@@ -1,0 +1,80 @@
+# ── Model weights (never commit) ─────────────────────────────────────────
+models/*/
+!models/README.md
+
+# ── Virtual environments ──────────────────────────────────────────────────
+.venv/
+venv/
+env/
+.env/
+__pyenv__/
+
+# ── Python caches ─────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# ── Offline wheels (binary artifacts; rebuild from requirements.txt) ───────
+offline_wheels/
+
+# ── pip bootstrap ─────────────────────────────────────────────────────────
+get-pip.py
+
+# ── Generated evaluation artifacts ───────────────────────────────────────
+# Preserve qwen3_full/ results; ignore top-level artefacts and future run dirs
+eval_results/per_question.jsonl
+eval_results/summary.json
+# Ignore any new run directories under eval_results/ (e.g. eval_results/my_run/)
+# while keeping qwen3_full/ tracked.
+# To exclude a specific new run: add   eval_results/<run_name>/   below.
+
+# ── Submission output (generated at runtime) ─────────────────────────────
+example_result/submission.jsonl
+example_result/logs/
+
+# ── HuggingFace / Torch download caches ──────────────────────────────────
+.cache/
+*.cache
+
+# ── Jupyter ───────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── OS artefacts ──────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# ── Logs & temporary files ────────────────────────────────────────────────
+*.log
+*.tmp
+*.bak
+logs/
+
+# ── Credentials & secrets ─────────────────────────────────────────────────
+.env
+*.pem
+*.key
+secrets.*
+credentials.*
+
+# ── Private / official competition data ──────────────────────────────────
+# Official Zalo AI Challenge train/test splits must NEVER be committed.
+# Only the synthetic benchmark under benchmark/ is tracked.
+private_data/
+official_data/
+zalo_data/
+
+# ── Docker build cache ────────────────────────────────────────────────────
+.dockerignore
+
+/eval_results/

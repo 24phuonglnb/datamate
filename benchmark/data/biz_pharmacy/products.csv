@@ -1,0 +1,16 @@
+﻿ma_thuoc,ten_thuoc,loai,don_gia,so_luong_ton
+T001,Paracetamol 500mg,Giảm đau,15000,200
+T002,Ibuprofen 400mg,Giảm đau,22000,150
+T003,Amoxicillin 500mg,Kháng sinh,85000,80
+T004,Azithromycin 250mg,Kháng sinh,120000,40
+T005,Vitamin C 1000mg,Vitamin,25000,300
+T006,Vitamin D3 1000IU,Vitamin,35000,180
+T007,Vitamin B complex,Vitamin,45000,120
+T008,Omeprazole 20mg,Tiêu hoá,40000,90
+T009,Domperidone 10mg,Tiêu hoá,18000,110
+T010,Loratadine 10mg,Dị ứng,20000,200
+T011,Cetirizine 10mg,Dị ứng,18000,160
+T012,Metformin 500mg,Tiểu đường,55000,60
+T013,Amlodipine 5mg,Tim mạch,65000,50
+T014,Atorvastatin 20mg,Tim mạch,90000,45
+T015,Zinc 10mg,Vitamin,12000,250

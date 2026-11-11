@@ -1,0 +1,105 @@
+{"id": "cafe_01", "business_id": "biz_cafe", "question": "Tổng doanh thu tháng 1 năm 2026 của quán là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "cafe_02", "business_id": "biz_cafe", "question": "Sản phẩm nào bán chạy nhất (theo số lượng) trong tháng 1?", "as_of_date": "2026-05-01"}
+{"id": "cafe_03", "business_id": "biz_cafe", "question": "Nhân viên nào bán được nhiều doanh thu nhất trong tháng 2?", "as_of_date": "2026-05-01"}
+{"id": "cafe_04", "business_id": "biz_cafe", "question": "Quán có bao nhiêu ngày bán hàng khác nhau trong tháng 1?", "as_of_date": "2026-05-01"}
+{"id": "cafe_05", "business_id": "biz_cafe", "question": "Hình thức thanh toán nào khách dùng nhiều nhất (theo số lần giao dịch)?", "as_of_date": "2026-05-01"}
+{"id": "cafe_06", "business_id": "biz_cafe", "question": "Tổng doanh thu ngày 14 tháng 2 là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "cafe_07", "business_id": "biz_cafe", "question": "Trà sữa bán ra tổng cộng bao nhiêu ly trong quý 1 (tháng 1 đến tháng 3)?", "as_of_date": "2026-05-01"}
+{"id": "cafe_08", "business_id": "biz_cafe", "question": "Cà phê sữa chiếm bao nhiêu phần trăm (%) doanh thu trong tháng 2?", "as_of_date": "2026-05-01"}
+{"id": "cafe_09", "business_id": "biz_cafe", "question": "Sản phẩm nào có số lượng tồn kho thấp nhất trong kho?", "as_of_date": "2026-05-01"}
+{"id": "cafe_10", "business_id": "biz_cafe", "question": "Liệt kê tên tất cả các sản phẩm hiện có trong kho của quán.", "as_of_date": "2026-05-01"}
+{"id": "cafe_11", "business_id": "biz_cafe", "question": "Doanh thu tháng 1 có lớn hơn doanh thu tháng 2 không?", "as_of_date": "2026-05-01"}
+{"id": "cafe_12", "business_id": "biz_cafe", "question": "Tổng doanh thu trong một ngày cao nhất của tháng 3 là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "cafe_13", "business_id": "biz_cafe", "question": "Tổng số lượng bánh mì bán ra trong tháng 3?", "as_of_date": "2026-05-01"}
+{"id": "cafe_14", "business_id": "biz_cafe", "question": "Doanh thu trung bình mỗi ngày bán hàng trong tháng 3 là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "cafe_15", "business_id": "biz_cafe", "question": "Nhân viên Cường bán được tổng bao nhiêu tiền trong tháng 2?", "as_of_date": "2026-05-01"}
+{"id": "cafe_16", "business_id": "biz_cafe", "question": "Quán có bao nhiêu loại sản phẩm khác nhau đã bán từ trước đến nay?", "as_of_date": "2026-05-01"}
+{"id": "cafe_17", "business_id": "biz_cafe", "question": "Tổng số lượng sinh tố bán trong tháng 1 và tháng 2 cộng lại là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "cafe_18", "business_id": "biz_cafe", "question": "Doanh thu tháng 2 theo từng sản phẩm là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "cafe_19", "business_id": "biz_cafe", "question": "Ngày nào có tổng doanh thu cao nhất trong tháng 1?", "as_of_date": "2026-05-01"}
+{"id": "cafe_20", "business_id": "biz_cafe", "question": "Khách hàng thân thiết của quán là ai?", "as_of_date": "2026-05-01"}
+{"id": "cafe_21", "business_id": "biz_cafe", "question": "Chi phí nguyên liệu tháng 1 là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "pharma_01", "business_id": "biz_pharmacy", "question": "Tổng doanh thu trong tháng 1 của nhà thuốc là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "pharma_02", "business_id": "biz_pharmacy", "question": "Thuốc nào được bán nhiều nhất (theo số lượng) trong tháng 1?", "as_of_date": "2026-05-01"}
+{"id": "pharma_03", "business_id": "biz_pharmacy", "question": "Nhà thuốc có bao nhiêu khách hàng khác nhau đã mua hàng?", "as_of_date": "2026-05-01"}
+{"id": "pharma_04", "business_id": "biz_pharmacy", "question": "Giá trung bình của các loại thuốc giảm đau là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "pharma_05", "business_id": "biz_pharmacy", "question": "Loại thuốc nào có nhiều sản phẩm (mã thuốc) nhất trong danh mục?", "as_of_date": "2026-05-01"}
+{"id": "pharma_06", "business_id": "biz_pharmacy", "question": "Tổng số lượng tồn kho hiện tại của tất cả thuốc là bao nhiêu hộp/vỉ?", "as_of_date": "2026-05-01"}
+{"id": "pharma_07", "business_id": "biz_pharmacy", "question": "Doanh thu tháng 2 có nhiều hơn tháng 1 không?", "as_of_date": "2026-05-01"}
+{"id": "pharma_08", "business_id": "biz_pharmacy", "question": "Thuốc nào có đơn giá cao nhất trong danh mục?", "as_of_date": "2026-05-01"}
+{"id": "pharma_09", "business_id": "biz_pharmacy", "question": "Khách hàng nào mua thuốc nhiều lần nhất (số lần giao dịch)?", "as_of_date": "2026-05-01"}
+{"id": "pharma_10", "business_id": "biz_pharmacy", "question": "Nhóm thuốc vitamin chiếm bao nhiêu phần trăm doanh thu tháng 1?", "as_of_date": "2026-05-01"}
+{"id": "pharma_11", "business_id": "biz_pharmacy", "question": "Liệt kê tất cả các loại thuốc (nhóm loại) có trong danh mục.", "as_of_date": "2026-05-01"}
+{"id": "pharma_12", "business_id": "biz_pharmacy", "question": "Doanh thu trung bình mỗi giao dịch trong tháng 1 là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "pharma_13", "business_id": "biz_pharmacy", "question": "Thuốc Paracetamol bán được tổng bao nhiêu hộp trong tháng 1 và 2?", "as_of_date": "2026-05-01"}
+{"id": "pharma_14", "business_id": "biz_pharmacy", "question": "Tổng doanh thu từ nhóm thuốc kháng sinh từ đầu năm đến hết tháng 3?", "as_of_date": "2026-05-01"}
+{"id": "pharma_15", "business_id": "biz_pharmacy", "question": "Doanh thu theo từng loại thuốc trong tháng 1 là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "pharma_16", "business_id": "biz_pharmacy", "question": "Có bao nhiêu giao dịch trong tháng 1?", "as_of_date": "2026-05-01"}
+{"id": "pharma_17", "business_id": "biz_pharmacy", "question": "Hạn sử dụng của thuốc Paracetamol là khi nào?", "as_of_date": "2026-05-01"}
+{"id": "pharma_18", "business_id": "biz_pharmacy", "question": "Nhà cung cấp thuốc của nhà thuốc là ai?", "as_of_date": "2026-05-01"}
+{"id": "pharma_19", "business_id": "biz_pharmacy", "question": "Ngày nào trong tháng 1 có doanh thu cao nhất?", "as_of_date": "2026-05-01"}
+{"id": "pharma_20", "business_id": "biz_pharmacy", "question": "Khách hàng Nguyễn Thị A đã chi tổng bao nhiêu tiền mua thuốc?", "as_of_date": "2026-05-01"}
+{"id": "pharma_21", "business_id": "biz_pharmacy", "question": "Tổng doanh thu từ đầu năm 2026 tới hết tháng 3 là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "rest_01", "business_id": "biz_restaurant", "question": "Tổng doanh thu (đơn hoàn thành) của nhà hàng trong tháng 1 là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "rest_02", "business_id": "biz_restaurant", "question": "Món ăn nào được gọi nhiều nhất (theo số lượng) trong tháng 1?", "as_of_date": "2026-05-01"}
+{"id": "rest_03", "business_id": "biz_restaurant", "question": "Có bao nhiêu lượt đặt bàn trong tháng 1?", "as_of_date": "2026-05-01"}
+{"id": "rest_04", "business_id": "biz_restaurant", "question": "Món ăn nào có giá cao nhất trong thực đơn?", "as_of_date": "2026-05-01"}
+{"id": "rest_05", "business_id": "biz_restaurant", "question": "Nhà hàng có bao nhiêu loại món ăn khác nhau trong thực đơn?", "as_of_date": "2026-05-01"}
+{"id": "rest_06", "business_id": "biz_restaurant", "question": "Tổng số khách ăn tại bàn (có đặt chỗ, trạng thái xác nhận) trong tháng 1 là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "rest_07", "business_id": "biz_restaurant", "question": "Khách nào đặt bàn với số người nhiều nhất trong một lần?", "as_of_date": "2026-05-01"}
+{"id": "rest_08", "business_id": "biz_restaurant", "question": "Tỷ lệ đơn hoàn thành (trên tổng đơn) trong tháng 1 là bao nhiêu phần trăm?", "as_of_date": "2026-05-01"}
+{"id": "rest_09", "business_id": "biz_restaurant", "question": "Doanh thu từ nhóm món hải sản trong tháng 1 là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "rest_10", "business_id": "biz_restaurant", "question": "Doanh thu trung bình mỗi đơn hàng hoàn thành là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "rest_11", "business_id": "biz_restaurant", "question": "Liệt kê các loại món ăn (phân nhóm) trong thực đơn.", "as_of_date": "2026-05-01"}
+{"id": "rest_12", "business_id": "biz_restaurant", "question": "Số lượt đặt bàn bị huỷ trong toàn bộ dữ liệu là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "rest_13", "business_id": "biz_restaurant", "question": "Doanh thu theo từng loại món ăn trong tháng 1 (chỉ đơn hoàn thành)?", "as_of_date": "2026-05-01"}
+{"id": "rest_14", "business_id": "biz_restaurant", "question": "Ngày nào trong tháng 1 có doanh thu cao nhất?", "as_of_date": "2026-05-01"}
+{"id": "rest_15", "business_id": "biz_restaurant", "question": "Tổng doanh thu tháng 2 của nhà hàng (chỉ đơn hoàn thành)?", "as_of_date": "2026-05-01"}
+{"id": "rest_16", "business_id": "biz_restaurant", "question": "Chi phí vật tư và nhân sự của nhà hàng trong tháng 1 là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "rest_17", "business_id": "biz_restaurant", "question": "Nhà hàng có bao nhiêu nhân viên phục vụ?", "as_of_date": "2026-05-01"}
+{"id": "rest_18", "business_id": "biz_restaurant", "question": "Phở bò bán được tổng bao nhiêu tô trong tháng 1 (đơn hoàn thành)?", "as_of_date": "2026-05-01"}
+{"id": "rest_19", "business_id": "biz_restaurant", "question": "Nhà hàng có bao nhiêu món trong thực đơn?", "as_of_date": "2026-05-01"}
+{"id": "rest_20", "business_id": "biz_restaurant", "question": "Khách nào đặt bàn nhiều lần nhất (số lần đặt)?", "as_of_date": "2026-05-01"}
+{"id": "rest_21", "business_id": "biz_restaurant", "question": "Doanh thu ngày 15/1 (đơn hoàn thành) là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "elec_01", "business_id": "biz_electronics", "question": "Tổng doanh thu trong tháng 1 của cửa hàng là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "elec_02", "business_id": "biz_electronics", "question": "Sản phẩm nào bán được nhiều doanh thu nhất trong tháng 1?", "as_of_date": "2026-05-01"}
+{"id": "elec_03", "business_id": "biz_electronics", "question": "Lợi nhuận gộp trong tháng 1 là bao nhiêu (tính theo gia_ban - gia_nhap nhân số lượng)?", "as_of_date": "2026-05-01"}
+{"id": "elec_04", "business_id": "biz_electronics", "question": "Danh mục sản phẩm nào bán được nhiều chiếc nhất trong tháng 1?", "as_of_date": "2026-05-01"}
+{"id": "elec_05", "business_id": "biz_electronics", "question": "Sản phẩm nào có giá bán cao nhất trong danh mục?", "as_of_date": "2026-05-01"}
+{"id": "elec_06", "business_id": "biz_electronics", "question": "Cửa hàng có bao nhiêu mã sản phẩm trong danh mục?", "as_of_date": "2026-05-01"}
+{"id": "elec_07", "business_id": "biz_electronics", "question": "Doanh thu tháng 2 có lớn hơn tháng 1 không?", "as_of_date": "2026-05-01"}
+{"id": "elec_08", "business_id": "biz_electronics", "question": "Hóa đơn có giá trị lớn nhất là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "elec_09", "business_id": "biz_electronics", "question": "Sản phẩm nào có thời gian bảo hành dài nhất?", "as_of_date": "2026-05-01"}
+{"id": "elec_10", "business_id": "biz_electronics", "question": "Liệt kê tất cả các danh mục sản phẩm trong cửa hàng.", "as_of_date": "2026-05-01"}
+{"id": "elec_11", "business_id": "biz_electronics", "question": "Có bao nhiêu hóa đơn bán hàng trong tháng 1?", "as_of_date": "2026-05-01"}
+{"id": "elec_12", "business_id": "biz_electronics", "question": "Điện thoại (loại 'Điện thoại') bán được bao nhiêu chiếc trong tháng 1?", "as_of_date": "2026-05-01"}
+{"id": "elec_13", "business_id": "biz_electronics", "question": "Lợi nhuận gộp theo từng danh mục trong tháng 1 là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "elec_14", "business_id": "biz_electronics", "question": "Giá trung bình của sản phẩm thuộc danh mục laptop là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "elec_15", "business_id": "biz_electronics", "question": "Tổng doanh thu từ phụ kiện trong tháng 1?", "as_of_date": "2026-05-01"}
+{"id": "elec_16", "business_id": "biz_electronics", "question": "Thuế VAT phải nộp trong tháng 1 là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "elec_17", "business_id": "biz_electronics", "question": "Nhà cung cấp của iPhone 16 là ai?", "as_of_date": "2026-05-01"}
+{"id": "elec_18", "business_id": "biz_electronics", "question": "Ngày nào có doanh thu cao nhất trong tháng 1?", "as_of_date": "2026-05-01"}
+{"id": "elec_19", "business_id": "biz_electronics", "question": "Tỷ lệ lợi nhuận gộp (lợi nhuận / doanh thu * 100) của cửa hàng trong tháng 1?", "as_of_date": "2026-05-01"}
+{"id": "elec_20", "business_id": "biz_electronics", "question": "Tổng doanh thu từ đầu năm đến hết tháng 3 của cửa hàng là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "elec_21", "business_id": "biz_electronics", "question": "MacBook Pro M4 bán được bao nhiêu chiếc từ đầu năm?", "as_of_date": "2026-05-01"}
+{"id": "fash_01", "business_id": "biz_fashion", "question": "Tổng doanh thu tháng 1 của cửa hàng thời trang là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "fash_02", "business_id": "biz_fashion", "question": "Mặt hàng nào bán chạy nhất (theo số lượng) trong tháng 1?", "as_of_date": "2026-05-01"}
+{"id": "fash_03", "business_id": "biz_fashion", "question": "Tỉnh/thành phố nào đặt mua nhiều nhất (theo số lượng) trong tháng 1?", "as_of_date": "2026-05-01"}
+{"id": "fash_04", "business_id": "biz_fashion", "question": "Loại hàng nào (áo, quần, váy, phụ kiện) chiếm doanh thu cao nhất trong tháng 1?", "as_of_date": "2026-05-01"}
+{"id": "fash_05", "business_id": "biz_fashion", "question": "Lợi nhuận gộp (doanh thu - giá nhập nhân số lượng) tháng 1 là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "fash_06", "business_id": "biz_fashion", "question": "Doanh thu tháng 2 theo từng tỉnh/thành phố là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "fash_07", "business_id": "biz_fashion", "question": "Tỷ lệ đơn hàng hoàn thành trong tháng 1 là bao nhiêu phần trăm?", "as_of_date": "2026-05-01"}
+{"id": "fash_08", "business_id": "biz_fashion", "question": "Liệt kê tất cả các tỉnh/thành phố đã đặt hàng.", "as_of_date": "2026-05-01"}
+{"id": "fash_09", "business_id": "biz_fashion", "question": "Doanh thu trung bình mỗi đơn hàng hoàn thành trong tháng 1 là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "fash_10", "business_id": "biz_fashion", "question": "Mã hàng nào được đặt mua ở nhiều tỉnh thành nhất?", "as_of_date": "2026-05-01"}
+{"id": "fash_11", "business_id": "biz_fashion", "question": "Tổng doanh thu từ nhóm hàng Áo trong tháng 1 (đơn hoàn thành)?", "as_of_date": "2026-05-01"}
+{"id": "fash_12", "business_id": "biz_fashion", "question": "Có bao nhiêu mã hàng khác nhau bán được trong tháng 1?", "as_of_date": "2026-05-01"}
+{"id": "fash_13", "business_id": "biz_fashion", "question": "Đơn hàng có giá trị lớn nhất là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "fash_14", "business_id": "biz_fashion", "question": "Doanh thu tháng 2 có lớn hơn tháng 1 không (chỉ đơn hoàn thành)?", "as_of_date": "2026-05-01"}
+{"id": "fash_15", "business_id": "biz_fashion", "question": "Tỉnh nào chiếm nhiều phần trăm doanh thu nhất trong tháng 1?", "as_of_date": "2026-05-01"}
+{"id": "fash_16", "business_id": "biz_fashion", "question": "Có bao nhiêu loại hàng khác nhau trong danh mục sản phẩm?", "as_of_date": "2026-05-01"}
+{"id": "fash_17", "business_id": "biz_fashion", "question": "Khách hàng thân thiết của cửa hàng thời trang này là ai?", "as_of_date": "2026-05-01"}
+{"id": "fash_18", "business_id": "biz_fashion", "question": "Cửa hàng bán hàng online hay offline nhiều hơn?", "as_of_date": "2026-05-01"}
+{"id": "fash_19", "business_id": "biz_fashion", "question": "Tổng số lượng đơn hàng hoàn thành trong toàn bộ dữ liệu là bao nhiêu?", "as_of_date": "2026-05-01"}
+{"id": "fash_20", "business_id": "biz_fashion", "question": "Doanh thu tháng 3 theo từng loại hàng (Áo/Quần/Váy/Phụ kiện)?", "as_of_date": "2026-05-01"}
+{"id": "fash_21", "business_id": "biz_fashion", "question": "Tổng doanh thu từ đầu năm đến hết tháng 3 (đơn hoàn thành)?", "as_of_date": "2026-05-01"}

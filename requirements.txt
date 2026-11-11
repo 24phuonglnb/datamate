@@ -1,0 +1,2 @@
+# vLLM and PyTorch are supplied by vllm/vllm-openai:v0.10.1.1
+openpyxl==3.1.5

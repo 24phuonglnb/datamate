@@ -1,0 +1,105 @@
+{"id": "cafe_01", "type": "number", "answer": 4050000}
+{"id": "cafe_02", "type": "string", "answer": "Cà phê đen"}
+{"id": "cafe_03", "type": "string", "answer": "An"}
+{"id": "cafe_04", "type": "number", "answer": 6}
+{"id": "cafe_05", "type": "string", "answer": "Tiền mặt"}
+{"id": "cafe_06", "type": "number", "answer": 1875000}
+{"id": "cafe_07", "type": "number", "answer": 59}
+{"id": "cafe_08", "type": "percent", "answer": 27.7}
+{"id": "cafe_09", "type": "string", "answer": "Bánh mì"}
+{"id": "cafe_10", "type": "list", "answer": ["Bánh mì", "Cà phê sữa", "Cà phê đen", "Sinh tố", "Trà sữa"]}
+{"id": "cafe_11", "type": "boolean", "answer": true}
+{"id": "cafe_12", "type": "number", "answer": 1475000}
+{"id": "cafe_13", "type": "number", "answer": 28}
+{"id": "cafe_14", "type": "number", "answer": 947500.0}
+{"id": "cafe_15", "type": "number", "answer": 600000}
+{"id": "cafe_16", "type": "number", "answer": 5}
+{"id": "cafe_17", "type": "number", "answer": 30}
+{"id": "cafe_18", "type": "table", "answer": [{"san_pham": "Cà phê sữa", "tong_doanh_thu": 1050000}, {"san_pham": "Trà sữa", "tong_doanh_thu": 990000}, {"san_pham": "Sinh tố", "tong_doanh_thu": 700000}, {"san_pham": "Cà phê đen", "tong_doanh_thu": 550000}, {"san_pham": "Bánh mì", "tong_doanh_thu": 500000}]}
+{"id": "cafe_19", "type": "string", "answer": "2026-01-20"}
+{"id": "cafe_20", "type": "unanswerable", "answer": "unanswerable"}
+{"id": "cafe_21", "type": "unanswerable", "answer": "unanswerable"}
+{"id": "pharma_01", "type": "number", "answer": 2592000}
+{"id": "pharma_02", "type": "string", "answer": "Paracetamol 500mg"}
+{"id": "pharma_03", "type": "number", "answer": 7}
+{"id": "pharma_04", "type": "number", "answer": 18500.0}
+{"id": "pharma_05", "type": "string", "answer": "Vitamin"}
+{"id": "pharma_06", "type": "number", "answer": 2035}
+{"id": "pharma_07", "type": "boolean", "answer": false}
+{"id": "pharma_08", "type": "string", "answer": "Azithromycin 250mg"}
+{"id": "pharma_09", "type": "string", "answer": "Nguyễn Thị A"}
+{"id": "pharma_10", "type": "percent", "answer": 27.78}
+{"id": "pharma_11", "type": "list", "answer": ["Dị ứng", "Giảm đau", "Kháng sinh", "Tim mạch", "Tiêu hoá", "Tiểu đường", "Vitamin"]}
+{"id": "pharma_12", "type": "number", "answer": 86400.0}
+{"id": "pharma_13", "type": "number", "answer": 58}
+{"id": "pharma_14", "type": "number", "answer": 1570000}
+{"id": "pharma_15", "type": "table", "answer": [{"loai": "Vitamin", "tong_doanh_thu": 720000}, {"loai": "Giảm đau", "tong_doanh_thu": 670000}, {"loai": "Kháng sinh", "tong_doanh_thu": 580000}, {"loai": "Tiểu đường", "tong_doanh_thu": 220000}, {"loai": "Tiêu hoá", "tong_doanh_thu": 152000}, {"loai": "Tim mạch", "tong_doanh_thu": 130000}, {"loai": "Dị ứng", "tong_doanh_thu": 120000}]}
+{"id": "pharma_16", "type": "number", "answer": 30}
+{"id": "pharma_17", "type": "unanswerable", "answer": "unanswerable"}
+{"id": "pharma_18", "type": "unanswerable", "answer": "unanswerable"}
+{"id": "pharma_19", "type": "string", "answer": "2026-01-08"}
+{"id": "pharma_20", "type": "number", "answer": 1130000}
+{"id": "pharma_21", "type": "number", "answer": 5952000}
+{"id": "rest_01", "type": "number", "answer": 4655000}
+{"id": "rest_02", "type": "string", "answer": "Phở bò"}
+{"id": "rest_03", "type": "number", "answer": 16}
+{"id": "rest_04", "type": "string", "answer": "Lẩu hải sản"}
+{"id": "rest_05", "type": "number", "answer": 5}
+{"id": "rest_06", "type": "number", "answer": 78}
+{"id": "rest_07", "type": "string", "answer": "Minh"}
+{"id": "rest_08", "type": "percent", "answer": 88.89}
+{"id": "rest_09", "type": "number", "answer": 2480000}
+{"id": "rest_10", "type": "number", "answer": 370961.54}
+{"id": "rest_11", "type": "list", "answer": ["Hải sản", "Khai vị", "Món chính", "Tráng miệng", "Đồ uống"]}
+{"id": "rest_12", "type": "number", "answer": 4}
+{"id": "rest_13", "type": "table", "answer": [{"loai": "Hải sản", "tong_doanh_thu": 2480000}, {"loai": "Món chính", "tong_doanh_thu": 2175000}]}
+{"id": "rest_14", "type": "string", "answer": "2026-01-15"}
+{"id": "rest_15", "type": "number", "answer": 2690000}
+{"id": "rest_16", "type": "unanswerable", "answer": "unanswerable"}
+{"id": "rest_17", "type": "unanswerable", "answer": "unanswerable"}
+{"id": "rest_18", "type": "number", "answer": 14}
+{"id": "rest_19", "type": "number", "answer": 10}
+{"id": "rest_20", "type": "string", "answer": "Nam"}
+{"id": "rest_21", "type": "number", "answer": 900000}
+{"id": "elec_01", "type": "number", "answer": 1023600000}
+{"id": "elec_02", "type": "string", "answer": "iPhone 16"}
+{"id": "elec_03", "type": "number", "answer": 262200000}
+{"id": "elec_04", "type": "string", "answer": "Điện thoại"}
+{"id": "elec_05", "type": "string", "answer": "MacBook Pro M4"}
+{"id": "elec_06", "type": "number", "answer": 13}
+{"id": "elec_07", "type": "boolean", "answer": false}
+{"id": "elec_08", "type": "number", "answer": 92000000}
+{"id": "elec_09", "type": "string", "answer": "MacBook Pro M4"}
+{"id": "elec_10", "type": "list", "answer": ["Laptop", "Màn hình", "Máy tính bảng", "Phụ kiện", "Điện thoại"]}
+{"id": "elec_11", "type": "number", "answer": 32}
+{"id": "elec_12", "type": "number", "answer": 28}
+{"id": "elec_13", "type": "table", "answer": [{"loai": "Điện thoại", "loi_nhuan": 134000000}, {"loai": "Laptop", "loi_nhuan": 66000000}, {"loai": "Máy tính bảng", "loi_nhuan": 28000000}, {"loai": "Phụ kiện", "loi_nhuan": 20200000}, {"loai": "Màn hình", "loi_nhuan": 14000000}]}
+{"id": "elec_14", "type": "number", "answer": 34333333.0}
+{"id": "elec_15", "type": "number", "answer": 70600000}
+{"id": "elec_16", "type": "unanswerable", "answer": "unanswerable"}
+{"id": "elec_17", "type": "unanswerable", "answer": "unanswerable"}
+{"id": "elec_18", "type": "string", "answer": "2026-01-15"}
+{"id": "elec_19", "type": "percent", "answer": 25.62}
+{"id": "elec_20", "type": "number", "answer": 1809600000}
+{"id": "elec_21", "type": "number", "answer": 6}
+{"id": "fash_01", "type": "number", "answer": 19490000}
+{"id": "fash_02", "type": "string", "answer": "Áo thun basic"}
+{"id": "fash_03", "type": "string", "answer": "TP HCM"}
+{"id": "fash_04", "type": "string", "answer": "Áo"}
+{"id": "fash_05", "type": "number", "answer": 11290000}
+{"id": "fash_06", "type": "table", "answer": [{"tinh_thanh": "TP HCM", "tong_doanh_thu": 4520000}, {"tinh_thanh": "Hà Nội", "tong_doanh_thu": 3800000}, {"tinh_thanh": "Đà Nẵng", "tong_doanh_thu": 1900000}, {"tinh_thanh": "Cần Thơ", "tong_doanh_thu": 1080000}]}
+{"id": "fash_07", "type": "percent", "answer": 95.0}
+{"id": "fash_08", "type": "list", "answer": ["Cần Thơ", "Hà Nội", "TP HCM", "Đà Nẵng"]}
+{"id": "fash_09", "type": "number", "answer": 1025789.47}
+{"id": "fash_10", "type": "string", "answer": "AO005"}
+{"id": "fash_11", "type": "number", "answer": 8540000}
+{"id": "fash_12", "type": "number", "answer": 12}
+{"id": "fash_13", "type": "number", "answer": 2280000}
+{"id": "fash_14", "type": "boolean", "answer": false}
+{"id": "fash_15", "type": "string", "answer": "TP HCM"}
+{"id": "fash_16", "type": "number", "answer": 4}
+{"id": "fash_17", "type": "unanswerable", "answer": "unanswerable"}
+{"id": "fash_18", "type": "unanswerable", "answer": "unanswerable"}
+{"id": "fash_19", "type": "number", "answer": 31}
+{"id": "fash_20", "type": "table", "answer": [{"loai": "Váy", "tong_doanh_thu": 2280000}, {"loai": "Áo", "tong_doanh_thu": 2250000}, {"loai": "Quần", "tong_doanh_thu": 1800000}]}
+{"id": "fash_21", "type": "number", "answer": 37120000}
