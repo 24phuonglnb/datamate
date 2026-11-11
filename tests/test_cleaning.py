@@ -6,7 +6,7 @@ import pandas as pd
 
 from src.cleaning import (drop_export_duplicates, fill_order_level, find_header, norm_key,
                           parse_date, parse_datetime, parse_number, parse_qty, period_hint,
-                          split_summary_rows, _family)
+                          split_summary_rows, _family, _from_grid)
 
 
 class NumberTests(unittest.TestCase):
@@ -15,7 +15,9 @@ class NumberTests(unittest.TestCase):
                  "16,56tr": 16560000, "4,544tr": 4544000, "129 000": 129000,
                  "45,000.0000": 45000, "14036k": 14036000, "-10.000đ": -10000,
                  "1,01tr": 1010000, "294.770.300đ": 294770300, "6,719.0000": 6719,
-                 "2tr5": 2500000, "0,9": 0.9, "18.6": 18.6, "1": 1}
+                 "2tr5": 2500000, "0,9": 0.9, "18.6": 18.6, "1": 1,
+                 # currency prefix / plus sign seen in shop files (dev_007, dev_014)
+                 "₫25.000": 25000, "đ 25.000": 25000, "+25000": 25000}
         for raw, want in cases.items():
             self.assertEqual(parse_number(raw), want, raw)
 
@@ -33,10 +35,13 @@ class DateTests(unittest.TestCase):
     def test_spellings(self):
         d = dt.date
         self.assertEqual(parse_date("1 thg 6 2025"), d(2025, 6, 1))
+        self.assertEqual(parse_date("ngày 1 thg 6 2025"), d(2025, 6, 1))
         self.assertEqual(parse_date(45689), d(2025, 2, 1))
         self.assertEqual(parse_date("45717"), d(2025, 3, 1))
         self.assertEqual(parse_date("01/02/2025"), d(2025, 2, 1))
         self.assertEqual(parse_date("2025-02-01 06:03:42"), d(2025, 2, 1))
+        self.assertEqual(parse_date("2025/02/01"), d(2025, 2, 1))
+        self.assertEqual(parse_date("2025.02.01"), d(2025, 2, 1))
         self.assertEqual(parse_datetime("2025-02-01 06:03:42").hour, 6)
 
     def test_yearless_needs_sheet_year(self):
@@ -47,6 +52,13 @@ class DateTests(unittest.TestCase):
         self.assertEqual(period_hint("Tháng 01-2025"), (2025, 1))
         self.assertEqual(period_hint("T7-2025"), (2025, 7))
         self.assertEqual(period_hint("04.2025"), (2025, 4))
+        # dev_014/SoBanHang.xlsx sheet T1-2026
+        self.assertEqual(period_hint("T1-2026"), (2026, 1))
+        # year-first naming
+        self.assertEqual(period_hint("2025_01"), (2025, 1))
+        self.assertEqual(period_hint("2025-01"), (2025, 1))
+        # cross-label combination: sheet='Thang 1', file='SoBanHang_2026'
+        self.assertEqual(period_hint("Thang 1", "SoBanHang_2026"), (2026, 1))
         self.assertEqual(period_hint("Sheet1", "SoBanHang_2026"), (2026, None))
         self.assertEqual(period_hint("Sheet1", "SoBanHang_1"), (None, None))
 
@@ -72,8 +84,22 @@ class LayoutTests(unittest.TestCase):
     def test_file_family(self):
         self.assertEqual(_family("DonHang_ChiTiet_2026"), "DonHang_ChiTiet")
         self.assertEqual(_family("BanHang_T1_2025"), "BanHang")
+        self.assertEqual(_family("BanHang_2025_01"), "BanHang")
         self.assertEqual(_family("SoBanHang_1"), "SoBanHang")
         self.assertEqual(_family("ban_hang"), "ban_hang")
+
+    def test_repeated_page_header_dropped(self):
+        # Literal header seen in dev_002/BanHang_T10_2025.xlsx row 302 and dev_010/chi_tiet_don.csv row 103
+        rows = [
+            ["Mã đơn hàng", "Ngày đặt hàng", "Trạng thái đơn hàng", "Tên khách hàng", "Tổng tiền"],
+            ["ORD001", "01/10/2025", "Đã hoàn thành", "lẻ", "25000"],
+            # repeated header from pagination break
+            ["Mã đơn hàng", "Ngày đặt hàng", "Trạng thái đơn hàng", "Tên khách hàng", "Tổng tiền"],
+            ["ORD002", "01/10/2025", "Đã hoàn thành", "lẻ", "39000"],
+        ]
+        got, _ = _from_grid(rows, "test.xlsx", "Sheet1")
+        self.assertEqual(len(got), 2)
+        self.assertEqual(got["Mã đơn hàng"].tolist(), ["ORD001", "ORD002"])
 
 
 class OrderRepairTests(unittest.TestCase):
@@ -98,12 +124,16 @@ class OrderRepairTests(unittest.TestCase):
         self.assertEqual(len(out), 4)  # O1 dup removed; key-less rows are separate sales
 
     def test_summary_rows(self):
-        df = pd.DataFrame({"gio": ["06:13", "Tổng tháng", "Ghi chú: số liệu ghi tay"],
-                           "ma": ["O1", None, None], "kh": ["An", None, None],
-                           "tien": ["55.000đ", "901.896.400đ", None], "hang": ["x", None, None]}, dtype=object)
+        # Literals from biz_104 (Tổng ngày), biz_105 (Ghi chú / Cộng), dev_001 (Cộng ngày), dev_014 (Tổng cộng)
+        df = pd.DataFrame({
+            "gio": ["06:13", "Tổng tháng", "Ghi chú: số liệu ghi tay", "Tổng ngày 01/04", "Cộng ngày 01/01/2025", "Tổng cộng"],
+            "ma": ["O1", None, None, None, None, None],
+            "kh": ["An", None, None, None, None, None],
+            "tien": ["55.000đ", "901.896.400đ", None, "5,606,000", "9,916,500.0000", "1.480.338.000đ"],
+            "hang": ["x", None, None, None, None, None]}, dtype=object)
         data, removed = split_summary_rows(df)
         self.assertEqual(len(data), 1)
-        self.assertEqual(len(removed), 2)
+        self.assertEqual(len(removed), 5)
 
     def test_norm_key(self):
         self.assertEqual(norm_key("  Đã Hủy-đơn "), "da huy don")

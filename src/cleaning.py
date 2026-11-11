@@ -69,6 +69,7 @@ _NUM_SUFFIX = re.compile(r"^(-?)\s*(\d+(?:[.,]\d+)?)\s*(tr|trieu|triệu|k|nghì
 _GROUPED = re.compile(r"^-?\d{1,3}(?:([.,  ])\d{3})(?:\1\d{3})*(?:[.,]\d+)?$")
 _PLAIN = re.compile(r"^-?\d+(?:[.,]\d+)?$")
 _CURRENCY = re.compile(r"(vnđ|vnd|đồng|dong|₫|đ|d)$", re.I)
+_CURRENCY_PRE = re.compile(r"^(vnđ|vnd|đồng|dong|₫|đ|d)\s*", re.I)
 
 
 def parse_number(v: Any) -> float | None:
@@ -88,6 +89,8 @@ def parse_number(v: Any) -> float | None:
     neg = s.startswith("(") and s.endswith(")")
     if neg:
         s = s[1:-1].strip()
+    if s.startswith("+"):
+        s = s[1:].strip()
     m = _NUM_SUFFIX.match(s)
     if m:
         sign, body, suf, tail = m.groups()
@@ -98,6 +101,7 @@ def parse_number(v: Any) -> float | None:
         val = round(val)
         return -val if (sign or neg) else val
     s = _CURRENCY.sub("", s).strip()
+    s = _CURRENCY_PRE.sub("", s).strip()
     if not s:
         return None
     if _GROUPED.match(s):
@@ -133,9 +137,9 @@ def parse_qty(v: Any) -> tuple[float | None, str | None]:
 # --------------------------------------------------------------------------- dates
 
 _EXCEL_EPOCH = dt.datetime(1899, 12, 30)
-_ISO = re.compile(r"^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?")
+_ISO = re.compile(r"^(\d{4})[/\-.](\d{1,2})[/\-.](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?)?")
 _DMY = re.compile(r"^(\d{1,2})[/\-.](\d{1,2})(?:[/\-.](\d{2,4}))?(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$")
-_THG = re.compile(r"^(\d{1,2})\s*(?:thg|tháng|thang|th)\.?\s*(\d{1,2})(?:\s*(?:,|năm|nam)?\s*(\d{2,4}))?$", re.I)
+_THG = re.compile(r"^(?:ngày\s+)?(\d{1,2})\s*(?:thg|tháng|thang|th)\.?\s*(\d{1,2})(?:\s*(?:,|năm|nam)?\s*(\d{2,4}))?$", re.I)
 
 
 def _year(y: str | None, default: int | None) -> int | None:
@@ -198,7 +202,9 @@ def looks_yearless_date(v: Any) -> bool:
 
 
 _PERIOD_HINT = re.compile(r"(?<!\d)(?:t|th|thang|tháng)?[\s_.\-]*(\d{1,2})[\s_.\-/]+(20\d{2})(?!\d)", re.I)
+_PERIOD_HINT_REV = re.compile(r"(?<!\d)(20\d{2})[\s_.\-/]+(?:t|th|thang|tháng)?[\s_.\-]*(\d{1,2})(?!\d)", re.I)
 _YEAR_HINT = re.compile(r"(?<!\d)(20\d{2})(?!\d)")
+_MONTH_ONLY = re.compile(r"(?<!\w)(?:t|th|thang|tháng)[\s_.\-]*(\d{1,2})(?!\d)", re.I)
 
 
 def period_hint(*labels: str | None) -> tuple[int | None, int | None]:
@@ -211,12 +217,25 @@ def period_hint(*labels: str | None) -> tuple[int | None, int | None]:
         m = _PERIOD_HINT.search(t)
         if m and 1 <= int(m.group(1)) <= 12:
             return int(m.group(2)), int(m.group(1))
+        m = _PERIOD_HINT_REV.search(t)
+        if m and 1 <= int(m.group(2)) <= 12:
+            return int(m.group(1)), int(m.group(2))
+    # cross-label combination: e.g. sheet='Thang 1', file='SoBanHang_2026'
+    y, mo = None, None
     for lab in labels:
         if not lab:
             continue
-        m = _YEAR_HINT.search(nfc(lab))
-        if m:
-            return int(m.group(1)), None
+        t = strip_accents(nfc(lab))
+        if y is None:
+            my = _YEAR_HINT.search(t)
+            if my:
+                y = int(my.group(1))
+        if mo is None:
+            mm = _MONTH_ONLY.search(t)
+            if mm and 1 <= int(mm.group(1)) <= 12:
+                mo = int(mm.group(1))
+    if y is not None:
+        return y, mo
     return None, None
 
 
@@ -312,6 +331,12 @@ def _trim(rows: list[list[Any]]) -> list[list[Any]]:
     return out
 
 
+def _is_repeated_header(row: Iterable[Any], header: list[Any]) -> bool:
+    r_cells = [norm_key(c) for c in row if not is_blank(c)]
+    h_cells = [norm_key(c) for c in header if not is_blank(c)]
+    return len(r_cells) >= 2 and r_cells == h_cells
+
+
 def _from_grid(rows: list[list[Any]], file: str, sheet: str | None) -> tuple[pd.DataFrame, list[str]] | None:
     rows = _trim(rows)
     if not any(rows):
@@ -321,7 +346,8 @@ def _from_grid(rows: list[list[Any]], file: str, sheet: str | None) -> tuple[pd.
     width = max(len(header), max((len(r) for r in rows[h + 1:h + 200]), default=0))
     header = header + [None] * (width - len(header))
     pre = [" | ".join(nfc(c) for c in r if not is_blank(c)) for r in rows[:h] if _n_filled(r)]
-    return _frame(header, rows[h + 1:], file, sheet, h + 2), pre
+    body = [r for r in rows[h + 1:] if not _is_repeated_header(r, header)]
+    return _frame(header, body, file, sheet, h + 2), pre
 
 
 def _read_csv(path: Path) -> list[list[Any]]:
@@ -345,7 +371,7 @@ def _layout_key(df: pd.DataFrame) -> tuple[str, ...]:
 
 
 _SPLIT_SUFFIX = re.compile(
-    r"(?:[_\-\s]+(?:(?:t|th|thang|tháng)[_\-\s]*)?\d{1,2})?(?:[_\-\s.]+20\d{2})?$", re.I)
+    r"(?:[_\-\s]+(?:20\d{2}[_\-\s.]+)?(?:(?:t|th|thang|tháng)[_\-\s]*)?\d{1,2})?(?:[_\-\s.]+20\d{2})?$", re.I)
 
 
 def _family(stem: str) -> str:
@@ -534,7 +560,7 @@ def drop_export_duplicates(df: pd.DataFrame, key: str) -> pd.DataFrame:
     return df.drop(index=dup[dup].index).reset_index(drop=True)
 
 
-_SUMMARY = re.compile(r"^(tong|cong|tong cong|total|subtotal|ghi chu|note|luu y|nguoi lap|ky ten)\b")
+_SUMMARY = re.compile(r"^(tong|cong|tong cong|tong ket|total|subtotal|ghi chu|note|luu y|chu y|nguoi lap|ky ten)\b")
 
 
 def split_summary_rows(df: pd.DataFrame, max_filled: int = 2) -> tuple[pd.DataFrame, pd.DataFrame]:
