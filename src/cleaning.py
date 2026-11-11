@@ -65,7 +65,7 @@ def is_blank(v: Any) -> bool:
 
 # ------------------------------------------------------------------------- numbers
 
-_NUM_SUFFIX = re.compile(r"^(-?)\s*(\d+(?:[.,]\d+)?)\s*(tr|trieu|triệu|k|nghìn|ngàn|m)\s*(\d{1,3})?$", re.I)
+_NUM_SUFFIX = re.compile(r"^(-?)\s*(\d+(?:[.,]\d+)?)\s*(tr|trieu|triệu|k|nghìn|ngàn)\s*(\d{1,3})?$", re.I)
 _GROUPED = re.compile(r"^-?\d{1,3}(?:([.,  ])\d{3})(?:\1\d{3})*(?:[.,]\d+)?$")
 _PLAIN = re.compile(r"^-?\d+(?:[.,]\d+)?$")
 _CURRENCY = re.compile(r"(vnđ|vnd|đồng|dong|₫|đ|d)$", re.I)
