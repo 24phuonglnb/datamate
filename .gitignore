@@ -78,3 +78,8 @@ zalo_data/
 .dockerignore
 
 /eval_results/
+
+# ── Official data downloaded by scripts/download_data.sh ──────────────────
+# Anchored so tracked benchmark/data and example_data/data are unaffected.
+/data/
+*.zip
