@@ -19,6 +19,15 @@ case "${SLURM_ARRAY_TASK_ID}" in
   *) echo bad index; exit 2 ;;
 esac
 MP=$(ls -d "$HF_HOME"/hub/models--Qwen--Qwen3-8B/snapshots/* | head -1)
+# GPUs are shared with other users' processes; Qwen3-8B bf16 needs ~17 GB. Wait (max 20 min), else give up
+# and release the GPU instead of sitting idle (idle GPUs get killed).
+NEED=${NEED_MIB:-19000}
+for i in $(seq 1 40); do
+  FREE=$(nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits -i "${CUDA_VISIBLE_DEVICES%%,*}" | head -1)
+  [ "${FREE:-0}" -ge "$NEED" ] && break
+  sleep 30
+done
+[ "${FREE:-0}" -ge "$NEED" ] || { echo "only ${FREE} MiB free on GPU ${CUDA_VISIBLE_DEVICES}; giving up"; exit 75; }
 echo "host=$(hostname) gpu=$CUDA_VISIBLE_DEVICES mode=$SUF"; nvidia-smi --query-gpu=memory.used --format=csv
 exec "$PY" -m eval.run_baseline --model-path "$MP" --model-name "Qwen3-8B$SUF" --device cuda:0 \
   --subset holdout --resume ${EXTRA:-}
