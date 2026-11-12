@@ -271,3 +271,20 @@ class SyntheticRules(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_same_month_last_year_and_teencode_comparison():
+    from src.timeutil import resolve
+    r = resolve("so vs cung thang nam truoc, dthu thang 4 nam 2026 thay doi may %", "2026-06-16")
+    assert (str(r.comparison.start), str(r.comparison.end)) == ("2025-04-01", "2025-04-30")
+    r = resolve("so cung ky nam trc, dthu thang 8/2026 tang giam may phan tram", "2026-09-07")
+    assert str(r.comparison.start) == "2025-08-01"
+    r = resolve("thang 4/2026 hon hay kem th truoc bao nhieu %", "2026-06-12")
+    assert (str(r.comparison.start), str(r.comparison.end)) == ("2026-03-01", "2026-03-31")
+
+
+def test_period_where_sql():
+    from src.timeutil import resolve
+    p = resolve("doanh thu thang 3/2026", "2026-09-07").periods[0]
+    assert p.where_sql() == "order_date BETWEEN '2026-03-01' AND '2026-03-31'"
+    assert "order_time" in p.where_sql(part_of_day=("06:00", "13:59"))

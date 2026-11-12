@@ -60,6 +60,21 @@ class Period:
     def days(self) -> int | None:
         return None if self.start is None else (self.end - self.start).days + 1
 
+    def where_sql(self, date_col: str = "order_date", time_col: str = "order_time",
+                  part_of_day: tuple[str, str] | None = None) -> str:
+        """SQL filter for this period on ISO-date column *date_col* (literals; dates are trusted values).
+
+        start None (cumulative, "đến hết ngày X") -> only an upper bound. part_of_day = (from, to) 'HH:MM'
+        adds a filter on *time_col* (ca sáng 06:00-13:59, ca chiều 14:00-21:59, rulebook section 2).
+        """
+        if self.start is None:
+            clause = f"{date_col} <= '{self.end.isoformat()}'"
+        else:
+            clause = f"{date_col} BETWEEN '{self.start.isoformat()}' AND '{self.end.isoformat()}'"
+        if part_of_day:
+            clause += f" AND substr({time_col}, 1, 5) BETWEEN '{part_of_day[0]}' AND '{part_of_day[1]}'"
+        return clause
+
     def to_dict(self) -> dict[str, Any]:
         return {"start": self.start.isoformat() if self.start else None, "end": self.end.isoformat(),
                 "granularity": self.granularity, "rule_refs": list(self.rule_refs), "source": self.source}
@@ -224,6 +239,12 @@ def _range_endpoint(tok: str, ctx: _Ctx, default_year: int | None = None) -> dat
     return None
 
 
+def _light_teencode(t: str) -> str:
+    """Only the abbreviations that change a time expression's meaning (resolve() may see un-normalised text)."""
+    t = re.sub(r"\btrc\b", "truoc", t)
+    return re.sub(r"\bth\b(?=\s+(?:truoc|nay|sau|\d))", "thang", t)
+
+
 def resolve(text: str, as_of: str | date, calendar: LunarCalendar | None = None,
             short_slash: str | None = None) -> ResolveResult:
     """Resolve all time expressions in *text* relative to *as_of* (the question's 'today').
@@ -233,7 +254,7 @@ def resolve(text: str, as_of: str | date, calendar: LunarCalendar | None = None,
     = report as ambiguous, produce nothing.
     """
     as_of_d = as_of if isinstance(as_of, date) else date.fromisoformat(str(as_of)[:10])
-    ctx = _Ctx(fold(text), as_of_d, calendar, short_slash)
+    ctx = _Ctx(_light_teencode(fold(text)), as_of_d, calendar, short_slash)
     for step in (_s_month_range, _s_n_days_from, _s_range, _s_stock_asof, _s_cumulative, _s_tet, _s_quarter, _s_day_full, _s_month, _s_relative_day,
                  _s_week, _s_rolling, _s_year, _s_short_slash, _s_day_short, _s_part_of_day):
         step(ctx)
@@ -426,7 +447,7 @@ def _s_rolling(ctx: _Ctx) -> None:
 def _s_year(ctx: _Ctx) -> None:
     for m in list(re.finditer(r"\btu\s+dau\s+nam(?:\s+(?:toi|den)\s+(?:nay|hom nay|het hom nay|nay))?", ctx.t)):
         ctx.add(Period(date(ctx.as_of.year, 1, 1), ctx.as_of, "year_to_date", (R_YTD,), _src(m)), m)
-    for m in list(re.finditer(r"\bcung ky nam (?:truoc|ngoai)\b", ctx.t)):
+    for m in list(re.finditer(r"\bcung (?:ky|thang) nam (?:truoc|ngoai)\b", ctx.t)):
         ctx.mask(m)
         ctx.same_period_last_year = True
     for m in list(re.finditer(r"\bnam\s+(\d{4})\b", ctx.t)):
