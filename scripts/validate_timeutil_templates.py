@@ -5,8 +5,11 @@ template group: explicit month / explicit date), the date part of the SQL templa
 generated from the timeutil Period (`Period.where_sql`) and the computed answer is compared with gold.
 Selection, SQL templates, answer comparison and the data layer are the data-layer branch's, unmodified.
 
-    python scripts/validate_timeutil_templates.py --p3-root ../datamate_exp --train-dir data/train/train \
-        --folds ../datamate/eval/folds.json --out outputs/timeutil_templates.md [--shops biz_101 ...]
+    python scripts/validate_timeutil_templates.py --p3-root <checkout of feat/p3-data-cleaning> --train-dir data/train/train \
+        --out outputs/timeutil_templates.md [--folds eval/folds.json] [--shops biz_101 ...]
+
+--folds defaults to $ZAIC_FOLDS, else eval/folds.json in this repo if present (file comes from feat/real-data-eval);
+without it every shop is reported as "dev".
 """
 from __future__ import annotations
 
@@ -15,6 +18,7 @@ import collections
 import datetime as dt
 import importlib.util
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -60,7 +64,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--p3-root", required=True)
     ap.add_argument("--train-dir", required=True)
-    ap.add_argument("--folds")
+    ap.add_argument("--folds", default=os.environ.get("ZAIC_FOLDS") or (str(ROOT / "eval" / "folds.json") if (ROOT / "eval" / "folds.json").is_file() else None))
     ap.add_argument("--out", required=True)
     ap.add_argument("--shops", nargs="*")
     a = ap.parse_args()

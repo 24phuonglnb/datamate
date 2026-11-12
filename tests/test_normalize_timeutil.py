@@ -28,6 +28,7 @@ def P(a, b):
 
 
 # id -> (periods, comparison or None)
+# Kỳ mong đợi tự suy từ rulebook §2, không lấy từ answers.jsonl; chỉ dùng trong test, không dùng lúc inference.
 PERIOD_CASES = {
     # cumulative: "đến hết ngày X", "cuối ngày hôm nay"
     "q_0194d8d10f17": ([P(None, "2026-08-19")], None),
@@ -275,12 +276,12 @@ if __name__ == "__main__":
 
 def test_same_month_last_year_and_teencode_comparison():
     from src.timeutil import resolve
-    r = resolve("so vs cung thang nam truoc, dthu thang 4 nam 2026 thay doi may %", "2026-06-16")
-    assert (str(r.comparison.start), str(r.comparison.end)) == ("2025-04-01", "2025-04-30")
-    r = resolve("so cung ky nam trc, dthu thang 8/2026 tang giam may phan tram", "2026-09-07")
-    assert str(r.comparison.start) == "2025-08-01"
-    r = resolve("thang 4/2026 hon hay kem th truoc bao nhieu %", "2026-06-12")
-    assert (str(r.comparison.start), str(r.comparison.end)) == ("2026-03-01", "2026-03-31")
+    r = resolve("so vs cung thang nam truoc, dthu thang 5 nam 2026 doi bn %", "2026-07-10")
+    assert (str(r.comparison.start), str(r.comparison.end)) == ("2025-05-01", "2025-05-31")
+    r = resolve("so voi cung ky nam trc, dthu thang 9/2026 tang hay giam", "2026-10-03")
+    assert str(r.comparison.start) == "2025-09-01"
+    r = resolve("thang 7/2026 hon hay kem th truoc bn %", "2026-08-20")
+    assert (str(r.comparison.start), str(r.comparison.end)) == ("2026-06-01", "2026-06-30")
 
 
 def test_period_where_sql():
