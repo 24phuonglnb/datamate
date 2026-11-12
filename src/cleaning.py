@@ -565,19 +565,37 @@ _SUMMARY = re.compile(r"^(tong|cong|tong cong|tong ket|total|subtotal|ghi chu|no
 
 def split_summary_rows(df: pd.DataFrame, max_filled: int = 2) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Separate hand-written subtotal / footnote rows ("Tổng tháng | 901.896.400đ",
-    "Tổng ngày 01/03", "Ghi chú: số liệu ghi tay") from data rows.
+    "Tổng ngày 01/03", "Cộng ngày 01/05/2025", "Ghi chú: số liệu ghi tay") from data rows.
 
-    A row is a summary row when it has at most `max_filled` filled cells (in a table of
-    5+ columns) and one of them is a label starting with tổng / cộng / ghi chú / total...
+    A row in a 5+ column table is a summary row when at least one cell is a label starting
+    with tổng / cộng / ghi chú / total... AND either:
+    (a) it has at most `max_filled` filled cells, OR
+    (b) it leaves at least 2 columns blank (`n_filled <= len(cols) - 2`) and the summary
+        label is the ONLY non-numeric filled cell in the row (e.g. daily subtotal rows with
+        4 money subtotal columns).
     Returns (data_rows, removed_rows); summing a money column without this double counts."""
     cols = [c for c in df.columns if c not in META_COLS]
     if len(cols) < 5 or df.empty:
         return df, df.iloc[0:0]
-    sparse = df[cols].notna().sum(axis=1) <= max_filled
-    if not sparse.any():
+    n_filled = df[cols].notna().sum(axis=1)
+    cand_mask = n_filled <= max(max_filled, len(cols) - 2)
+    if not cand_mask.any():
         return df, df.iloc[0:0]
-    cand = df.loc[sparse, cols]
-    hit = cand.apply(lambda r: any(isinstance(v, str) and _SUMMARY.match(norm_key(v)) for v in r), axis=1)
+
+    def _is_summary_row(r: pd.Series) -> bool:
+        non_blank = [v for v in r if v is not None and not is_blank(v)]
+        if not non_blank:
+            return False
+        has_summary_label = any(isinstance(v, str) and bool(_SUMMARY.match(norm_key(v))) for v in non_blank)
+        if not has_summary_label:
+            return False
+        if len(non_blank) <= max_filled:
+            return True
+        non_num = [v for v in non_blank if parse_number(v) is None]
+        return len(non_num) == 1 and isinstance(non_num[0], str) and bool(_SUMMARY.match(norm_key(non_num[0])))
+
+    cand = df.loc[cand_mask, cols]
+    hit = cand.apply(_is_summary_row, axis=1)
     idx = hit[hit].index
     return df.drop(index=idx).reset_index(drop=True), df.loc[idx]
 

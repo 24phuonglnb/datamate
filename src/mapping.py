@@ -283,7 +283,7 @@ def role_from_description(desc: str) -> tuple[str, float] | None:
 
 COL_RULES: list[tuple[str, str, float]] = [
     # order_id
-    (r"^(ma hoa don|ma don hang|ma don|ma giao dich|ma gd|ma phieu|ma bill|ma chung tu|so phieu|so hoa don|so giao dich|so don hang|so don|don so|so bill|order id|bill)$", "order_id", 0.9),
+    (r"^(ma hoa don|ma hd|ma don hang|ma dh|ma don|ma giao dich|ma gd|ma phieu|ma bill|ma chung tu|so phieu|so hoa don|so hd|so giao dich|so don hang|so don|don so|so bill|order id|bill)$", "order_id", 0.9),
     (r"^(stt)$", "order_id", 0.7),  # multi-line tickets/orders, e.g. dev_014
     # order_date
     (r"^(ngay ban|ngay dat hang|ngay dat|ngay gd|ngay giao dich|ngay lap|ngay hd|ngay hoa don|ngay tao don|ngay sua|thoi gian|thoi gian lap|thoi gian tao|date)$", "order_date", 0.9),
@@ -293,7 +293,7 @@ COL_RULES: list[tuple[str, str, float]] = [
     # status
     (r"^(trang thai don hang|trang thai don|trang thai xu ly|trang thai giao|trang thai|status|tinh trang|ket qua|tien do|tt don|xu ly|ghi chu tt)$", "status", 0.9),
     # item_name
-    (r"^(ten hang hoa|ten hang|ten san pham|ten sp|ten mon|hang hoa|hang ban|san pham|mat hang|noi dung|chi tiet hang|item)$", "item_name", 0.85),
+    (r"^(ten hang hoa|ten hang|ten mat hang|ten san pham|ten sp|ten mon|hang hoa|hang ban|san pham|mat hang|noi dung|chi tiet hang|item)$", "item_name", 0.85),
     (r"^(hang)$", "item_name", 0.8),
     # item_code
     (r"^(ma hang hoa|ma hang|ma san pham|ma sp|ma hh|ma sku|id sp|ma barcode|ma vach|barcode)$", "item_code", 0.9),

@@ -1,0 +1,406 @@
+{
+  "n_shops": 44,
+  "total_cold_seconds": 781.77,
+  "total_warm_seconds": 0.339,
+  "avg_warm_ms": 7.71,
+  "total_cache_mb": 1711.97,
+  "peak_rss_mb": 684.0,
+  "shops": [
+    {
+      "shop": "biz_101",
+      "n_rows": 56501,
+      "has_views": true,
+      "cold_s": 7.906,
+      "warm_ms": 1.56,
+      "cache_mb": 23.6,
+      "peak_rss_mb": 214.0
+    },
+    {
+      "shop": "biz_102",
+      "n_rows": 86029,
+      "has_views": true,
+      "cold_s": 17.423,
+      "warm_ms": 19.24,
+      "cache_mb": 39.02,
+      "peak_rss_mb": 288.2
+    },
+    {
+      "shop": "biz_103",
+      "n_rows": 45534,
+      "has_views": true,
+      "cold_s": 9.203,
+      "warm_ms": 7.85,
+      "cache_mb": 17.77,
+      "peak_rss_mb": 288.2
+    },
+    {
+      "shop": "biz_104",
+      "n_rows": 62451,
+      "has_views": true,
+      "cold_s": 11.718,
+      "warm_ms": 2.63,
+      "cache_mb": 27.1,
+      "peak_rss_mb": 288.2
+    },
+    {
+      "shop": "biz_105",
+      "n_rows": 137983,
+      "has_views": true,
+      "cold_s": 27.6,
+      "warm_ms": 34.61,
+      "cache_mb": 65.8,
+      "peak_rss_mb": 414.0
+    },
+    {
+      "shop": "biz_106",
+      "n_rows": 126186,
+      "has_views": true,
+      "cold_s": 45.31,
+      "warm_ms": 8.02,
+      "cache_mb": 79.41,
+      "peak_rss_mb": 455.4
+    },
+    {
+      "shop": "biz_107",
+      "n_rows": 43079,
+      "has_views": true,
+      "cold_s": 7.038,
+      "warm_ms": 2.18,
+      "cache_mb": 15.59,
+      "peak_rss_mb": 455.4
+    },
+    {
+      "shop": "biz_108",
+      "n_rows": 78983,
+      "has_views": true,
+      "cold_s": 21.431,
+      "warm_ms": 5.18,
+      "cache_mb": 39.63,
+      "peak_rss_mb": 455.4
+    },
+    {
+      "shop": "biz_109",
+      "n_rows": 83284,
+      "has_views": true,
+      "cold_s": 26.192,
+      "warm_ms": 4.94,
+      "cache_mb": 48.7,
+      "peak_rss_mb": 455.4
+    },
+    {
+      "shop": "biz_110",
+      "n_rows": 28888,
+      "has_views": true,
+      "cold_s": 2.43,
+      "warm_ms": 1.48,
+      "cache_mb": 10.03,
+      "peak_rss_mb": 455.4
+    },
+    {
+      "shop": "biz_111",
+      "n_rows": 106585,
+      "has_views": true,
+      "cold_s": 14.527,
+      "warm_ms": 2.26,
+      "cache_mb": 47.64,
+      "peak_rss_mb": 455.4
+    },
+    {
+      "shop": "biz_112",
+      "n_rows": 113325,
+      "has_views": true,
+      "cold_s": 19.618,
+      "warm_ms": 17.71,
+      "cache_mb": 46.78,
+      "peak_rss_mb": 455.4
+    },
+    {
+      "shop": "biz_113",
+      "n_rows": 32994,
+      "has_views": true,
+      "cold_s": 5.392,
+      "warm_ms": 2.0,
+      "cache_mb": 12.37,
+      "peak_rss_mb": 455.4
+    },
+    {
+      "shop": "biz_114",
+      "n_rows": 26119,
+      "has_views": true,
+      "cold_s": 3.675,
+      "warm_ms": 1.59,
+      "cache_mb": 11.8,
+      "peak_rss_mb": 455.4
+    },
+    {
+      "shop": "biz_115",
+      "n_rows": 28721,
+      "has_views": true,
+      "cold_s": 8.821,
+      "warm_ms": 8.56,
+      "cache_mb": 19.41,
+      "peak_rss_mb": 455.4
+    },
+    {
+      "shop": "biz_116",
+      "n_rows": 39889,
+      "has_views": true,
+      "cold_s": 11.821,
+      "warm_ms": 3.1,
+      "cache_mb": 26.38,
+      "peak_rss_mb": 455.4
+    },
+    {
+      "shop": "biz_117",
+      "n_rows": 33332,
+      "has_views": true,
+      "cold_s": 10.272,
+      "warm_ms": 11.42,
+      "cache_mb": 22.8,
+      "peak_rss_mb": 455.4
+    },
+    {
+      "shop": "biz_118",
+      "n_rows": 46001,
+      "has_views": true,
+      "cold_s": 14.152,
+      "warm_ms": 13.89,
+      "cache_mb": 30.56,
+      "peak_rss_mb": 455.4
+    },
+    {
+      "shop": "biz_119",
+      "n_rows": 63823,
+      "has_views": true,
+      "cold_s": 20.071,
+      "warm_ms": 12.66,
+      "cache_mb": 40.11,
+      "peak_rss_mb": 455.4
+    },
+    {
+      "shop": "biz_120",
+      "n_rows": 90706,
+      "has_views": true,
+      "cold_s": 28.52,
+      "warm_ms": 13.7,
+      "cache_mb": 56.67,
+      "peak_rss_mb": 455.4
+    },
+    {
+      "shop": "biz_121",
+      "n_rows": 82920,
+      "has_views": true,
+      "cold_s": 20.909,
+      "warm_ms": 3.95,
+      "cache_mb": 43.79,
+      "peak_rss_mb": 455.4
+    },
+    {
+      "shop": "biz_122",
+      "n_rows": 103663,
+      "has_views": true,
+      "cold_s": 25.832,
+      "warm_ms": 22.68,
+      "cache_mb": 55.15,
+      "peak_rss_mb": 455.4
+    },
+    {
+      "shop": "biz_123",
+      "n_rows": 62941,
+      "has_views": true,
+      "cold_s": 9.514,
+      "warm_ms": 6.43,
+      "cache_mb": 50.48,
+      "peak_rss_mb": 455.4
+    },
+    {
+      "shop": "biz_124",
+      "n_rows": 95845,
+      "has_views": true,
+      "cold_s": 40.962,
+      "warm_ms": 8.27,
+      "cache_mb": 74.84,
+      "peak_rss_mb": 455.4
+    },
+    {
+      "shop": "biz_125",
+      "n_rows": 79052,
+      "has_views": true,
+      "cold_s": 10.191,
+      "warm_ms": 1.66,
+      "cache_mb": 34.73,
+      "peak_rss_mb": 455.4
+    },
+    {
+      "shop": "biz_126",
+      "n_rows": 66429,
+      "has_views": true,
+      "cold_s": 9.625,
+      "warm_ms": 2.66,
+      "cache_mb": 23.62,
+      "peak_rss_mb": 455.4
+    },
+    {
+      "shop": "biz_127",
+      "n_rows": 128293,
+      "has_views": true,
+      "cold_s": 16.935,
+      "warm_ms": 2.28,
+      "cache_mb": 53.43,
+      "peak_rss_mb": 455.4
+    },
+    {
+      "shop": "biz_128",
+      "n_rows": 98507,
+      "has_views": true,
+      "cold_s": 21.054,
+      "warm_ms": 10.54,
+      "cache_mb": 44.89,
+      "peak_rss_mb": 455.4
+    },
+    {
+      "shop": "biz_129",
+      "n_rows": 145479,
+      "has_views": true,
+      "cold_s": 16.511,
+      "warm_ms": 2.37,
+      "cache_mb": 52.45,
+      "peak_rss_mb": 455.4
+    },
+    {
+      "shop": "biz_130",
+      "n_rows": 171936,
+      "has_views": true,
+      "cold_s": 30.673,
+      "warm_ms": 5.59,
+      "cache_mb": 75.91,
+      "peak_rss_mb": 508.3
+    },
+    {
+      "shop": "dev_001",
+      "n_rows": 90297,
+      "has_views": true,
+      "cold_s": 17.887,
+      "warm_ms": 3.69,
+      "cache_mb": 43.72,
+      "peak_rss_mb": 508.3
+    },
+    {
+      "shop": "dev_002",
+      "n_rows": 84146,
+      "has_views": true,
+      "cold_s": 15.762,
+      "warm_ms": 18.62,
+      "cache_mb": 37.73,
+      "peak_rss_mb": 508.3
+    },
+    {
+      "shop": "dev_003",
+      "n_rows": 100210,
+      "has_views": true,
+      "cold_s": 46.547,
+      "warm_ms": 8.47,
+      "cache_mb": 72.09,
+      "peak_rss_mb": 508.3
+    },
+    {
+      "shop": "dev_004",
+      "n_rows": 32869,
+      "has_views": true,
+      "cold_s": 9.851,
+      "warm_ms": 11.17,
+      "cache_mb": 21.3,
+      "peak_rss_mb": 508.3
+    },
+    {
+      "shop": "dev_005",
+      "n_rows": 75970,
+      "has_views": true,
+      "cold_s": 18.957,
+      "warm_ms": 16.94,
+      "cache_mb": 40.66,
+      "peak_rss_mb": 508.3
+    },
+    {
+      "shop": "dev_006",
+      "n_rows": 71061,
+      "has_views": true,
+      "cold_s": 12.213,
+      "warm_ms": 7.22,
+      "cache_mb": 63.12,
+      "peak_rss_mb": 508.3
+    },
+    {
+      "shop": "dev_007",
+      "n_rows": 119070,
+      "has_views": true,
+      "cold_s": 45.97,
+      "warm_ms": 1.93,
+      "cache_mb": 82.05,
+      "peak_rss_mb": 508.3
+    },
+    {
+      "shop": "dev_008",
+      "n_rows": 151392,
+      "has_views": true,
+      "cold_s": 81.314,
+      "warm_ms": 11.94,
+      "cache_mb": 112.97,
+      "peak_rss_mb": 684.0
+    },
+    {
+      "shop": "dev_009",
+      "n_rows": 22490,
+      "has_views": true,
+      "cold_s": 1.923,
+      "warm_ms": 1.48,
+      "cache_mb": 7.61,
+      "peak_rss_mb": 684.0
+    },
+    {
+      "shop": "dev_010",
+      "n_rows": 43935,
+      "has_views": true,
+      "cold_s": 6.627,
+      "warm_ms": 2.47,
+      "cache_mb": 20.13,
+      "peak_rss_mb": 684.0
+    },
+    {
+      "shop": "dev_011",
+      "n_rows": 6043,
+      "has_views": true,
+      "cold_s": 1.1,
+      "warm_ms": 1.77,
+      "cache_mb": 2.61,
+      "peak_rss_mb": 684.0
+    },
+    {
+      "shop": "dev_012",
+      "n_rows": 7525,
+      "has_views": false,
+      "cold_s": 0.495,
+      "warm_ms": 1.72,
+      "cache_mb": 0.98,
+      "peak_rss_mb": 684.0
+    },
+    {
+      "shop": "dev_013",
+      "n_rows": 20643,
+      "has_views": true,
+      "cold_s": 5.342,
+      "warm_ms": 7.08,
+      "cache_mb": 11.75,
+      "peak_rss_mb": 684.0
+    },
+    {
+      "shop": "dev_014",
+      "n_rows": 10107,
+      "has_views": true,
+      "cold_s": 2.456,
+      "warm_ms": 3.59,
+      "cache_mb": 4.79,
+      "peak_rss_mb": 684.0
+    }
+  ]
+}

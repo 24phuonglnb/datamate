@@ -21,6 +21,7 @@ verify_invariants(ledger_df, readme="") -> dict[str, dict[str, Any]]
 """
 from __future__ import annotations
 
+import copy
 import datetime as dt
 import re
 from dataclasses import dataclass
@@ -291,6 +292,11 @@ CANONICAL_COLUMNS = [
 ]
 
 
+_NON_ITEM_ADJUSTMENT_RE = re.compile(
+    r"^(voucher|phi ship|phi giao hang|phi van chuyen|dung \d+ diem|giam gia hoa don|chiet khau hoa don)$"
+)
+
+
 def build_ledger(
     tables: list[RawTable],
     mapping: Mapping | None = None,
@@ -301,12 +307,13 @@ def build_ledger(
     Steps applied:
     1. Select sales_table and orders_table according to mapping.
     2. Split hand-written summary rows (split_summary_rows).
-    3. Link orders header table if present (by order_join_key).
-    4. Fill down order-level blanks within each order (fill_order_level).
-    5. Drop export duplicate rows within each order (drop_export_duplicates).
-    6. Parse date/time, quantity, price, amount cells.
-    7. Normalize order status at line level, then enforce order-level priority (§1, §8).
-    8. Convert quantity to base unit using conversion rules and cross-check with existing qty_base column.
+    3. Fill down order-level blanks within each order (fill_order_level) and drop export duplicates.
+    4. Link orders header table if present (supporting different column names via left_on/right_on).
+    5. Exclude invoice-level adjustment rows (voucher / shipping fee / loyalty points with blank qty).
+    6. Enrich item_name from catalog and customer_name from customer table when only codes are in sales.
+    7. Parse date/time, quantity, price, amount cells; unify order placement date per order_id.
+    8. Normalize order status at line level, then enforce order-level priority (§1, §8).
+    9. Convert quantity to base unit using conversion rules and cross-check with existing qty_base column.
 
     Returns:
         (ledger_df, issues)
@@ -314,6 +321,7 @@ def build_ledger(
     issues: dict[str, Any] = {
         "summary_rows_dropped": 0,
         "duplicate_rows_dropped": 0,
+        "adjustment_rows_dropped": 0,
         "order_level_filled": 0,
         "unparsed_dates": 0,
         "unparsed_amounts": 0,
@@ -323,6 +331,8 @@ def build_ledger(
 
     if mapping is None:
         mapping = propose_mapping(tables, readme)
+    else:
+        mapping = copy.deepcopy(mapping)
 
     # 1. Locate sales_table
     sales_t = None
@@ -341,34 +351,7 @@ def build_ledger(
     sales_df, removed_summary = split_summary_rows(sales_df)
     issues["summary_rows_dropped"] += len(removed_summary)
 
-    # 3. Handle separate orders header table if present
-    ord_df = None
-    if mapping.orders_table and mapping.order_join_key:
-        ord_t = next((t for t in tables if t.name == mapping.orders_table), None)
-        if ord_t is not None:
-            ord_df = ord_t.df.copy()
-            ord_df, removed_ord_summary = split_summary_rows(ord_df)
-            issues["summary_rows_dropped"] += len(removed_ord_summary)
-            if mapping.order_join_key in ord_df.columns:
-                ord_df = drop_export_duplicates(ord_df, mapping.order_join_key)
-
-    # Merge orders header table columns if order_join_key exists in both
-    join_key = mapping.order_join_key or mapping.sales_columns.get("order_id")
-    if ord_df is not None and join_key and join_key in sales_df.columns and join_key in ord_df.columns:
-        ord_cols_to_pull = {}
-        for role, c in mapping.orders_columns.items():
-            if c and c in ord_df.columns and c != join_key:
-                # Only pull if sales_df does not already have this role assigned
-                if mapping.sales_columns.get(role) is None:
-                    ord_cols_to_pull[c] = f"__ord_{role}"
-                    mapping.sales_columns[role] = f"__ord_{role}"
-
-        if ord_cols_to_pull:
-            subset = ord_df[[join_key] + list(ord_cols_to_pull.keys())].drop_duplicates(subset=[join_key])
-            subset = subset.rename(columns=ord_cols_to_pull)
-            sales_df = sales_df.merge(subset, on=join_key, how="left")
-
-    # 4. Fill down order-level blanks and drop export duplicates (§8)
+    # 3. Fill down order-level blanks and drop export duplicates (§8)
     order_id_col = mapping.sales_columns.get("order_id")
     if order_id_col and order_id_col in sales_df.columns:
         n_before_fill = sales_df[order_id_col].isna().sum()
@@ -379,11 +362,56 @@ def build_ledger(
         sales_df = drop_export_duplicates(sales_df, order_id_col)
         issues["duplicate_rows_dropped"] = int(n_before_dedup - len(sales_df))
 
-    # 5. Fallback item_name from catalog table if missing
+    # 4. Handle separate orders header table if present
+    ord_df = None
+    ord_oid_col = mapping.orders_columns.get("order_id") or mapping.order_join_key
+    sales_oid_col = order_id_col or mapping.order_join_key
+    if mapping.orders_table and ord_oid_col:
+        ord_t = next((t for t in tables if t.name == mapping.orders_table), None)
+        if ord_t is not None:
+            ord_df = ord_t.df.copy()
+            ord_df, removed_ord_summary = split_summary_rows(ord_df)
+            issues["summary_rows_dropped"] += len(removed_ord_summary)
+            if ord_oid_col in ord_df.columns:
+                ord_df = fill_order_level(ord_df, ord_oid_col)
+                ord_df = drop_export_duplicates(ord_df, ord_oid_col)
+
+    if (
+        ord_df is not None
+        and sales_oid_col
+        and ord_oid_col
+        and sales_oid_col in sales_df.columns
+        and ord_oid_col in ord_df.columns
+    ):
+        ord_cols_to_pull = {}
+        for role, c in mapping.orders_columns.items():
+            if c and c in ord_df.columns and c != ord_oid_col:
+                if mapping.sales_columns.get(role) is None:
+                    ord_cols_to_pull[c] = f"__ord_{role}"
+                    mapping.sales_columns[role] = f"__ord_{role}"
+
+        if ord_cols_to_pull:
+            subset = ord_df[[ord_oid_col] + list(ord_cols_to_pull.keys())].drop_duplicates(subset=[ord_oid_col])
+            subset = subset.rename(columns=ord_cols_to_pull)
+            subset["__join_oid"] = subset[ord_oid_col].map(lambda x: str(x).strip() if pd.notna(x) else None)
+            subset = subset.drop(columns=[ord_oid_col]).drop_duplicates(subset=["__join_oid"])
+            sales_df["__join_oid"] = sales_df[sales_oid_col].map(lambda x: str(x).strip() if pd.notna(x) else None)
+            sales_df = sales_df.merge(subset, on="__join_oid", how="left").drop(columns=["__join_oid"])
+
+    # 4b. Exclude invoice-level adjustment rows (voucher / shipping fee / points with blank qty, Rulebook §1)
     item_name_col = mapping.sales_columns.get("item_name")
+    qty_col = mapping.sales_columns.get("qty")
+    if item_name_col and item_name_col in sales_df.columns and qty_col and qty_col in sales_df.columns:
+        adj_mask = sales_df[qty_col].isna() & sales_df[item_name_col].map(
+            lambda v: bool(v is not None and not pd.isna(v) and _NON_ITEM_ADJUSTMENT_RE.match(norm_key(v)))
+        )
+        if adj_mask.any():
+            issues["adjustment_rows_dropped"] = int(adj_mask.sum())
+            sales_df = sales_df.loc[~adj_mask].reset_index(drop=True)
+
+    # 5. Fallback item_name from catalog table and customer_name from customer table if missing
     item_code_col = mapping.sales_columns.get("item_code")
     if (not item_name_col or item_name_col not in sales_df.columns) and (item_code_col and item_code_col in sales_df.columns):
-        # Look for catalog table with matching code
         for t in tables:
             t_k = norm_key(t.name)
             if any(k in t_k for k in ["san pham", "hang hoa", "catalog", "danh muc"]):
@@ -395,6 +423,25 @@ def build_ledger(
                     sales_df = sales_df.merge(cat_map, left_on=item_code_col, right_on=cat_code_col, how="left")
                     mapping.sales_columns["item_name"] = cat_name_col
                     item_name_col = cat_name_col
+                    break
+
+    cust_name_col = mapping.sales_columns.get("customer_name")
+    cust_code_col = mapping.sales_columns.get("customer_code")
+    if (not cust_name_col or cust_name_col not in sales_df.columns) and (cust_code_col and cust_code_col in sales_df.columns):
+        for t in tables:
+            t_k = norm_key(t.name)
+            if any(k in t_k for k in ["khach hang", "khach_hang", "khachhang", "doi tac", "customer"]):
+                c_df = t.df
+                c_code = next((c for c in c_df.columns if any(k in norm_key(c) for k in ["ma kh", "ma khach", "so kh", "customer id", "ma doi tac", "ma"])), None)
+                c_name = next((c for c in c_df.columns if any(k in norm_key(c) for k in ["ten kh", "ho ten", "ten khach", "khach hang", "ten doi tac", "ten"])), None)
+                if c_code and c_name and c_code in c_df.columns and c_name in c_df.columns:
+                    c_map = c_df[[c_code, c_name]].dropna().drop_duplicates(subset=[c_code]).copy()
+                    c_map["__join_cc"] = c_map[c_code].map(lambda x: str(x).strip())
+                    c_map = c_map[["__join_cc", c_name]].rename(columns={c_name: "__cust_name"}).drop_duplicates(subset=["__join_cc"])
+                    sales_df["__join_cc"] = sales_df[cust_code_col].map(lambda x: str(x).strip() if pd.notna(x) else None)
+                    sales_df = sales_df.merge(c_map, on="__join_cc", how="left").drop(columns=["__join_cc"])
+                    mapping.sales_columns["customer_name"] = "__cust_name"
+                    cust_name_col = "__cust_name"
                     break
 
     # 6. Parse date and time
@@ -495,28 +542,39 @@ def build_ledger(
         normalize_status(s_v, n_v) for s_v, n_v in zip(raw_statuses, raw_notes)
     ]
 
-    # Resolve order-level status if order_id is present
+    # Resolve order-level status and placement date/time if order_id is present (§1, §8)
     raw_oids = sales_df[order_id_col] if order_id_col and order_id_col in sales_df.columns else [None] * len(sales_df)
     normalized_order_statuses = line_statuses.copy()
 
     if order_id_col and order_id_col in sales_df.columns:
-        # Group by non-null order_id and determine order-level status
         order_status_map: dict[Any, str] = {}
-        for oid, st in zip(raw_oids, line_statuses):
+        order_date_map: dict[Any, dt.date] = {}
+        order_time_map: dict[Any, dt.time] = {}
+
+        for oid, st, d_val, t_val in zip(raw_oids, line_statuses, parsed_dates, parsed_times):
             if pd.isna(oid):
                 continue
             cur = order_status_map.get(oid)
-            if cur is None:
+            if cur is None or STATUS_PRIORITY.get(st, 0) > STATUS_PRIORITY.get(cur, 0):
                 order_status_map[oid] = st
-            else:
-                # Pick higher priority
-                if STATUS_PRIORITY.get(st, 0) > STATUS_PRIORITY.get(cur, 0):
-                    order_status_map[oid] = st
+            if d_val is not None:
+                cur_d = order_date_map.get(oid)
+                if cur_d is None or d_val < cur_d:
+                    order_date_map[oid] = d_val
+                    if t_val is not None:
+                        order_time_map[oid] = t_val
+            if t_val is not None and oid not in order_time_map:
+                order_time_map[oid] = t_val
 
-        # Overwrite all lines of each order with its resolved order-level status
+        # Overwrite all lines of each order with its resolved order-level status and placement date
         for i, oid in enumerate(raw_oids):
-            if not pd.isna(oid) and oid in order_status_map:
-                normalized_order_statuses[i] = order_status_map[oid]
+            if not pd.isna(oid):
+                if oid in order_status_map:
+                    normalized_order_statuses[i] = order_status_map[oid]
+                if oid in order_date_map:
+                    parsed_dates[i] = order_date_map[oid]
+                if oid in order_time_map and parsed_times[i] is None:
+                    parsed_times[i] = order_time_map[oid]
 
     # 9. Unit conversion and base unit calculation
     conversions = load_unit_conversions(tables, readme)
