@@ -1,0 +1,29 @@
+{
+ "_source": "30 train shops with views; worst value per metric",
+ "shops_without_ledger": [],
+ "unparsed_dates_pct": {
+  "worst": 0.0,
+  "n": 30
+ },
+ "status_unknown_pct": {
+  "worst": 0.0,
+  "n": 30
+ },
+ "unit_unconverted_pct": {
+  "worst": 0.0,
+  "n": 30
+ },
+ "nonpositive_months": {
+  "worst": 0,
+  "n": 30
+ },
+ "dup_pct": {
+  "worst": 2.902739955272246,
+  "n": 30
+ },
+ "amount_ratio": {
+  "min": 0.3333333333333333,
+  "max": 1.0,
+  "n": 30
+ }
+}

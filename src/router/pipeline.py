@@ -19,7 +19,11 @@ def solve(question: dict[str, Any], agent: Any, router: Router | None, normalize
         try:
             nq = normalizer(str(question.get("question", "")), str(question.get("as_of_date", "")))
             conn = provider.connection(str(question["business_id"]))
-            decision = router.route(question, nq, conn)
+            bad = provider.flags(str(question["business_id"])) if hasattr(provider, "flags") else []
+            if bad:  # shop-level data check failed: the whole shop abstains, reason logged
+                decision = RouteDecision("abstain", "shop_low_confidence: " + "; ".join(bad))
+            else:
+                decision = router.route(question, nq, conn)
         except Exception as exc:  # never let the router break a question: fall back to the agent
             decision = RouteDecision("llm", f"router_error:{type(exc).__name__}")
     if decision.route in ("template", "unanswerable"):

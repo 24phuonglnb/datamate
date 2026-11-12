@@ -209,3 +209,46 @@ def test_pipeline_routes_template_and_falls_back(monkeypatch):
     q3 = dict(q, id="t3", question="doanh thu tháng 1/2020 là bao nhiêu")
     ans, log = solve(q3, agent, Router(), norm, FakeProvider())
     assert ans["type"] == "unanswerable" and agent.calls == 2 and log["router"]["route"] == "unanswerable"
+
+
+def test_invariant_flags_use_train_worst_values():
+    from src.router import invariants as inv
+    thr = {"unparsed_dates_pct": {"worst": 0.0}, "dup_pct": {"worst": 2.9}, "nonpositive_months": {"worst": 0},
+           "status_unknown_pct": {"worst": 0.0}, "unit_unconverted_pct": {"worst": 0.0},
+           "amount_ratio": {"min": 0.33, "max": 1.0}}
+    ok = {"amount_ratio": 0.5, "unparsed_dates_pct": 0.0, "dup_pct": 2.9, "nonpositive_months": 0, "no_ledger": 0}
+    assert inv.flags(ok, thr) == []
+    assert inv.flags(dict(ok, unparsed_dates_pct=3.0), thr)[0].startswith("unparsed_dates_pct")
+    assert inv.flags(dict(ok, amount_ratio=0.2), thr) and inv.flags(dict(ok, amount_ratio=1.2), thr)
+    assert inv.flags({"no_ledger": 1}, thr) == ["no_ledger"]
+    assert inv.flags(dict(ok, amount_ratio=None), thr) == []  # not computable is not a reason by itself
+
+
+def test_flagged_shop_abstains_in_pipeline():
+    from src.nlu.normalize import RuleNormalizer
+    from src.router.pipeline import solve
+
+    class P:
+        def connection(self, shop):
+            return _db()
+
+        def flags(self, shop):
+            return ["unparsed_dates_pct=54>train_worst=0"]
+
+    class A:
+        calls = 0
+
+        def solve(self, q):
+            A.calls += 1
+            return {"id": q["id"], "type": "abstain"}, {}
+
+    q = {"id": "t1", "business_id": "x", "as_of_date": AS_OF, "question": "doanh thu tháng 3/2026 là bao nhiêu"}
+    ans, log = solve(q, A(), Router(), RuleNormalizer(None), P())
+    assert ans == {"id": "t1", "type": "abstain"} and A.calls == 0
+    assert log["router"]["route"] == "abstain" and "shop_low_confidence" in log["router"]["reason"]
+
+
+def test_thresholds_file_has_train_values():
+    from src.router import invariants as inv
+    thr = inv.load_thresholds()
+    assert thr["amount_ratio"]["n"] == 30 and "worst" in thr["dup_pct"]

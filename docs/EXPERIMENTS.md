@@ -159,3 +159,12 @@ Report: `eval/reports/2026-11-13_router.md` (ids only). Scored with `eval/pa_sco
 | 2026-11-13 | feat/intent-router | none (rules + SQL) | dev (24 shops, 2291 q) | router-answered 968/968 correct (960 template + 8 unanswerable); PA lower bound 0.4225 | 42.25% answered by the router, rest -> LLM |
 | 2026-11-13 | feat/intent-router | none (rules + SQL) | hold-out (6 shops, 709 q) | router-answered 299/299 correct (298 template + 1 unanswerable); PA lower bound 0.4217 | first run 296/298 (threshold orders), fixed on dev evidence only |
 | 2026-11-13 | feat/intent-router | none (rules + SQL), router-only submission | public_test (14 shops, 1000 q), no gold | not scored (leaderboard) | 221 answered, 779 abstain (dev_012: views not built, 0 answered); intent mix differs from train |
+
+### Data-layer invariants per shop (branch feat/intent-router, CPU, no gold)
+
+`src/router/invariants.py`, thresholds = worst value over the 30 train shops (`src/router/invariant_thresholds.json`,
+derived by `scripts/data_invariants.py derive`; never tuned on public). Flagged shops abstain entirely (reason in the log).
+
+| date | set | result |
+|---|---|---|
+| 2026-11-13 | public_test, 14 shops | flagged: dev_004 (54% of sales dates unparsed: day/month cells without year), dev_007 and dev_008 (amount_ratio 0.3321 / 0.3323, marginally below the train minimum 0.3333), dev_012 (views not built). Leaderboard v1 router-only: 0.165 (221 answered) |

@@ -16,6 +16,7 @@ class ConnectionProvider:
         self.root = Path(root)
         self.max_open = max_open
         self._open: dict[str, BusinessDB] = {}
+        self._flags: dict[str, list[str]] = {}
         cal = self.root / "calendar.csv"
         self._calendar = cal if cal.is_file() else None
 
@@ -29,6 +30,18 @@ class ConnectionProvider:
                 self._open.pop(next(iter(self._open))).close()
             self._open[shop] = BusinessDB(target, self._calendar)
         return self._open[shop].connection
+
+    def flags(self, shop: str) -> list[str]:
+        """Low-confidence reasons of the shop's data layer (empty = ok), computed once per shop (invariants.py)."""
+        if shop not in self._flags:
+            from . import invariants
+            conn = self.connection(shop)
+            try:
+                m = invariants.compute(self.root / "data" / shop, conn)
+                self._flags[shop] = invariants.flags(m, invariants.load_thresholds())
+            except Exception as exc:  # cannot even check the shop: do not trust it
+                self._flags[shop] = [f"invariants_error:{type(exc).__name__}"]
+        return self._flags[shop]
 
     def close(self) -> None:
         for db in self._open.values():

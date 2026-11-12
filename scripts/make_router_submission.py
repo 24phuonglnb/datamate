@@ -50,16 +50,23 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--data-dir", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--guard", action="store_true", help="abstain every shop flagged low_confidence by the data invariants")
+    ap.add_argument("--meta-out", help="jsonl with id, business_id, intent, route, reason per question (not for submission)")
     a = ap.parse_args()
     data = Path(a.data_dir)
     qs = [json.loads(l) for l in open(data / "questions.jsonl", encoding="utf-8") if l.strip()]
     router, norm, prov = Router(), RuleNormalizer(data / "calendar.csv"), ConnectionProvider(data)
     t0 = time.monotonic()
-    out, per_shop, shop_err, reasons = [], collections.defaultdict(collections.Counter), {}, collections.Counter()
+    meta, out, per_shop, shop_err, reasons = [], [], collections.defaultdict(collections.Counter), {}, collections.Counter()
     for q in sorted(qs, key=lambda x: x["business_id"]):  # grouped by shop only for speed; file order is irrelevant
         biz, qid = q["business_id"], q["id"]
         try:
-            d = router.route(q, norm(q["question"], q["as_of_date"]), prov.connection(biz))
+            bad = prov.flags(biz) if a.guard else []
+            if bad:
+                from src.router.router import RouteDecision
+                d = RouteDecision("abstain", "shop_low_confidence: " + "; ".join(bad))
+            else:
+                d = router.route(q, norm(q["question"], q["as_of_date"]), prov.connection(biz))
         except Exception as exc:
             shop_err.setdefault(biz, f"{type(exc).__name__}: {str(exc)[:160]}")
             d = None
@@ -71,6 +78,8 @@ def main() -> None:
         per_shop[biz]["total"] += 1
         per_shop[biz][line["type"] if line["type"] in ("abstain", "unanswerable") else "answered"] += 1
         out.append(line)
+        meta.append({"id": qid, "business_id": biz, "intent": d.intent if d else None,
+                     "route": d.route if d else "llm", "reason": d.reason if d else "shop_error"})
     prov.close()
     ids = [x["id"] for x in out]
     problems = [(x["id"], valid_line(x)) for x in out if valid_line(x)]
@@ -82,6 +91,8 @@ def main() -> None:
     with open(a.out, "w", encoding="utf-8") as f:
         for x in out:
             f.write(json.dumps(x, ensure_ascii=False) + "\n")
+    if a.meta_out:
+        Path(a.meta_out).write_text("\n".join(json.dumps(m, ensure_ascii=False) for m in meta) + "\n", encoding="utf-8")
     print(f"{datetime.date.today()} wrote {len(out)} lines to {a.out} in {time.monotonic() - t0:.0f}s; ids unique, all lines valid")
     print("shop      total answered unanswerable abstain")
     for b in sorted(per_shop):
