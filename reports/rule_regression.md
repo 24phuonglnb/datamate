@@ -1,6 +1,6 @@
 # Báo cáo Regression Tầng Dữ Liệu (Task T5 — Không dùng LLM)
 
-**Tổng kết: 942/942 (100.00% đúng trên câu đã chọn)** | Doanh thu tháng (`revenue`): **197/197 (100.00%)** | Thời gian chạy 30 shop: `614.5s`
+**Tổng kết: 942/942 (100.00% đúng trên câu đã chọn)** | Doanh thu tháng (`revenue`): **197/197 (100.00%)** | Thời gian chạy 30 shop: `630.5s`
 
 ## 1. Thống kê theo Intent
 

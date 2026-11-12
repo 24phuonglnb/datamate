@@ -761,6 +761,224 @@ def _build_item_catalog_and_canonicalize_lines(
     return df, items_df
 
 
+# ------------------------------------------------------------- payments / deliveries / due dates
+
+# Column-name patterns (accent-free, lower case) for dates kept outside the sales ledger.
+_DUE_COL = re.compile(r"\b(han thanh toan|han tra|han no|han gop|ngay den han|den han|ngay phai tra|phai tra|han)\b")
+_PAY_COL = re.compile(r"\b(thoi gian thu|ngay thu|gio thu|ngay tt|thoi gian tt|ngay thanh toan|thoi gian thanh toan|ngay tra tien|ngay nop)\b")
+_DELIV_COL = re.compile(r"\b(ngay giao hang|ngay giao|thoi gian giao|giao luc|ngay cho|ngay van chuyen|ngay ship|ngay xuat kho)\b")
+_PAY_TABLE = ("so quy", "phieu thu", "thanh toan", "thu tien")
+_DELIV_TABLE = ("giao hang", "so giao", "van chuyen", "cho hang", "phieu giao")
+_ROUND_COL = re.compile(r"\b(lan giao|luot giao|dot giao|dot|lan|luot)\b")
+_AMOUNT_COL = re.compile(r"\b(so tien|tien thu|so tien thu|gia tri|tien|thanh tien|amount)\b")
+_METHOD_COL = re.compile(r"\b(phuong thuc|hinh thuc|pttt|httt)\b")
+
+ORDER_EVENT_COLUMNS = (
+    "first_paid_at", "last_paid_at", "paid_amount", "n_payments",
+    "first_delivery_date", "last_delivery_date", "n_delivery_rounds", "due_date",
+)
+
+
+def _id_text(v: Any) -> str | None:
+    if v is None or is_blank(v):
+        return None
+    if isinstance(v, float) and v.is_integer():
+        v = int(v)
+    s = str(v).strip()
+    return s or None
+
+
+def _find_order_link(df: pd.DataFrame, order_ids: set[str], skip: set[str]) -> str | None:
+    """Column of `df` whose values are order IDs of the sales ledger (by content, not by name)."""
+    best: tuple[float, str] | None = None
+    for c in df.columns:
+        if c in skip:
+            continue
+        vals = {x for x in (_id_text(v) for v in df[c].head(5000)) if x is not None}
+        if len(vals) < 5:
+            continue
+        # Small integers (row numbers, rounds, quantities) overlap any numeric ID space by chance
+        if all(x.isdigit() and len(x) <= 4 for x in vals):
+            continue
+        hit = len(vals & order_ids) / len(vals)
+        if hit >= 0.8 and (best is None or hit > best[0]):
+            best = (hit, c)
+    return best[1] if best else None
+
+
+def _build_order_events(
+    conn: sqlite3.Connection,
+    cleaned: list[tuple[str, str, pd.DataFrame, dict[str, str], dict[str, str]]],
+    order_ids: set[str],
+    skip_tables: set[str],
+) -> dict[str, Any]:
+    """Create `payments`, `deliveries`, `order_due` and the per-order `order_events` summary.
+
+    Source tables are found by content: a column whose values are sales order IDs, plus a date column
+    whose header names a payment, delivery or due date (or the only date column of a table named
+    like a cash book / receipts / delivery book). Every source row is kept; no rulebook filter applied.
+    """
+    pay_rows: list[dict[str, Any]] = []
+    deliv_rows: list[dict[str, Any]] = []
+    due_rows: list[dict[str, Any]] = []
+    sources: dict[str, list[str]] = {"payments": [], "deliveries": [], "order_due": []}
+
+    for orig_name, clean_name, df, col_map, kind_map in cleaned:
+        if orig_name in skip_tables or df.empty:
+            continue
+        t_key = norm_key(orig_name)
+        safe_to_orig = {v: k for k, v in col_map.items()}
+        date_cols = [c for c in df.columns if kind_map.get(c) in ("date", "datetime")]
+        if not date_cols:
+            continue
+        link = _find_order_link(df, order_ids, skip=set(date_cols))
+        if link is None:
+            continue
+        keys = {c: norm_key(safe_to_orig.get(c, c)) for c in df.columns}
+
+        due_c = [c for c in date_cols if _DUE_COL.search(keys[c])]
+        rest = [c for c in date_cols if c not in due_c]
+        pay_c = [c for c in rest if _PAY_COL.search(keys[c])]
+        deliv_c = [c for c in rest if _DELIV_COL.search(keys[c]) and "giao dich" not in keys[c]]
+        if not pay_c and not deliv_c and len(rest) == 1:
+            t_compact = re.sub(r"[\s_/]+", "", t_key)
+            if any(w.replace(" ", "") in t_compact for w in _PAY_TABLE):
+                pay_c = rest
+            elif any(w.replace(" ", "") in t_compact for w in _DELIV_TABLE):
+                deliv_c = rest
+
+        oids = [_id_text(v) for v in df[link]]
+        if due_c:
+            for oid, d in zip(oids, df[due_c[0]]):
+                if oid and d:
+                    due_rows.append({"order_id": oid, "due_date": str(d)[:10], "src_table": clean_name})
+            sources["order_due"].append(clean_name)
+        if pay_c:
+            pc = pay_c[0]
+            amt_c = next((c for c in df.columns if kind_map.get(c) == "number" and _AMOUNT_COL.search(keys[c])), None)
+            meth_c = next((c for c in df.columns if c != link and _METHOD_COL.search(keys[c])), None)
+            amts = df[amt_c] if amt_c else [None] * len(df)
+            meths = df[meth_c] if meth_c else [None] * len(df)
+            for oid, d, a, m in zip(oids, df[pc], amts, meths):
+                if oid and d:
+                    s = str(d)
+                    pay_rows.append({
+                        "order_id": oid,
+                        "paid_at": s if len(s) > 10 else s[:10],
+                        "paid_date": s[:10],
+                        "paid_time": s[11:19] if len(s) > 10 else None,
+                        "amount": a if a is not None and not pd.isna(a) else None,
+                        "method": m,
+                        "src_table": clean_name,
+                    })
+            sources["payments"].append(clean_name)
+        if deliv_c:
+            dc = deliv_c[0]
+            round_c = next((c for c in df.columns if c not in (link, dc) and _ROUND_COL.search(keys[c])), None)
+            rounds = df[round_c] if round_c else [None] * len(df)
+            for oid, d, r in zip(oids, df[dc], rounds):
+                if oid and d:
+                    deliv_rows.append({
+                        "order_id": oid,
+                        "delivery_date": str(d)[:10],
+                        "delivery_round": _id_text(r),
+                        "src_table": clean_name,
+                    })
+            sources["deliveries"].append(clean_name)
+
+    conn.executescript(
+        """
+        DROP TABLE IF EXISTS payments;
+        DROP TABLE IF EXISTS deliveries;
+        DROP TABLE IF EXISTS order_due;
+        DROP TABLE IF EXISTS order_events;
+        CREATE TABLE payments (order_id TEXT, paid_at TEXT, paid_date TEXT, paid_time TEXT,
+                               amount REAL, method TEXT, src_table TEXT);
+        CREATE TABLE deliveries (order_id TEXT, delivery_date TEXT, delivery_round TEXT, src_table TEXT);
+        CREATE TABLE order_due (order_id TEXT, due_date TEXT, src_table TEXT);
+        """
+    )
+    if pay_rows:
+        pd.DataFrame(pay_rows).to_sql("payments", conn, index=False, if_exists="append")
+    if deliv_rows:
+        pd.DataFrame(deliv_rows).to_sql("deliveries", conn, index=False, if_exists="append")
+    if due_rows:
+        pd.DataFrame(due_rows).to_sql("order_due", conn, index=False, if_exists="append")
+    conn.executescript(
+        """
+        CREATE INDEX IF NOT EXISTS idx_payments_order ON payments(order_id);
+        CREATE INDEX IF NOT EXISTS idx_deliveries_order ON deliveries(order_id);
+        CREATE INDEX IF NOT EXISTS idx_order_due_order ON order_due(order_id);
+        CREATE TABLE order_events AS
+        WITH ids AS (
+            SELECT order_id FROM payments UNION SELECT order_id FROM deliveries UNION SELECT order_id FROM order_due
+        ),
+        p AS (
+            SELECT order_id, MIN(paid_at) AS first_paid_at, MAX(paid_at) AS last_paid_at,
+                   SUM(amount) AS paid_amount, COUNT(*) AS n_payments
+            FROM payments GROUP BY order_id
+        ),
+        d AS (
+            SELECT order_id, MIN(delivery_date) AS first_delivery_date, MAX(delivery_date) AS last_delivery_date,
+                   COUNT(DISTINCT COALESCE(delivery_round, delivery_date)) AS n_delivery_rounds
+            FROM deliveries GROUP BY order_id
+        ),
+        u AS (SELECT order_id, MAX(due_date) AS due_date FROM order_due GROUP BY order_id)
+        SELECT ids.order_id, p.first_paid_at, p.last_paid_at, p.paid_amount, p.n_payments,
+               d.first_delivery_date, d.last_delivery_date, d.n_delivery_rounds, u.due_date
+        FROM ids
+        LEFT JOIN p ON p.order_id = ids.order_id
+        LEFT JOIN d ON d.order_id = ids.order_id
+        LEFT JOIN u ON u.order_id = ids.order_id;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_order_events_order ON order_events(order_id);
+
+        DROP VIEW IF EXISTS v_payments;
+        DROP VIEW IF EXISTS v_deliveries;
+        CREATE VIEW v_payments AS
+        SELECT order_id, paid_at, paid_date, paid_time, SUBSTR(paid_date, 1, 7) AS paid_month,
+               amount, method, src_table
+        FROM payments;
+        CREATE VIEW v_deliveries AS
+        SELECT order_id, COALESCE(delivery_round, delivery_date) AS delivery_round, delivery_date,
+               SUBSTR(delivery_date, 1, 7) AS delivery_month, COUNT(*) AS n_rows, MIN(src_table) AS src_table
+        FROM deliveries
+        GROUP BY order_id, COALESCE(delivery_round, delivery_date), delivery_date;
+        """
+    )
+    return {
+        "n_payments": len(pay_rows),
+        "n_deliveries": len(deliv_rows),
+        "n_due": len(due_rows),
+        "sources": sources,
+    }
+
+
+def _count_rows(conn: sqlite3.Connection, name: str) -> int:
+    try:
+        return int(conn.execute(f'SELECT COUNT(*) FROM "{name}"').fetchone()[0])
+    except sqlite3.Error:
+        return 0
+
+
+def _order_event_columns_text(n_pay: int, n_deliv: int, n_due: int) -> str:
+    """Describe only the order-event columns of `v_orders` that hold data for this shop."""
+    parts = []
+    if n_pay:
+        parts.append(
+            "first_paid_at / last_paid_at (TEXT first/last receipt time of the order, see `v_payments`), "
+            "paid_amount (REAL sum of receipts), n_payments (INT)"
+        )
+    if n_deliv:
+        parts.append(
+            "first_delivery_date / last_delivery_date (TEXT 'YYYY-MM-DD', see `v_deliveries`), n_delivery_rounds (INT)"
+        )
+    if n_due:
+        parts.append("due_date (TEXT 'YYYY-MM-DD' payment due date of a credit order)")
+    if not parts:
+        return ""
+    return ", " + ", ".join(parts) + " — NULL when the order has no such record"
+
+
 def _create_sales_views(conn: sqlite3.Connection) -> None:
     """Create the 5 standard rulebook views (`v_lines`, `v_valid_lines`, `v_orders`, `v_valid_orders`, `v_items`)."""
     conn.executescript(
@@ -810,6 +1028,17 @@ def _create_sales_views(conn: sqlite3.Connection) -> None:
 
         CREATE VIEW v_orders AS
         SELECT
+            o.*,
+            e.first_paid_at,
+            e.last_paid_at,
+            e.paid_amount,
+            e.n_payments,
+            e.first_delivery_date,
+            e.last_delivery_date,
+            e.n_delivery_rounds,
+            e.due_date
+        FROM (
+        SELECT
             order_id,
             MIN(order_date) AS order_date,
             MIN(order_time) AS order_time,
@@ -826,7 +1055,9 @@ def _create_sales_views(conn: sqlite3.Connection) -> None:
             MAX(channel) AS channel,
             MAX(payment_method) AS payment_method
         FROM v_lines
-        GROUP BY order_id;
+        GROUP BY order_id
+        ) AS o
+        LEFT JOIN order_events AS e ON e.order_id = o.order_id;
 
         CREATE VIEW v_valid_orders AS
         SELECT *
@@ -866,6 +1097,58 @@ def _find_calendar_path(business_dir: Path, calendar_path: str | Path | None = N
         if cand.is_file():
             return cand
     return None
+
+
+_DAY_NAME_VI = {1: "Thứ Hai", 2: "Thứ Ba", 3: "Thứ Tư", 4: "Thứ Năm", 5: "Thứ Sáu", 6: "Thứ Bảy", 7: "Chủ nhật"}
+_TRUE_TEXT = {"1", "true", "t", "yes", "y", "co", "có", "x"}
+
+
+def calendar_frame(cal_file: Path) -> pd.DataFrame:
+    """Read `calendar.csv` and add derived solar columns for SQL JOINs.
+
+    Source columns are kept as given (`date`, `weekday`, `lunar_*`, `holiday`); missing ones become NULL.
+    Derived columns are computed from `date` only, so they hold whatever calendar file the run receives:
+    `year`, `month`, `day`, `quarter`, `iso_year`, `iso_week`, `day_of_week` (1=Mon..7=Sun),
+    `day_name_vi`, `is_weekend`, `holiday_vi` (alias of `holiday`).
+    No rulebook period (Tết window, season…) is baked in: those are filtered in SQL on the lunar columns.
+    """
+    raw = pd.read_csv(cal_file, dtype=str, keep_default_na=False, encoding="utf-8-sig")
+    raw.columns = [str(c).strip() for c in raw.columns]
+    dates = pd.to_datetime(raw.get("date", pd.Series([], dtype=str)).str.strip(), errors="coerce", format="mixed")
+    df = pd.DataFrame({"date": dates.dt.strftime("%Y-%m-%d")})
+    df["year"] = dates.dt.year
+    df["month"] = dates.dt.month
+    df["day"] = dates.dt.day
+    df["quarter"] = dates.dt.quarter
+    iso = dates.dt.isocalendar()
+    df["iso_year"] = iso["year"]
+    df["iso_week"] = iso["week"]
+    df["day_of_week"] = dates.dt.dayofweek + 1
+    df["day_name_vi"] = df["day_of_week"].map(_DAY_NAME_VI)
+    df["is_weekend"] = (df["day_of_week"] >= 6).astype("Int64")
+
+    def _int_col(name: str) -> pd.Series:
+        if name not in raw.columns:
+            return pd.Series([None] * len(raw), dtype="Int64")
+        return pd.to_numeric(raw[name].str.strip(), errors="coerce").astype("Int64")
+
+    df["weekday"] = _int_col("weekday") if "weekday" in raw.columns else df["day_of_week"]
+    for c in ("lunar_year", "lunar_month", "lunar_day"):
+        df[c] = _int_col(c)
+    if "lunar_leap" in raw.columns:
+        df["lunar_leap"] = raw["lunar_leap"].str.strip().str.lower().map(lambda v: 1 if v in _TRUE_TEXT else 0).astype("Int64")
+    else:
+        df["lunar_leap"] = pd.Series([None] * len(raw), dtype="Int64")
+    hol_src = next((c for c in ("holiday", "holiday_vi") if c in raw.columns), None)
+    hol = raw[hol_src].str.strip() if hol_src else pd.Series([""] * len(raw))
+    df["holiday"] = hol.map(lambda v: nfc(v) if v else None)
+    df["holiday_vi"] = df["holiday"]
+    # Keep any extra columns a future calendar.csv might carry, without overwriting derived ones
+    for c in raw.columns:
+        if c not in df.columns:
+            df[c] = raw[c].map(lambda v: v if v != "" else None)
+    df = df[df["date"].notna()].reset_index(drop=True)
+    return df
 
 
 def build_database(
@@ -908,7 +1191,14 @@ def build_database(
         "v_orders",
         "v_valid_orders",
         "v_items",
+        "payments",
+        "deliveries",
+        "order_due",
+        "order_events",
+        "v_payments",
+        "v_deliveries",
     }
+    cleaned_frames: list[tuple[str, str, pd.DataFrame, dict[str, str], dict[str, str]]] = []
 
     # 1. Write `raw_<name>` and cleaned `<name>` for every table in the business
     for t in tables:
@@ -936,6 +1226,7 @@ def build_database(
         # Write cleaned table with snake_case columns and parsed types
         cleaned_df, col_map, kind_map = _clean_dataframe_for_sql(t)
         cleaned_df.to_sql(clean_tname, conn, index=False, if_exists="replace")
+        cleaned_frames.append((t.name, clean_tname, cleaned_df, col_map, kind_map))
 
         col_meta = []
         for orig_c in orig_cols:
@@ -1034,6 +1325,10 @@ def build_database(
             """
         )
 
+        events_meta = _build_order_events(
+            conn, cleaned_frames, set(resolved_oids),
+            skip_tables={mapping.sales_table, mapping.orders_table} - {None},
+        )
         _create_sales_views(conn)
 
         valid_d = [d for d in iso_dates if d]
@@ -1046,13 +1341,14 @@ def build_database(
             "min_date": min(valid_d) if valid_d else None,
             "max_date": max(valid_d) if valid_d else None,
             "issues": issues,
+            "order_events": events_meta,
         })
 
     # 3. Load `calendar.csv` if available
     cal_file = _find_calendar_path(business_dir, calendar_path)
     has_calendar = False
     if cal_file is not None:
-        cal_df = pd.read_csv(cal_file)
+        cal_df = calendar_frame(cal_file)
         cal_df.to_sql("calendar", conn, index=False, if_exists="replace")
         if "date" in cal_df.columns:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_calendar_date ON calendar(date);")
@@ -1175,6 +1471,10 @@ def schema_text(conn: sqlite3.Connection, max_chars: int = 13000) -> str:
         lines.append(
             f"Date range: [{min_d} .. {max_d}] | Orders by status: {status_summary}"
         )
+        n_pay = _count_rows(conn, "payments")
+        n_deliv = _count_rows(conn, "deliveries")
+        n_due = _count_rows(conn, "order_due")
+        n_deliv_rounds = _count_rows(conn, "v_deliveries") if n_deliv else 0
         lines.append(
             "- VIEW `v_valid_orders` "
             f"(rows={n_valid_orders}, {oid_note}, EXCLUDES 'huy' & 'tra_hang', INCLUDES 'hoan_thanh' & 'dang_giao' per §1):"
@@ -1185,6 +1485,7 @@ def schema_text(conn: sqlite3.Connection, max_chars: int = 13000) -> str:
             "revenue (REAL: sum of line_amount for the order), n_lines (INT), total_qty_base (REAL), "
             "customer_code (TEXT), customer_name (TEXT, NULL for walk-in), customer_key (TEXT, unique customer ID for grouping/counting, NULL for walk-in §3), "
             "customer_group (TEXT), staff (TEXT), channel (TEXT), payment_method (TEXT)"
+            + _order_event_columns_text(n_pay, n_deliv, n_due)
         )
         lines.extend(
             _format_sample_rows(
@@ -1246,6 +1547,28 @@ def schema_text(conn: sqlite3.Connection, max_chars: int = 13000) -> str:
                 limit=3,
             )
         )
+        if n_pay:
+            lines.append(
+                f"- VIEW `v_payments` (rows={n_pay}, one row per money receipt linked to an order, every order status, "
+                "taken as recorded in the shop's receipt/cash book):"
+            )
+            lines.append(
+                "  Columns: order_id (TEXT), paid_at (TEXT 'YYYY-MM-DD HH:MM:SS' or 'YYYY-MM-DD'), paid_date (TEXT 'YYYY-MM-DD'), "
+                "paid_time (TEXT 'HH:MM:SS' or NULL), paid_month (TEXT 'YYYY-MM'), amount (REAL), method (TEXT), src_table (TEXT). "
+                "Revenue and order periods still follow the ORDER date (`v_orders.order_date`), not the payment date."
+            )
+            lines.extend(_format_sample_rows(conn, "v_payments", ["order_id", "paid_at", "amount", "method"], limit=2))
+        if n_deliv:
+            lines.append(
+                f"- VIEW `v_deliveries` (rows={n_deliv_rounds}, one row per delivery round of an order, every order status, "
+                "including rounds of orders later returned):"
+            )
+            lines.append(
+                "  Columns: order_id (TEXT), delivery_round (TEXT round number, or the date when the shop records no round), "
+                "delivery_date (TEXT 'YYYY-MM-DD'), delivery_month (TEXT 'YYYY-MM'), n_rows (INT item rows shipped in that round), src_table (TEXT). "
+                "Count rounds in a month with `COUNT(*) FROM v_deliveries WHERE delivery_month = 'YYYY-MM'`."
+            )
+            lines.extend(_format_sample_rows(conn, "v_deliveries", ["order_id", "delivery_round", "delivery_date", "n_rows"], limit=2))
         lines.append("")
         lines.append("=== 2. CLEANED AUXILIARY & SOURCE TABLES ===")
     else:
@@ -1302,11 +1625,17 @@ def schema_text(conn: sqlite3.Connection, max_chars: int = 13000) -> str:
     if has_calendar:
         lines.append("=== CALENDAR TABLE ===")
         lines.append(
-            "TABLE `calendar` (columns: `date` TEXT 'YYYY-MM-DD', `year` INT, `month` INT, `day` INT, "
-            "`quarter` INT, `iso_year` INT, `iso_week` INT, `day_of_week` INT 1=Mon..7=Sun, "
-            "`day_name_vi` TEXT, `is_weekend` INT 0/1, `lunar_year` INT, `lunar_month` INT, `lunar_day` INT, "
-            "`lunar_leap` INT, `holiday_vi` TEXT)"
+            "TABLE `calendar` (one row per solar day; JOIN `calendar.date = v_orders.order_date`). Columns: "
+            "`date` TEXT 'YYYY-MM-DD', `year` INT, `month` INT, `day` INT, `quarter` INT, `iso_year` INT, `iso_week` INT, "
+            "`day_of_week` INT 1=Mon..7=Sun (same as `weekday`), `day_name_vi` TEXT ('Thứ Hai'..'Chủ nhật'), "
+            "`is_weekend` INT 0/1, `lunar_year` INT, `lunar_month` INT (12 = tháng Chạp, 1 = tháng Giêng), `lunar_day` INT, "
+            "`lunar_leap` INT 0/1 (leap lunar month), `holiday` TEXT (also `holiday_vi`, NULL on ordinary days)"
         )
+        try:
+            lo, hi = conn.execute("SELECT MIN(date), MAX(date) FROM calendar").fetchone()
+            lines.append(f"  date_range=[{lo} .. {hi}]")
+        except sqlite3.Error:
+            pass
         lines.append("")
 
     text = "\n".join(lines)

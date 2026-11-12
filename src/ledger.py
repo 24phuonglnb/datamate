@@ -585,6 +585,14 @@ def build_ledger(
             elif isinstance(t_val, dt.datetime):
                 parsed_times.append(t_val.time())
             elif isinstance(t_val, str) and ":" in t_val:
+                # Full "date time" text: keep only the clock part
+                m_dt = re.search(r"(\d{1,2}):(\d{2})(?::(\d{2}))?\s*$", t_val.strip())
+                if m_dt and re.search(r"\d{1,4}[/\-.]\d{1,2}[/\-.]\d{1,4}", t_val):
+                    try:
+                        parsed_times.append(dt.time(int(m_dt.group(1)), int(m_dt.group(2)), int(m_dt.group(3) or 0)))
+                    except ValueError:
+                        parsed_times.append(None)
+                    continue
                 try:
                     parts = [int(p) for p in re.findall(r"\d+", t_val)[:3]]
                     if len(parts) >= 2:

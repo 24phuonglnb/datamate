@@ -33,7 +33,8 @@ Mỗi database của một tiệm gồm **4 lớp dữ liệu**:
 1. **Rulebook Sales Views (`v_valid_orders`, `v_valid_lines`, `v_orders`, `v_lines`, `v_items`)** — chỉ tạo khi `can_build_ledger(tables, mapping, readme) == True`. Toàn bộ tên cột là tiếng Anh `snake_case`, đã áp dụng sẵn quy tắc làm sạch và chuẩn hoá theo `rulebook.md`.
 2. **Cleaned Tables (`<safe_table_name>`)** — mọi bảng của tiệm đã cắt dòng tổng cộng ghi tay (`split_summary_rows`), đổi tên cột sang ASCII `snake_case`, ép kiểu số (`REAL`) và ngày chuẩn ISO (`YYYY-MM-DD` / `YYYY-MM-DD HH:MM:SS`).
 3. **Raw Fallback Tables (`raw_<safe_table_name>`)** — giữ nguyên tên cột gốc và dữ liệu gốc (chỉ bỏ `META_COLS`), dùng cho các truy vấn đặc thù ngoài phạm vi view chuẩn.
-4. **Calendar Table (`calendar`)** — nạp từ `calendar.csv` (dương lịch, âm lịch, thứ trong tuần, cuối tuần, ngày lễ).
+4. **Calendar Table (`calendar`)** — nạp từ `calendar.csv` lúc dựng DB, thêm các cột dương lịch suy ra từ `date` (xem mục 3.7).
+5. **Order events (`payments`, `deliveries`, `order_due` → view `v_payments`, `v_deliveries`, cột mới trong `v_orders`)** — ngày thu tiền, ngày giao, hạn thanh toán lấy từ bảng phụ của tiệm khi có (xem mục 3.6).
 
 ---
 
@@ -112,8 +113,13 @@ SELECT
     MAX(channel) AS channel,
     MAX(payment_method) AS payment_method
 FROM v_lines
-GROUP BY order_id;
+GROUP BY order_id
+-- rồi LEFT JOIN order_events (mục 3.6), thêm 8 cột:
+-- first_paid_at, last_paid_at, paid_amount, n_payments,
+-- first_delivery_date, last_delivery_date, n_delivery_rounds, due_date
 ```
+
+`order_time` lấy từ cột giờ của sổ bán hoặc bảng hoá đơn. Khi không cột nào có tên kiểu giờ, `propose_mapping` chọn theo nội dung (`find_time_column`): cột datetime có giờ khác 00:00:00 trên đa số dòng và rơi **cùng ngày** với `order_date` trên ≥ 95% dòng (vd. `Thời gian tạo` cạnh `Thời gian` chỉ có ngày). Giờ thu tiền, giờ giao ở ngày khác nên không bị chọn nhầm.
 
 > **Khi nào dùng `v_orders`?**
 > - Đếm **tổng số đơn phát sinh**, **số đơn huỷ** (`status = 'huy'`), **số đơn hoàn trả** (`status = 'tra_hang'`), **số đơn đang giao** (`status = 'dang_giao'`).
@@ -150,6 +156,44 @@ WHERE status NOT IN ('huy', 'tra_hang');
 | `cost_price` | `REAL` | Giá vốn / giá nhập chuẩn trong bảng danh mục (nếu có, dùng cho **§2**). |
 | `active_ingredient` | `TEXT` | Hoạt chất (đối với nhà thuốc, nếu có). |
 | `is_prescription` | `TEXT` | Thuốc kê đơn (đối với nhà thuốc, nếu có). |
+
+---
+
+### 3.6. Ngày thu tiền, ngày giao, hạn thanh toán (`v_payments`, `v_deliveries`, cột mới của `v_orders`)
+
+Chỉ có dữ liệu khi tiệm có bảng phụ. Bảng nguồn được nhận theo **nội dung**, không theo tên shop:
+
+1. Bảng có một cột mà ≥ 80% giá trị khác nhau là `order_id` của sổ bán (bỏ qua cột toàn số nguyên ≤ 4 chữ số như STT, lần giao).
+2. Cột ngày của bảng đó được xếp loại theo tên cột: `Hạn …` → hạn thanh toán; `Thời gian thu`, `Ngày TT`, `Ngày thanh toán`… → thu tiền; `Ngày giao (hàng)`, `Ngày chở`… → giao (không nhận `giao dịch`). Nếu bảng chỉ có một cột ngày chung chung (`Thời gian`) thì dựa vào tên bảng (`Sổ quỹ`, `Phiếu thu`, `Thanh toán` / `Giao hàng`, `Sổ giao`).
+3. Giữ mọi dòng nguồn, mọi trạng thái đơn; **không** áp luật rulebook nào (doanh thu và kỳ vẫn theo ngày đặt).
+
+| Đối tượng | Cột |
+|---|---|
+| `v_payments` (mỗi phiếu thu một dòng) | `order_id`, `paid_at` (`YYYY-MM-DD HH:MM:SS` hoặc `YYYY-MM-DD`), `paid_date`, `paid_time`, `paid_month`, `amount`, `method`, `src_table` |
+| `v_deliveries` (mỗi **đợt giao** của mỗi đơn một dòng, gộp các dòng hàng cùng đợt) | `order_id`, `delivery_round` (số đợt; nếu sổ không ghi đợt thì là ngày giao), `delivery_date`, `delivery_month`, `n_rows`, `src_table` |
+| `v_orders` / `v_valid_orders` (thêm) | `first_paid_at`, `last_paid_at`, `paid_amount`, `n_payments`, `first_delivery_date`, `last_delivery_date`, `n_delivery_rounds`, `due_date` — `NULL` khi đơn không có bản ghi |
+
+Phủ trên 44 shop (12/11/2026): thu tiền ở biz_106, 109, 111, 123, 124, 127, 129, dev_003, 006, 010; giao + hạn nợ ở biz_115–118 và dev_004. Kiểm chứng: "số đợt giao trong tháng X" = `SELECT COUNT(*) FROM v_deliveries WHERE delivery_month = 'YYYY-MM'` khớp 5/5 câu train (biz_117, biz_118). Sổ nợ / trả góp ghi theo khách (dev_014) không có mã đơn nên không vào đây; truy vấn bảng đã làm sạch.
+
+`schema_text` chỉ mô tả các cột/view này khi shop có dữ liệu, để không tốn chỗ trong prompt.
+
+---
+
+### 3.7. `calendar`
+
+Dựng từ `calendar.csv` lúc chạy (file nào được đưa vào thì dùng file đó). Cột gốc giữ nguyên: `date`, `weekday` (1=T2..7=CN), `lunar_day`, `lunar_month`, `lunar_year`, `lunar_leap` (0/1), `holiday`. Cột thêm, tính từ `date`: `year`, `month`, `day`, `quarter`, `iso_year`, `iso_week`, `day_of_week` (1=T2..7=CN), `day_name_vi` (`Thứ Hai`..`Chủ nhật`), `is_weekend`, `holiday_vi` (= `holiday`).
+
+Không dựng sẵn khoảng Tết hay mùa nào, vì định nghĩa nằm trong rulebook và có thể đổi. Lọc bằng JOIN, ví dụ đơn hợp lệ từ 23 tháng Chạp năm âm 2025 đến hết mùng 10 tháng Giêng năm âm 2026:
+
+```sql
+SELECT SUM(o.revenue)
+FROM v_valid_orders o
+JOIN calendar c ON c.date = o.order_date
+WHERE (c.lunar_year = 2025 AND c.lunar_month = 12 AND c.lunar_day >= 23 AND c.lunar_leap = 0)
+   OR (c.lunar_year = 2026 AND c.lunar_month = 1 AND c.lunar_day <= 10 AND c.lunar_leap = 0);
+```
+
+Cách an toàn hơn khi kỳ phức tạp: tính `[start, end]` dương lịch bằng Python từ `calendar` rồi lọc `order_date BETWEEN start AND end`.
 
 ---
 

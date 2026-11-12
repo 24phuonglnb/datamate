@@ -31,7 +31,9 @@ from src.cleaning import (
     RawTable,
     _family,
     infer_kinds,
+    is_blank,
     norm_key,
+    parse_datetime,
     parse_number,
     parse_qty,
 )
@@ -434,6 +436,45 @@ def _find_table_readme(table_name: str, sources: list[str], parsed_readme: dict[
     return {}
 
 
+def find_time_column(
+    df: pd.DataFrame, date_col: str, exclude: set[str] | None = None, sample_size: int = 400
+) -> str | None:
+    """Return a column holding the order's clock time, judged by content only.
+
+    A candidate must parse as a datetime with a non-midnight time on most sampled rows and fall on the
+    same calendar day as `date_col` on nearly all of them (so payment or delivery times on later days
+    are not taken). Returns None when no column qualifies.
+    """
+    exclude = exclude or set()
+    if date_col not in df.columns:
+        return None
+    sample = df.head(sample_size)
+    base_dates = [parse_datetime(v) for v in sample[date_col]]
+    best: tuple[float, str] | None = None
+    for c in df.columns:
+        if c == date_col or c in exclude or str(c).startswith("__"):
+            continue
+        n = n_dt = n_time = n_same = 0
+        for v, bd in zip(sample[c], base_dates):
+            if is_blank(v):
+                continue
+            n += 1
+            d = parse_datetime(v)
+            if d is None:
+                continue
+            n_dt += 1
+            if d.hour or d.minute or d.second:
+                n_time += 1
+            if bd is not None and d.date() == bd.date():
+                n_same += 1
+        if n < 10 or n_dt / n < 0.9 or n_time / n_dt < 0.5 or n_same / n_dt < 0.95:
+            continue
+        score = n_same / n_dt + n_time / n_dt
+        if best is None or score > best[0]:
+            best = (score, c)
+    return best[1] if best else None
+
+
 def propose_mapping(tables: list[RawTable], readme: str | None = None) -> Mapping:
     """Propose table roles and column mapping for a business from tables and optional readme."""
     parsed_readme = parse_readme(readme) if readme else {}
@@ -625,6 +666,21 @@ def propose_mapping(tables: list[RawTable], readme: str | None = None) -> Mappin
             order_join_key = sales_oid
         elif ord_oid:
             order_join_key = ord_oid
+
+    # Step 3b: order_time by content when no column was named like a time (e.g. "Thời gian tạo"
+    # holding a datetime next to a date-only order_date column)
+    if not sales_columns.get("order_time") and not orders_columns.get("order_time"):
+        for tbl, cols in ((sales_t, sales_columns), (orders_table_candidate, orders_columns)):
+            if tbl is None or not cols.get("order_date"):
+                continue
+            used = {c for c in cols.values() if c}
+            t_col = find_time_column(tbl.df, cols["order_date"], exclude=used)
+            if t_col:
+                cols["order_time"] = t_col
+                target = sales_assignments if cols is sales_columns else orders_assignments
+                target["order_time"] = RoleAssignment(
+                    "order_time", t_col, 0.8, f"content: datetime on the order date in '{t_col}'")
+                break
 
     # Step 4: Arithmetic consistency check on sales_table
     q_col = sales_columns.get("qty") or sales_columns.get("qty_base")
