@@ -10,6 +10,9 @@ from pathlib import Path
 
 from .agent import Agent
 from .llm import LocalVLLM
+from .nlu.normalize import RuleNormalizer
+from .router import Router
+from .router.pipeline import solve as solve_routed
 
 
 def run(data_dir: Path, result_dir: Path, model, max_attempts: int = 2) -> int:
@@ -22,6 +25,10 @@ def run(data_dir: Path, result_dir: Path, model, max_attempts: int = 2) -> int:
     answers_path = result_dir / "submission.jsonl"
     log_path = logdir / "questions.jsonl"
     agent = Agent(model, data_dir, max_attempts=max_attempts)
+    # Router first (templates over the views), LLM agent for the rest; DATAMATE_ROUTER=0 disables it.
+    use_router = os.environ.get("DATAMATE_ROUTER", "1").lower() not in ("0", "false", "no")
+    router = Router() if use_router else None
+    normalizer = RuleNormalizer(data_dir / "calendar.csv") if use_router else None
     count = 0
     try:
         # Open in write mode for a clean, deterministic run. Flush each answer.
@@ -33,7 +40,7 @@ def run(data_dir: Path, result_dir: Path, model, max_attempts: int = 2) -> int:
                     continue
                 try:
                     question = json.loads(line)
-                    answer, log = agent.solve(question)
+                    answer, log = solve_routed(question, agent, router, normalizer)
                 except Exception as exc:
                     qid = ""
                     try:

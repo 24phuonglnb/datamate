@@ -289,3 +289,10 @@ def test_period_where_sql():
     p = resolve("doanh thu thang 3/2026", "2026-09-07").periods[0]
     assert p.where_sql() == "order_date BETWEEN '2026-03-01' AND '2026-03-31'"
     assert "order_time" in p.where_sql(part_of_day=("06:00", "13:59"))
+
+
+def test_calendar_without_lunar_columns_is_tolerated(tmp_path):
+    from src.timeutil import LunarCalendar
+    f = tmp_path / "calendar.csv"
+    f.write_text("date,weekday\n2026-01-01,Thu\n", encoding="utf-8")
+    assert LunarCalendar(f).tet(2026) is None

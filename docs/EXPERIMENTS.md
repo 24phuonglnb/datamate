@@ -146,3 +146,14 @@ PA = point average (+1 correct / -1 wrong / 0 abstain, rulebook section 9), scor
 | date | branch | model | question set | PA | notes |
 |---|---|---|---|---|---|
 | 2026-11-11 | feat/real-data-eval | Qwen3-8B | sample 600 (dev 480 / hold-out 120) | -0.4067 (dev -0.406, hold-out -0.408) | baseline agent, unchanged; correct 3.2%, abstain 53%, wrong 43.8%; 20.6 s/question; report `eval/reports/2026-11-11_Qwen3-8B.md` |
+
+### Intent router (branch feat/intent-router, CPU only, no LLM)
+
+Router = rules on the normalized question -> SQL templates over the rulebook views (templates copied from
+`scripts/analysis/rule_regression.py`, need the data-layer author's approval); everything uncertain goes to the LLM.
+Report: `eval/reports/2026-11-13_router.md` (ids only). Scored with `eval/pa_score.py`.
+
+| date | branch | model | question set | PA | notes |
+|---|---|---|---|---|---|
+| 2026-11-13 | feat/intent-router | none (rules + SQL) | dev (24 shops, 2291 q) | template route 1.000 (960/960); lower bound 0.419 | 41.9% of questions answered by template, rest -> LLM |
+| 2026-11-13 | feat/intent-router | none (rules + SQL) | hold-out (6 shops, 709 q) | template route 1.000 (298/298); lower bound 0.420 | 42.0% by template; first run 296/298 (threshold orders), fixed on dev evidence |

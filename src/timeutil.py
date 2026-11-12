@@ -98,11 +98,14 @@ class LunarCalendar:
 
     def __init__(self, path: str | Path):
         self._solar: dict[tuple[int, int, int, bool], date] = {}
-        with open(path, encoding="utf-8", newline="") as f:
-            for r in csv.DictReader(f):
-                key = (int(r["lunar_year"]), int(r["lunar_month"]), int(r["lunar_day"]),
-                       str(r["lunar_leap"]).strip().lower() == "true")
-                self._solar.setdefault(key, date.fromisoformat(r["date"]))
+        try:
+            with open(path, encoding="utf-8", newline="") as f:
+                for r in csv.DictReader(f):
+                    key = (int(r["lunar_year"]), int(r["lunar_month"]), int(r["lunar_day"]),
+                           str(r["lunar_leap"]).strip().lower() == "true")
+                    self._solar.setdefault(key, date.fromisoformat(r["date"]))
+        except (KeyError, ValueError, OSError):
+            self._solar = {}  # calendar without lunar columns (e.g. the demo data): lunar expressions stay unresolved
 
     def solar(self, lunar_year: int, month: int, day: int, leap: bool = False) -> date | None:
         return self._solar.get((lunar_year, month, day, leap))
