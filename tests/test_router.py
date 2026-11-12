@@ -74,8 +74,19 @@ def test_item_match_and_ambiguity():
     assert I.asked_unit(I.prepare("bán bao nhiêu gói mì hảo hảo")) == "goi"
 
 
+_OPEN: list = []
+
+
+@pytest.fixture(autouse=True)
+def _close_test_connections():
+    yield
+    while _OPEN:  # no leaked sqlite connections (test_smoke checks ResourceWarning process-wide)
+        _OPEN.pop().close()
+
+
 def _db():
     c = sqlite3.connect(":memory:")
+    _OPEN.append(c)
     c.executescript("""
     CREATE TABLE v_orders(order_id, order_date, order_time, status, revenue);
     CREATE VIEW v_valid_orders AS SELECT * FROM v_orders WHERE status NOT IN ('huy','tra_hang');
@@ -246,6 +257,29 @@ def test_flagged_shop_abstains_in_pipeline():
     ans, log = solve(q, A(), Router(), RuleNormalizer(None), P())
     assert ans == {"id": "t1", "type": "abstain"} and A.calls == 0
     assert log["router"]["route"] == "abstain" and "shop_low_confidence" in log["router"]["reason"]
+
+
+def test_shop_without_views_still_goes_to_the_agent():
+    from src.nlu.normalize import RuleNormalizer
+    from src.router.pipeline import solve
+
+    class P:
+        def connection(self, shop):
+            return _db()
+
+        def flags(self, shop):
+            return ["no_ledger"]
+
+    class A:
+        calls = 0
+
+        def solve(self, q):
+            A.calls += 1
+            return {"id": q["id"], "type": "abstain"}, {}
+
+    q = {"id": "t1", "business_id": "x", "as_of_date": AS_OF, "question": "doanh thu tháng 3/2026 là bao nhiêu"}
+    _, log = solve(q, A(), Router(), RuleNormalizer(None), P())
+    assert A.calls == 1 and log["router"]["route"] == "llm" and "not_applicable" in log["router"]["reason"]
 
 
 def test_thresholds_file_has_train_values():
