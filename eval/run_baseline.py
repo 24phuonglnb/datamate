@@ -4,9 +4,9 @@
     python -m eval.run_baseline ... --full            # all 3000 train questions
 
 Outputs (eval/reports/):
-    <date>_<model>[_full].md / .json       aggregate report (committed)
-    <date>_<model>[_full].per_question.jsonl   raw per-question rows   (git-ignored)
-    <date>_<model>[_full]_errors.md        top error groups + examples (git-ignored)
+    <date>_<model>[_<subset>].md / .json       aggregate report (committed)
+    <date>_<model>[_<subset>].per_question.jsonl   raw per-question rows   (git-ignored)
+    <date>_<model>[_<subset>]_errors.md        top error groups + examples (git-ignored)
 
 Per-question rows are written as they finish, so a killed run resumes with --resume.
 The baseline (src/) is NOT modified; this script only drives it.
@@ -124,10 +124,13 @@ def _by(rows: list[dict[str, Any]], key: str) -> dict[str, Any]:
     return {k: _agg(v) for k, v in sorted(g.items())}
 
 
-def build_model(path: str, backend: str, device: str | None):
+def build_model(path: str, backend: str, device: str | None, tp: int = 1):
     if backend == "mock":
         from src.llm import MockLLM
         return MockLLM()
+    if backend == "vllm":
+        from src.llm import get_model
+        return get_model(path, "vllm", tensor_parallel_size=tp)
     from src.llm import HFTransformers
     kw = {}
     if device:
@@ -139,12 +142,15 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model-path", required=True)
     ap.add_argument("--model-name", required=True)
-    ap.add_argument("--backend", default="transformers", choices=["transformers", "mock"])
+    ap.add_argument("--backend", default="transformers", choices=["transformers", "vllm", "mock"])
+    ap.add_argument("--tensor-parallel-size", type=int, default=1, help="vllm backend only")
     ap.add_argument("--train-dir", default=str(HERE.parent / "data" / "train" / "train"))
     ap.add_argument("--sample", default=str(HERE / "sample_ids.json"))
     ap.add_argument("--folds", default=str(HERE / "folds.json"))
     ap.add_argument("--out", default=str(HERE / "reports"))
-    ap.add_argument("--full", action="store_true", help="all 3000 questions instead of the sample")
+    ap.add_argument("--subset", default="sample", choices=["sample", "holdout", "full"],
+                    help="sample = fixed 600; holdout = every question of the 6 hold-out shops; full = all 3000")
+    ap.add_argument("--full", action="store_true", help="alias of --subset full")
     ap.add_argument("--limit", type=int)
     ap.add_argument("--resume", action="store_true")
     ap.add_argument("--device", default=None, help="e.g. cuda:0 (default: device_map auto)")
@@ -156,7 +162,11 @@ def main() -> None:
     gold = {g["id"]: g for g in _read_jsonl(train / "answers.jsonl")}
     folds = json.loads(Path(a.folds).read_text(encoding="utf-8"))
     hold = set(folds["holdout"])
-    if not a.full:
+    if a.full:
+        a.subset = "full"
+    if a.subset == "holdout":
+        questions = [q for q in questions if q["business_id"] in hold]
+    elif a.subset == "sample":
         keep = set(json.loads(Path(a.sample).read_text(encoding="utf-8"))["ids"])
         questions = [q for q in questions if q["id"] in keep]
     # Group by shop (stable) so the Agent's 2-entry DB cache is not thrashed by the
@@ -165,7 +175,7 @@ def main() -> None:
     if a.limit:
         questions = questions[: a.limit]
 
-    tag = f"{a.date}_{a.model_name}" + ("_full" if a.full else "") + ("_mock" if a.backend == "mock" else "")
+    tag = f"{a.date}_{a.model_name}" + ("" if a.subset == "sample" else f"_{a.subset}") + ("_mock" if a.backend == "mock" else "")
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     pq_path = out / f"{tag}.per_question.jsonl"
@@ -178,7 +188,7 @@ def main() -> None:
         pq_path.unlink()
 
     t0 = time.monotonic()
-    model = build_model(a.model_path, a.backend, a.device)
+    model = build_model(a.model_path, a.backend, a.device, a.tensor_parallel_size)
     load_s = time.monotonic() - t0
     print(f"model loaded in {load_s:.1f}s; {len(questions)} questions, {len(done)} already done", flush=True)
 
@@ -218,7 +228,7 @@ def main() -> None:
     # rows resumed from an earlier process keep their own timings; wall time covers this process only
     report = {
         "date": a.date, "model": a.model_name, "model_path": a.model_path, "backend": a.backend,
-        "set": "full_3000" if a.full else "sample_600",
+        "set": {"full": "full_3000", "sample": "sample_600", "holdout": "holdout_all"}[a.subset],
         "percent_mode": pa_score.PERCENT_MODE,
         "overall": _agg(rows),
         "by_fold": _by(rows, "fold"),
