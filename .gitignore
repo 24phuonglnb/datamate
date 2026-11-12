@@ -79,3 +79,5 @@ zalo_data/
 
 /eval_results/
 /reports/mappings
+/reports/profiles/
+/reports/*.json
