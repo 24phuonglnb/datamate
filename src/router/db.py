@@ -18,6 +18,7 @@ class ConnectionProvider:
         self._open: dict[str, BusinessDB] = {}
         self._flags: dict[str, list[str]] = {}
         self._warnings: dict[str, list[str]] = {}
+        self._spans: dict[str, list[list[str]]] = {}
         cal = self.root / "calendar.csv"
         self._calendar = cal if cal.is_file() else None
 
@@ -42,9 +43,15 @@ class ConnectionProvider:
                 thr = invariants.load_thresholds()
                 self._flags[shop] = invariants.flags(m, thr)
                 self._warnings[shop] = invariants.warnings(m, thr)
+                self._spans[shop] = m.get("unparsed_spans") or []
             except Exception as exc:  # cannot even check the shop: do not trust it
                 self._flags[shop] = [f"invariants_error:{type(exc).__name__}"]
         return self._flags[shop]
+
+    def spans(self, shop: str) -> list[list[str]]:
+        """Date spans that unparsed cells can belong to; questions whose period meets one abstain."""
+        self.flags(shop)
+        return self._spans.get(shop, [])
 
     def warnings(self, shop: str) -> list[str]:
         self.flags(shop)

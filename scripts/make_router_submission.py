@@ -50,12 +50,17 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--data-dir", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--guard", action="store_true", help="abstain every shop flagged low_confidence by the data invariants")
+    ap.add_argument("--guard", action="store_true", help="shop-level low_confidence flags + per-question unparsed-date spans")
+    ap.add_argument("--only-shops", nargs="*", help="restrict to these shops (analysis only)")
     ap.add_argument("--meta-out", help="jsonl with id, business_id, intent, route, reason per question (not for submission)")
     a = ap.parse_args()
     data = Path(a.data_dir)
     qs = [json.loads(l) for l in open(data / "questions.jsonl", encoding="utf-8") if l.strip()]
-    router, norm, prov = Router(), RuleNormalizer(data / "calendar.csv"), ConnectionProvider(data)
+    if a.only_shops:
+        qs = [q for q in qs if q["business_id"] in a.only_shops]
+    from src.router.rule_guard import RuleGuard
+    guard = RuleGuard.load(data / "rulebook.md") if a.guard and (data / "rulebook.md").is_file() else None
+    router, norm, prov = Router(guard), RuleNormalizer(data / "calendar.csv"), ConnectionProvider(data)
     t0 = time.monotonic()
     meta, out, per_shop, shop_err, reasons = [], [], collections.defaultdict(collections.Counter), {}, collections.Counter()
     for q in sorted(qs, key=lambda x: x["business_id"]):  # grouped by shop only for speed; file order is irrelevant
@@ -66,7 +71,8 @@ def main() -> None:
                 from src.router.router import RouteDecision
                 d = RouteDecision("abstain", "shop_low_confidence: " + "; ".join(bad))
             else:
-                d = router.route(q, norm(q["question"], q["as_of_date"]), prov.connection(biz))
+                d = router.route(q, norm(q["question"], q["as_of_date"]), prov.connection(biz),
+                                 prov.spans(biz) if a.guard else None)
         except Exception as exc:
             shop_err.setdefault(biz, f"{type(exc).__name__}: {str(exc)[:160]}")
             d = None

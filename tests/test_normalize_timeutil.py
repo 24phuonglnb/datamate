@@ -253,12 +253,14 @@ class SyntheticRules(unittest.TestCase):
         r = resolve("Q1/2026", "2026-09-07")
         self.assertEqual((r.periods[0].start, r.periods[0].end), (D("2026-01-01"), D("2026-03-31")))
 
-    def test_short_slash_is_not_guessed(self):
-        r = resolve("doanh thu 6/25", "2026-09-07")
+    def test_short_slash_two_digit_year_default_and_overrides(self):
+        r = resolve("doanh thu 6/25", "2026-09-07")  # default: 20..39 can only be a year
+        self.assertEqual((r.periods[0].start, r.periods[0].end), (D("2025-06-01"), D("2025-06-30")))
+        r = resolve("doanh thu 6/45", "2026-09-07")  # not a plausible year: still not guessed
         self.assertEqual(r.periods, [])
         self.assertEqual(r.ambiguous[0]["candidates"], ["month_year", "month_day"])
-        r = resolve("doanh thu 6/25", "2026-09-07", short_slash="month_year")
-        self.assertEqual((r.periods[0].start, r.periods[0].end), (D("2025-06-01"), D("2025-06-30")))
+        r = resolve("doanh thu 6/25", "2026-09-07", short_slash="month_day")
+        self.assertEqual((r.periods[0].start, r.periods[0].end), (D("2026-06-25"), D("2026-06-25")))
 
     def test_day_month_still_day_month(self):
         r = resolve("ngay 1/1", "2026-04-27")

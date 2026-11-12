@@ -1,5 +1,8 @@
 # Backlog router: phần rơi xuống LLM (chỉ dev, 24 shop)
 
+> Cập nhật 2026-11-13: đã thêm vào router (100% trên dev, hold-out chạy một lần 339/339): `orders_threshold` (qua order_count),
+> `unans_subjective`, `item_revenue`, `category_rev`, `sell_price_on_day`. Các số bên dưới là của lần đo trước khi thêm các intent này.
+
 Nguồn: `scripts/eval_router.py` (run 2026-11-13). Chỉ dùng dev; không có câu hỏi hay đáp án, chỉ id. Nhóm theo nhãn của tagger hiện có
 (`src/router/_tagger_rules.py`, nhãn gần đúng ±10%, có gắn nhầm). Độ khó = ước lượng công viết template + kiểm chứng, không phải độ khó dữ liệu.
 Tổng dev rơi xuống LLM: 1331 câu; trong đó 984 câu intent ngoài TARGET_INTENTS (bảng 1) và 347 câu thuộc TARGET_INTENTS bị luật an toàn chặn (bảng 2).
@@ -89,11 +92,13 @@ Cần Nghiệp: v_purchases, v_stock, v_batches, công nợ theo ngày (v_debt_a
 
 ## Chặn bởi tầng dữ liệu (việc của Nghiệp; router không sửa file của Nghiệp)
 
-- **dev_004 (public): ngày `d/m` không ghi năm không được parse.** 3906/15337 ô ngày không rỗng (≈25%) của sổ bán hàng
-  là dạng `3/6`, `27/2`; các dòng đó (54,05% dòng sổ bị ảnh hưởng) rơi khỏi view nên doanh thu, số đơn của shop sai.
-  Rulebook §8 (Ngày không ghi năm): năm là năm của sheet chứa dòng đó (sheet tên dạng `T05-2025`, cột `__year` đã có
-  sau khi nạp). Cần `parse_date(..., year=<năm của sheet>)` cho các ô này. Router đang abstain cả shop nhờ chỉ số
-  `unparsed_dates_pct`; khi sửa xong, chạy lại `scripts/data_invariants.py report`.
+- **dev_004 (public): chẩn đoán cũ "ngày d/m không ghi năm không parse được" là SAI (đã sửa 2026-11-13).** Khi parse
+  với năm của sheet (đúng như `build_ledger` làm), cả 15337 ô ngày không rỗng của sổ bán hàng đều parse được. 54% dòng
+  được `build_ledger` đếm vào `issues["unparsed_dates"]` là các ô ngày **bỏ trống** (ngày chỉ ghi ở dòng đầu mỗi đơn,
+  ledger điền xuống; ledger cuối không còn dòng nào thiếu ngày). Bộ đếm `unparsed_dates` của Nghiệp vì vậy đếm cả ô trống;
+  router không dùng nó nữa mà tự đếm ô không rỗng parse lỗi (`src/router/invariants.py`). dev_004 không còn bị cờ.
+  Lỗi của dev_004 nếu có (leaderboard: bỏ 28 câu của shop này tăng/giảm điểm +14 ròng, tức ≈21 đúng/7 sai, 75% so với ≈89% các shop khác)
+  chưa rõ nguyên nhân; chưa có bằng chứng về lỗi parse ngày.
 - **Test của Nghiệp phụ thuộc thứ tự chạy:** `tests/test_smoke.py::RegressionTests::test_create_demo_no_connection_leak`
   fail khi chạy sau `tests/test_ingestion_cache.py` (`pytest tests/test_ingestion_cache.py tests/test_smoke.py`).
   Đã fail từ commit merge branch của Nghiệp vào `feat/question-normalization` (trước mọi code router), không fail trên

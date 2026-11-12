@@ -18,6 +18,8 @@ TARGET_INTENTS = (
     "revenue", "order_count", "cancel_count", "cancel_rate", "aov",
     "best_day", "topk_items", "best_item", "item_qty", "rev_change_pct",
 )
+EXTRA_INTENTS = ("item_revenue", "category_rev", "sell_price_on_day", "unans_subjective")
+ENABLED_EXTRA = ("item_revenue", "category_rev", "sell_price_on_day", "unans_subjective")  # see eval report: 100% on dev
 _RULE_RX = dict(T.RULES)
 GENERIC = {"revenue"}  # may co-occur with a more specific intent ("doanh thu ... tang bao nhieu %")
 # The tagger rules are ordered specific -> general, so a general rule always also matches a specific question
@@ -34,6 +36,10 @@ def prepare(text: str) -> str:
 def recognise(s: str) -> tuple[str | None, str]:
     """-> (intent or None, reason)."""
     first = T.tag(s)
+    if first == "orders_threshold" and order_threshold(s)[1] == "ok":
+        first = "order_count"  # "so don co doanh thu tu X dong tro len": template order_count_threshold
+    if first in EXTRA_INTENTS and first in ENABLED_EXTRA:
+        return first, "ok"
     if first not in TARGET_INTENTS:
         return None, f"not_target:{first}"
     rivals = [n for n in TARGET_INTENTS if n != first and n not in GENERIC and n not in COMPAT.get(first, ()) and re.search(_RULE_RX[n], s)]
@@ -61,6 +67,10 @@ _SKIP: dict[str, str] = {
                        r"nhom|kenh|\bca\b"),
 }
 _SKIP["best_item"] = _SKIP["topk_items"]
+_SKIP["item_revenue"] = r"nhom|khach|\bca\b|so voi|%|phan tram|top|nhat|tang|giam|moi|quy|nhan vien|kenh|ke don|hoat chat|size"
+_SKIP["category_rev"] = r"khach|\bca\b|so voi|%|phan tram|top|nhat|tang|giam|moi|quy|nhan vien|kenh|ke don|hoat chat|size|nhom (than thiet|si|le|vip)"
+_SKIP["sell_price_on_day"] = r"khach|so voi|%|phan tram|top|nhat|tang gia|ke tu|nhom|\bca\b"
+_SKIP["unans_subjective"] = r"$^"
 # revenue also: item-specific revenue ("ban <mat hang> ... bao nhieu tien")
 _ITEM_REV = re.compile(r"\b(ban|bans)\b")
 _ITEM_REV_OK = re.compile(r"cua\s*\w*\s+hang\s*\w*\s+(?:ban|bans)\s+\S+\s+(tong cong|total|toongr cong|bao nhieu|bnhiu|bn)")
@@ -136,3 +146,32 @@ def order_threshold(s: str) -> tuple[float | None, str]:
         return float(m.group(1).replace(".", "")), "ok"
     except ValueError:
         return None, "threshold_unparsed"
+
+
+def match_category(categories: list[str], s: str) -> tuple[str | None, str]:
+    """Category named in the question: longest category key contained in it; ambiguous when several tie."""
+    qk = item_match_key(s)
+    best, found = 0, set()
+    for c in categories:
+        ck = item_match_key(c)
+        if len(ck) < 3:
+            continue
+        if re.search(r"(?<![0-9a-z])" + re.escape(ck) + r"(?![0-9a-z])", qk):
+            if len(ck) > best:
+                best, found = len(ck), set()
+            if len(ck) == best:
+                found.add(c)
+    if not found:
+        return None, "category_not_found"
+    if len(found) > 1:
+        return None, "category_ambiguous"
+    return next(iter(found)), "ok"
+
+
+_MOT_UNIT = re.compile(r"\b(?:mot|1)\s+" + T.U + r"\b")
+
+
+def asked_unit_after_mot(s: str) -> str | None:
+    """Unit of "gia ... mot <don vi>" (price per one unit)."""
+    m = _MOT_UNIT.search(s)
+    return m.group(1) if m else None

@@ -13,6 +13,7 @@ from .llm import LocalVLLM
 from .nlu.normalize import RuleNormalizer
 from .router import Router
 from .router.db import ConnectionProvider
+from .router.rule_guard import RuleGuard
 from .router.pipeline import solve as solve_routed
 
 
@@ -28,7 +29,10 @@ def run(data_dir: Path, result_dir: Path, model, max_attempts: int = 2) -> int:
     agent = Agent(model, data_dir, max_attempts=max_attempts)
     # Router first (templates over the views), LLM agent for the rest; DATAMATE_ROUTER=0 disables it.
     use_router = os.environ.get("DATAMATE_ROUTER", "1").lower() not in ("0", "false", "no")
-    router = Router() if use_router else None
+    rule_guard = None
+    if use_router and (data_dir / "rulebook.md").is_file():
+        rule_guard = RuleGuard.load(data_dir / "rulebook.md")  # intents whose rulebook rows changed are switched off
+    router = Router(rule_guard) if use_router else None
     normalizer = RuleNormalizer(data_dir / "calendar.csv") if use_router else None
     provider = ConnectionProvider(data_dir) if use_router else None
     count = 0

@@ -26,7 +26,8 @@ def solve(question: dict[str, Any], agent: Any, router: Router | None, normalize
             elif bad:  # views exist but the data layer looks worse than any train shop: the whole shop abstains
                 decision = RouteDecision("abstain", "shop_low_confidence: " + "; ".join(bad))
             else:
-                decision = router.route(question, nq, conn)
+                spans = provider.spans(str(question["business_id"])) if hasattr(provider, "spans") else None
+                decision = router.route(question, nq, conn, spans)
         except Exception as exc:  # never let the router break a question: fall back to the agent
             decision = RouteDecision("llm", f"router_error:{type(exc).__name__}")
     if decision.route in ("template", "unanswerable"):

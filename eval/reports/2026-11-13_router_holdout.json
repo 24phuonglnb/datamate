@@ -1,0 +1,324 @@
+{
+ "dev": {
+  "n": 0,
+  "template": 0,
+  "template_pct": 0.0,
+  "template_correct": 0,
+  "template_acc_pct": 0.0,
+  "template_pa": 0.0,
+  "pa_lower_bound": 0.0,
+  "wrong": 0,
+  "by_intent": {
+   "revenue": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "order_count": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "cancel_count": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "cancel_rate": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "aov": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "best_day": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "topk_items": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "best_item": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "item_qty": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "rev_change_pct": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "item_revenue": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "category_rev": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "sell_price_on_day": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "unans_subjective": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   }
+  },
+  "llm_reasons": {},
+  "wrong_attribution": {},
+  "intent_accuracy_pct": 100.0,
+  "errors": []
+ },
+ "holdout": {
+  "n": 709,
+  "template": 339,
+  "template_pct": 47.81,
+  "template_correct": 339,
+  "template_acc_pct": 100.0,
+  "template_pa": 1.0,
+  "pa_lower_bound": 0.4781,
+  "wrong": 0,
+  "by_intent": {
+   "revenue": {
+    "n": 84,
+    "template": 84,
+    "template_pct": 100.0,
+    "template_correct": 84,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "order_count": {
+    "n": 51,
+    "template": 51,
+    "template_pct": 100.0,
+    "template_correct": 51,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "cancel_count": {
+    "n": 38,
+    "template": 38,
+    "template_pct": 100.0,
+    "template_correct": 38,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "cancel_rate": {
+    "n": 12,
+    "template": 12,
+    "template_pct": 100.0,
+    "template_correct": 12,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "aov": {
+    "n": 45,
+    "template": 45,
+    "template_pct": 100.0,
+    "template_correct": 45,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "best_day": {
+    "n": 23,
+    "template": 23,
+    "template_pct": 100.0,
+    "template_correct": 23,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "topk_items": {
+    "n": 17,
+    "template": 17,
+    "template_pct": 100.0,
+    "template_correct": 17,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "best_item": {
+    "n": 1,
+    "template": 1,
+    "template_pct": 100.0,
+    "template_correct": 1,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "item_qty": {
+    "n": 13,
+    "template": 13,
+    "template_pct": 100.0,
+    "template_correct": 13,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "rev_change_pct": {
+    "n": 18,
+    "template": 18,
+    "template_pct": 100.0,
+    "template_correct": 18,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "item_revenue": {
+    "n": 12,
+    "template": 12,
+    "template_pct": 100.0,
+    "template_correct": 12,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "category_rev": {
+    "n": 8,
+    "template": 8,
+    "template_pct": 100.0,
+    "template_correct": 8,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "sell_price_on_day": {
+    "n": 14,
+    "template": 14,
+    "template_pct": 100.0,
+    "template_correct": 14,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "unans_subjective": {
+    "n": 3,
+    "template": 3,
+    "template_pct": 100.0,
+    "template_correct": 3,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   }
+  },
+  "llm_reasons": {
+   "not_target": 275,
+   "extra_filter_or_subintent": 30,
+   "multi_intent": 28,
+   "normalizer_residual_teencode": 14,
+   "category_not_found": 9,
+   "item_specific_revenue": 8,
+   "unit_mismatch": 4,
+   "period_count": 1,
+   "item_not_found": 1
+  },
+  "wrong_attribution": {},
+  "intent_accuracy_pct": 100.0,
+  "errors": []
+ }
+}

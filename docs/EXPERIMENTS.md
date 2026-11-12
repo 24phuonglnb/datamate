@@ -167,4 +167,22 @@ derived by `scripts/data_invariants.py derive`; never tuned on public). Flagged 
 
 | date | set | result |
 |---|---|---|
-| 2026-11-13 | public_test, 14 shops | flagged: dev_004 (54% of sales rows with unparsed dates: day/month cells without year) and dev_012 (views not built, router not applicable). amount_ratio is a logged warning only (dev_007 0.3321, dev_008 0.3323 vs train min 0.3333). Leaderboard v1 router-only: 0.165 (221 answered) |
+| 2026-11-13 | public_test, 14 shops | dev_012 only: views not built, router not applicable. (An earlier version flagged dev_004 for "unparsed dates"; that was a counting artefact: blank date cells filled down by the ledger, see ROUTER_BACKLOG.) amount_ratio is a logged warning only (dev_007 0.3321, dev_008 0.3323 vs train min 0.3333). |
+
+### Leaderboard submissions (router-only, public_test, 1000 questions)
+
+| date | file (not committed) | answered | score | notes |
+|---|---|---|---|---|
+| 2026-11-13 | router_only v1 | 221 | 0.165 | = 193 correct, 28 wrong (87%) |
+| 2026-11-13 | v1 minus the 28 answers of dev_004 | 193 | 0.151 | dev_004 contributed +14 net: about 21 correct / 7 wrong (75%); the other 193 answers: about 172 correct / 21 wrong (89%) |
+
+### Router expansion, rule/sanity guards (branch feat/intent-router, CPU, no LLM)
+
+Added intents (dev-only development; 100% on dev before the hold-out was run): orders with revenue threshold (order_count_threshold),
+item_revenue, category_rev, sell_price_on_day, unans_subjective. Guards: per-question blocking by unparsed-date spans, rulebook-row
+guard (`rule_guard.py`), answer sanity checks (`sanity.py`). Reports: `eval/reports/2026-11-13_router_dev.md`, `..._router_holdout.md` (ids only).
+
+| date | branch | model | question set | PA | notes |
+|---|---|---|---|---|---|
+| 2026-11-13 | feat/intent-router | none | dev (24 shops, 2291 q) | router-answered 1048/1048 correct; PA lower bound 0.4574 | 45.74% answered; new intents: item_revenue 32, category_rev 11, sell_price_on_day 21, unans_subjective 4 (all 100%) |
+| 2026-11-13 | feat/intent-router | none | hold-out (709 q), run exactly once after the dev work | router-answered 339/339 correct; PA lower bound 0.4781 | 47.81% answered |

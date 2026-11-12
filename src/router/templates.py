@@ -74,11 +74,31 @@ SQL_TEMPLATES: dict[str, str] = {
     ),
 }
 
+# Templates written for the router (NOT from rule_regression.py; need review by the data-layer author).
+SQL_TEMPLATES.update({
+    "item_revenue_by_code": (
+        "SELECT CAST(ROUND(COALESCE(SUM(line_amount), 0)) AS INTEGER) FROM v_valid_lines "
+        "WHERE order_date BETWEEN ? AND ? AND is_service_fee = 0 AND item_code = ?"
+    ),
+    "item_revenue_by_name": (
+        "SELECT CAST(ROUND(COALESCE(SUM(line_amount), 0)) AS INTEGER) FROM v_valid_lines "
+        "WHERE order_date BETWEEN ? AND ? AND is_service_fee = 0 AND item_name = ?"
+    ),
+    "category_revenue": (
+        "SELECT CAST(ROUND(COALESCE(SUM(line_amount), 0)) AS INTEGER) FROM v_valid_lines "
+        "WHERE order_date BETWEEN ? AND ? AND is_service_fee = 0 AND category = ?"
+    ),
+    # list price per base unit on a day: every line of that day, any order status (rulebook section 5, "Giá bán X ngày D")
+    "price_on_day_by_code": "SELECT DISTINCT ROUND(unit_price_base, 2) FROM v_lines WHERE order_date = ? AND item_code = ?",
+    "price_on_day_by_name": "SELECT DISTINCT ROUND(unit_price_base, 2) FROM v_lines WHERE order_date = ? AND item_name = ?",
+})
+
 # answer type per intent (rulebook section 9)
 ANSWER_TYPE = {
     "revenue": "number", "order_count": "number", "cancel_count": "number", "aov": "number",
     "item_qty": "number", "cancel_rate": "percent", "rev_change_pct": "percent",
     "best_day": "date", "best_item": "string", "topk_items": "list",
+    "item_revenue": "number", "category_rev": "number", "sell_price_on_day": "number",
 }
 
 
@@ -93,6 +113,26 @@ def run_template(conn: sqlite3.Connection, intent: str, start: str, end: str, *,
     if intent == "topk_items":
         assert k is not None
         return [r[0] for r in conn.execute(SQL_TEMPLATES[intent], (start, end, k)).fetchall()] or None
+    if intent == "item_revenue":
+        assert item is not None
+        code, name = item
+        row = (conn.execute(SQL_TEMPLATES["item_revenue_by_code"], (start, end, code)).fetchone() if code
+               else conn.execute(SQL_TEMPLATES["item_revenue_by_name"], (start, end, name)).fetchone())
+        return int(row[0]) if row and row[0] is not None else None
+    if intent == "category_rev":
+        assert item is not None
+        row = conn.execute(SQL_TEMPLATES["category_revenue"], (start, end, item[1])).fetchone()
+        return int(row[0]) if row and row[0] is not None else None
+    if intent == "sell_price_on_day":
+        assert item is not None
+        code, name = item
+        rows = (conn.execute(SQL_TEMPLATES["price_on_day_by_code"], (start, code)).fetchall() if code
+                else conn.execute(SQL_TEMPLATES["price_on_day_by_name"], (start, name)).fetchall())
+        vals = {r[0] for r in rows if r[0] is not None}
+        if len(vals) != 1:  # no sale that day, or several prices: not decidable by the template
+            return None
+        v = float(next(iter(vals)))
+        return int(v) if abs(v - round(v)) < 1e-9 else v
     if intent == "item_qty":
         assert item is not None
         code, name = item

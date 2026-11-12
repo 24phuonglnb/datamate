@@ -24,7 +24,7 @@ from eval import pa_score  # noqa: E402
 from src.ingestion import BusinessDB  # noqa: E402
 from src.nlu.normalize import normalize  # noqa: E402
 from src.router import Router  # noqa: E402
-from src.router.intents import TARGET_INTENTS  # noqa: E402
+from src.router.intents import EXTRA_INTENTS, TARGET_INTENTS  # noqa: E402
 from src.router.templates import ANSWER_TYPE, run_template  # noqa: E402
 from src.timeutil import LunarCalendar  # noqa: E402
 
@@ -64,6 +64,8 @@ def main():
     ap.add_argument("--train-dir", required=True)
     ap.add_argument("--folds", default=str(ROOT / "eval" / "folds.json"))
     ap.add_argument("--shops", nargs="*")
+    ap.add_argument("--fold", choices=["dev", "holdout", "both"], default="both",
+                    help="evaluate only dev shops (use while developing) or only the hold-out shops")
     ap.add_argument("--out", default=str(ROOT / "eval" / "reports" / f"{datetime.date.today()}_router"))
     a = ap.parse_args()
     train = Path(a.train_dir)
@@ -74,6 +76,9 @@ def main():
     router = Router()
     by_shop = collections.defaultdict(list)
     for q in qs:
+        fold_q = "holdout" if q["business_id"] in hold else "dev"
+        if a.fold != "both" and fold_q != a.fold:
+            continue
         if not a.shops or q["business_id"] in a.shops:
             by_shop[q["business_id"]].append(q)
     out = Path(a.out)
@@ -113,7 +118,7 @@ def main():
         rs = [r for r in rows if r["fold"] == fold]
         tm = [r for r in rs if r["route"] in ("template", "unanswerable")]
         rep[fold] = {**agg(rs),
-                     "by_intent": {i: agg([r for r in rs if r["intent"] == i and r["route"] in ("template", "unanswerable")]) for i in TARGET_INTENTS},
+                     "by_intent": {i: agg([r for r in rs if r["intent"] == i and r["route"] in ("template", "unanswerable")]) for i in (*TARGET_INTENTS, *EXTRA_INTENTS)},
                      "llm_reasons": dict(collections.Counter(r["reason"].split(":")[0] for r in rs if r["route"] not in ("template", "unanswerable")).most_common()),
                      "wrong_attribution": dict(collections.Counter(r["attr"].split("(")[0] for r in tm if r["score"] != 1 and "attr" in r)),
                      "intent_accuracy_pct": round(100 * (1 - sum(1 for r in tm if str(r.get("attr", "")).startswith("intent_error")) / max(len(tm), 1)), 2),

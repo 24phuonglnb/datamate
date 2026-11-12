@@ -252,9 +252,9 @@ def resolve(text: str, as_of: str | date, calendar: LunarCalendar | None = None,
             short_slash: str | None = None) -> ResolveResult:
     """Resolve all time expressions in *text* relative to *as_of* (the question's 'today').
 
-    short_slash: convention for ambiguous 'a/b' tokens whose second part cannot be a month
-    ("6/25"): 'month_year' (tháng 6 năm 2025) or 'month_day' (ngày 25 tháng 6). Default None
-    = report as ambiguous, produce nothing.
+    short_slash: convention for 'a/b' tokens whose second part cannot be a month ("6/25"):
+    'month_year' (tháng 6 năm 2025) or 'month_day' (ngày 25 tháng 6).  Default None = month_year when the second
+    part is 20..39 (a 2-digit year), otherwise reported as ambiguous.
     """
     as_of_d = as_of if isinstance(as_of, date) else date.fromisoformat(str(as_of)[:10])
     ctx = _Ctx(_light_teencode(fold(text)), as_of_d, calendar, short_slash)
@@ -470,10 +470,13 @@ def _s_short_slash(ctx: _Ctx) -> None:
         a, b = int(m.group(1)), int(m.group(2))
         if b <= 12 and 1 <= a <= 31:
             continue  # day/month, handled by _s_day_short
-        if ctx.short_slash == "month_year" and 1 <= a <= 12:
+        # default (short_slash None): a two-digit second part 20..39 can only be a year (2020..2039): "tháng 6/25" =
+        # June 2025.  "month_day" must be asked for explicitly; anything else stays ambiguous.
+        conv = ctx.short_slash or ("month_year" if 20 <= b <= 39 else None)
+        if conv == "month_year" and 1 <= a <= 12:
             y = 2000 + b
             ctx.add(Period(*month_range(y, a), "month", (R_MONTH,), _src(m)), m)
-        elif ctx.short_slash == "month_day" and 1 <= a <= 12:
+        elif conv == "month_day" and 1 <= a <= 12:
             d = _day_from(str(b), str(a), None, ctx)
             if d:
                 ctx.add(Period(d, d, "day", (R_DAY, R_NOYEAR), _src(m)), m)
