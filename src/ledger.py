@@ -431,6 +431,8 @@ def build_ledger(
         "adjustment_rows_dropped": 0,
         "order_level_filled": 0,
         "unparsed_dates": 0,
+        "blank_date_cells": 0,
+        "unparsed_date_cells": 0,
         "unparsed_amounts": 0,
         "unit_conv_mismatches": 0,
         "warnings": [],
@@ -604,10 +606,10 @@ def build_ledger(
             else:
                 parsed_times.append(None)
 
-    unparsed_date_count = sum(d is None for d in parsed_dates)
-    issues["unparsed_dates"] = unparsed_date_count
-    if unparsed_date_count > 0:
-        issues["warnings"].append(f"{unparsed_date_count} rows have unparseable dates.")
+    # Cell-level counts before order-level resolution: blank continuation cells of multi-line orders are
+    # normal (they take the order's date below); non-blank cells that fail to parse are real problems.
+    issues["blank_date_cells"] = sum(d is None and is_blank(v) for d, v in zip(parsed_dates, raw_dates))
+    issues["unparsed_date_cells"] = sum(d is None and not is_blank(v) for d, v in zip(parsed_dates, raw_dates))
 
     # 7. Parse quantities, units, prices, line amounts
     qty_col = mapping.sales_columns.get("qty")
@@ -694,6 +696,14 @@ def build_ledger(
                     parsed_dates[i] = order_date_map[oid]
                 if oid in order_time_map and parsed_times[i] is None:
                     parsed_times[i] = order_time_map[oid]
+
+    # Rows still without a date after taking the order's date: these fall out of every period filter
+    unparsed_date_count = sum(d is None for d in parsed_dates)
+    issues["unparsed_dates"] = unparsed_date_count
+    if unparsed_date_count > 0:
+        issues["warnings"].append(f"{unparsed_date_count} rows have no order date after order-level resolution.")
+    if issues["unparsed_date_cells"] > 0:
+        issues["warnings"].append(f"{issues['unparsed_date_cells']} non-blank date cells could not be parsed.")
 
     # 9. Unit conversion and base unit calculation
     conversions = load_unit_conversions(tables, readme)
