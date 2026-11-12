@@ -234,10 +234,21 @@ class ReliabilityTests(unittest.TestCase):
             self.root / "calendar.csv",
         )
         try:
+            # Views expose typed columns, so the CAST hint is only needed in legacy mode.
             schema = db.schema_text()
-            self.assertIn("CAST", schema)
+            self.assertIn("v_valid_orders", schema)
+            self.assertIn("(REAL", schema)
         finally:
             db.close()
+        legacy_db = BusinessDB(
+            self.root / "data" / "biz_cafe",
+            self.root / "calendar.csv",
+            legacy=True,
+        )
+        try:
+            self.assertIn("CAST", legacy_db.schema_text())
+        finally:
+            legacy_db.close()
 
 
 # ─── SQL success helper ───────────────────────────────────────────────────

@@ -55,6 +55,20 @@ def norm_key(s: Any) -> str:
     return re.sub(r"\s+", " ", t).strip()
 
 
+def name_has(key: str, words: Iterable[str]) -> bool:
+    """True when the normalised name `key` contains one of `words`, also when the name was
+    written without separators ("DanhSachSanPham" -> "danhsachsanpham" still has "san pham").
+    Words shorter than 6 letters are only matched as written, to avoid accidental hits."""
+    compact = key.replace(" ", "").replace("_", "")
+    for w in words:
+        if w in key:
+            return True
+        wc = w.replace(" ", "").replace("_", "")
+        if len(wc) >= 6 and wc in compact:
+            return True
+    return False
+
+
 def is_blank(v: Any) -> bool:
     if v is None:
         return True

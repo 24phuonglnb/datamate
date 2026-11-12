@@ -25,7 +25,7 @@ import copy
 import datetime as dt
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Iterable
 
 import numpy as np
 import pandas as pd
@@ -36,6 +36,8 @@ from src.cleaning import (
     drop_export_duplicates,
     fill_order_level,
     infer_kinds,
+    is_blank,
+    name_has,
     norm_key,
     parse_date,
     parse_datetime,
@@ -120,6 +122,9 @@ def normalize_status(value: Any, note: Any = None) -> str:
 
 # ---------------------------------------------------------------------- Unit Conversions
 
+_BASE_UNIT_COL = re.compile(r"co ban|co so|(dv|dvt|don vi)( tinh)? (nho|le|goc)$|^(dv|dvt|don vi) (nho|le|goc)")
+_CELL_CONV_RE = re.compile(r"^\s*([\d.,]+)\s*([^\d=]+?)\s*=\s*([\d.,]+)\s*([^\d=]+?)\s*$")
+
 _README_CONV_RE = re.compile(
     r"^\s*[-*]\s+([^:\n]+):\s*(\d+(?:[.,]\d+)?)\s*([^=\n]+?)\s*=\s*(\d+(?:[.,]\d+)?)\s*([^\n]+?)\s*$",
     re.M,
@@ -136,6 +141,7 @@ def _resolve_multi_tier(
     """
     by_item: dict[str, dict[str, tuple[float, str]]] = {}
     base_hints: dict[str, str] = {}
+    display: dict[str, str] = {}
 
     for item_key, u1, factor, u2, base_hint in raw_rules:
         k_item = norm_key(item_key)
@@ -146,6 +152,8 @@ def _resolve_multi_tier(
         if k_item not in by_item:
             by_item[k_item] = {}
         by_item[k_item][k_u1] = (factor, k_u2)
+        # keep the spelling seen in the file ("viên", not "vien") for the base unit shown to users
+        display.setdefault(k_u2, re.sub(r"\s+", " ", str(u2).strip()))
         if base_hint:
             base_hints[k_item] = norm_key(base_hint)
 
@@ -178,7 +186,7 @@ def _resolve_multi_tier(
         if base:
             resolved[(k_item, base)] = (1.0, base)
 
-    return resolved
+    return {k: (f, display.get(b, b)) for k, (f, b) in resolved.items()}
 
 
 def load_unit_conversions(
@@ -206,12 +214,19 @@ def load_unit_conversions(
     # 2. Parse conversion tables from business data
     for t in tables:
         t_k = norm_key(t.name)
-        is_conv_table = any(k in t_k for k in ["quy doi", "don vi", "don_vi", "quydoi"])
-        if not is_conv_table:
-            continue
-
         df = t.df
         cols = t.columns
+        col_keys = [norm_key(c) for c in cols]
+        # A conversion table is named so, or is a small table with a factor column next to
+        # large/small unit columns (e.g. "Hàng | ĐV lớn | ĐV nhỏ | Hệ số QĐ" in a file named DanhMuc).
+        has_factor_col = any(k.startswith("he so") or "quy doi" in k or k.startswith("ti le") for k in col_keys)
+        # two unit-like columns: one large unit, one base unit ("ĐV lớn | ĐV nhỏ", "Loại ĐV | ĐV gốc")
+        unit_like = [k for k in col_keys if re.search(r"(^|\s)(dv|dvt|don vi)(\s|$)", k)]
+        has_unit_pair = len(unit_like) >= 2 and any(_BASE_UNIT_COL.search(k) for k in unit_like)
+        is_conv_table = name_has(t_k, ["quy doi", "don vi"]) or (
+            has_factor_col and has_unit_pair and len(cols) <= 8)
+        if not is_conv_table:
+            continue
         if len(df) == 0:
             continue
 
@@ -224,9 +239,12 @@ def load_unit_conversions(
             ck = norm_key(c)
             if not col_item and any(k in ck for k in ["ten san pham", "ten hang", "ten sp", "ma hang", "ma sp", "ma vach", "mahanghoa"]):
                 col_item = c
-            elif not col_base and any(k in ck for k in ["co ban", "dvt co ban", "don vi co ban"]):
+            elif not col_base and _BASE_UNIT_COL.search(ck):
                 col_base = c
-            elif not col_unit and any(k in ck for k in ["quy doi", "don vi tinh", "don vi", "dvt", "quy cach", "donvitinh"]):
+            elif not col_factor and (ck.startswith("he so") or ck.startswith("ti le")):
+                col_factor = c
+            elif not col_unit and (any(k in ck for k in ["quy doi", "don vi tinh", "don vi", "dvt", "quy cach", "donvitinh"])
+                                   or re.search(r"(^|\s)dv(\s|$)", ck)):
                 col_unit = c
             elif not col_factor and any(k in ck for k in ["ti le", "he so", "quy doi", "bang", "hesoquydoi"]):
                 col_factor = c
@@ -241,6 +259,12 @@ def load_unit_conversions(
             for c in cols:
                 if c not in (col_item, col_base, col_unit) and any(k in norm_key(c) for k in ["bang", "so", "sl"]):
                     col_factor = c
+                    break
+        if not col_item:  # bare headers such as "Hàng", "Sản phẩm", "Mặt hàng", "Tên"
+            for c in cols:
+                if c not in (col_unit, col_base, col_factor) and norm_key(c) in (
+                        "hang", "san pham", "mat hang", "ten", "hang hoa", "ten hang hoa", "mon", "thuoc"):
+                    col_item = c
                     break
 
         if not (col_item and col_unit and col_factor):
@@ -262,7 +286,90 @@ def load_unit_conversions(
             target_unit = embedded_unit if embedded_unit else (str(base_hint).strip() if base_hint else "base")
             raw_rules.append((str(item_val).strip(), str(unit_val).strip(), float(num), target_unit, str(base_hint).strip() if base_hint else None))
 
+    # 3. Conversions written inside a catalog cell: "1 thùng = 6 bịch" next to the item name
+    for t in tables:
+        df = t.df
+        for c in t.columns:
+            vals = df[c].dropna()
+            hits = vals[vals.map(lambda v: isinstance(v, str) and bool(_CELL_CONV_RE.match(v)))]
+            if len(hits) < 1 or len(hits) < 0.8 * len(vals):
+                continue
+            _, name_c = pick_catalog_columns(df.drop(columns=[c]))
+            if not name_c:
+                continue
+            for idx, v in hits.items():
+                item_val = df.at[idx, name_c]
+                if is_blank(item_val):
+                    continue
+                q1_s, u1, q2_s, u2 = _CELL_CONV_RE.match(v).groups()
+                q1, q2 = parse_number(q1_s) or 1.0, parse_number(q2_s) or 1.0
+                raw_rules.append((str(item_val).strip(), u1.strip(), q2 / q1 if q1 else 1.0, u2.strip(), u2.strip()))
+
     return _resolve_multi_tier(raw_rules)
+
+
+# ------------------------------------------------------------------ Catalog column picking
+
+_NAME_HINTS = ("ten", "name", "san pham", "hang hoa", "mat hang", "hang", "mon", "thuoc", "dich vu")
+_NOT_NAME = ("mo ta", "ghi chu", "nhom", "loai", "thuong hieu", "vi tri", "hinh anh", "thuoc tinh",
+             "bao hanh", "don vi", "dvt", "danh muc", "lien quan", "barcode", "ma vach", "ean")
+
+
+def pick_catalog_columns(c_df: pd.DataFrame, sales_codes: Iterable[Any] | None = None
+                         ) -> tuple[str | None, str | None]:
+    """Find (code column, name column) of an item catalog from its *contents*.
+
+    Catalog exports shuffle their columns and carry look-alikes ("Mã barcode", "Mã HH liên
+    quan", "Mô tả sản phẩm"), so the first column whose name contains "mã" / "tên" is often
+    wrong. The code column is the one whose values cover the item codes used on the sales
+    lines; the name column is a mostly-filled, mostly-unique text column, preferring
+    name-like headers and never description / note / group columns."""
+    cols = [c for c in c_df.columns if c not in META_COLS]
+    if not cols or c_df.empty:
+        return None, None
+
+    def _vals(c: str) -> pd.Series:
+        return c_df[c].dropna().map(lambda x: str(x).strip()).loc[lambda x: x != ""]
+
+    code_c = None
+    if sales_codes is not None:
+        want = {str(x).strip().upper() for x in sales_codes if x is not None and not is_blank(x)}
+        if want:
+            best = 0.0
+            for c in cols:
+                have = {v.upper() for v in _vals(c).unique()}
+                cover = len(want & have) / len(want)
+                if cover > best:
+                    best, code_c = cover, c
+            if best < 0.5:
+                code_c = None
+    if code_c is None:
+        for c in cols:
+            ck = norm_key(c)
+            if any(k in ck for k in ("barcode", "ma vach", "ean", "lien quan", "ghi chu", "mo ta")):
+                continue
+            if re.search(r"(^|\b)(ma|sku|code|id)(\b|$)", ck) or ck.startswith("ma"):
+                code_c = c
+                break
+
+    n = len(c_df)
+    scored: list[tuple[int, float, str]] = []
+    for c in cols:
+        if c == code_c:
+            continue
+        ck = norm_key(c)
+        if any(k in ck for k in _NOT_NAME) or ck.startswith("ma ") or ck in ("ma", "sku", "id"):
+            continue
+        v = _vals(c)
+        if len(v) < 0.9 * n or v.nunique() < 0.9 * len(v):
+            continue
+        if v.head(200).map(lambda x: parse_number(x) is not None).mean() > 0.5:
+            continue
+        hint = next((len(_NAME_HINTS) - i for i, k in enumerate(_NAME_HINTS) if k in ck), 0)
+        scored.append((hint, float(v.map(len).mean()), c))
+    name_c = max(scored)[2] if scored else None
+    return code_c, name_c
+
 
 
 # ---------------------------------------------------------------------- Build SalesLedger
@@ -414,15 +521,19 @@ def build_ledger(
     if (not item_name_col or item_name_col not in sales_df.columns) and (item_code_col and item_code_col in sales_df.columns):
         for t in tables:
             t_k = norm_key(t.name)
-            if any(k in t_k for k in ["san pham", "hang hoa", "catalog", "danh muc"]):
+            if name_has(t_k, ["san pham", "hang hoa", "catalog", "danh muc"]):
                 c_df = t.df
-                cat_code_col = next((c for c in c_df.columns if any(k in norm_key(c) for k in ["ma", "code", "barcode"])), None)
-                cat_name_col = next((c for c in c_df.columns if any(k in norm_key(c) for k in ["ten", "name"])), None)
-                if cat_code_col and cat_name_col and cat_code_col in c_df.columns:
-                    cat_map = c_df[[cat_code_col, cat_name_col]].dropna().drop_duplicates(subset=[cat_code_col])
-                    sales_df = sales_df.merge(cat_map, left_on=item_code_col, right_on=cat_code_col, how="left")
-                    mapping.sales_columns["item_name"] = cat_name_col
-                    item_name_col = cat_name_col
+                cat_code_col, cat_name_col = pick_catalog_columns(c_df, sales_df[item_code_col].dropna().unique())
+                if cat_code_col and cat_name_col:
+                    cat_map = c_df[[cat_code_col, cat_name_col]].dropna().copy()
+                    cat_map["__join_ic"] = cat_map[cat_code_col].map(lambda x: str(x).strip().upper())
+                    cat_map = cat_map[["__join_ic", cat_name_col]].rename(columns={cat_name_col: "__item_name"})
+                    cat_map = cat_map.drop_duplicates(subset=["__join_ic"])
+                    sales_df["__join_ic"] = sales_df[item_code_col].map(
+                        lambda x: str(x).strip().upper() if pd.notna(x) else None)
+                    sales_df = sales_df.merge(cat_map, on="__join_ic", how="left").drop(columns=["__join_ic"])
+                    mapping.sales_columns["item_name"] = "__item_name"
+                    item_name_col = "__item_name"
                     break
 
     cust_name_col = mapping.sales_columns.get("customer_name")
@@ -430,7 +541,7 @@ def build_ledger(
     if (not cust_name_col or cust_name_col not in sales_df.columns) and (cust_code_col and cust_code_col in sales_df.columns):
         for t in tables:
             t_k = norm_key(t.name)
-            if any(k in t_k for k in ["khach hang", "khach_hang", "khachhang", "doi tac", "customer"]):
+            if name_has(t_k, ["khach hang", "doi tac", "customer"]):
                 c_df = t.df
                 c_code = next((c for c in c_df.columns if any(k in norm_key(c) for k in ["ma kh", "ma khach", "so kh", "customer id", "ma doi tac", "ma"])), None)
                 c_name = next((c for c in c_df.columns if any(k in norm_key(c) for k in ["ten kh", "ho ten", "ten khach", "khach hang", "ten doi tac", "ten"])), None)

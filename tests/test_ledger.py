@@ -193,9 +193,10 @@ class UnitConversionTests(unittest.TestCase):
         resolved = _resolve_multi_tier(raw_rules)
         item_k = "thuoc panadol"
 
-        self.assertEqual(resolved[(item_k, "hop")], (180.0, "vien"))
-        self.assertEqual(resolved[(item_k, "vi")], (12.0, "vien"))
-        self.assertEqual(resolved[(item_k, "vien")], (1.0, "vien"))
+        # base unit keeps the spelling seen in the file; lookup keys stay accent-free
+        self.assertEqual(resolved[(item_k, "hop")], (180.0, "viên"))
+        self.assertEqual(resolved[(item_k, "vi")], (12.0, "viên"))
+        self.assertEqual(resolved[(item_k, "vien")], (1.0, "viên"))
 
     def test_multi_tier_three_levels(self):
         # 1 thùng = 4 lốc, 1 lốc = 6 lon -> 1 thùng = 24 lon
@@ -224,11 +225,11 @@ class UnitConversionTests(unittest.TestCase):
         # 1 cuon 4x50m = 200 m2
         self.assertEqual(convs[("bat xanh cam kho 4m", "cuon 4x50m")], (200.0, "m2"))
         # 1 cay = 10 cuon
-        self.assertEqual(convs[("bang keo dien nano 20 yard", "cay")], (10.0, "cuon"))
+        self.assertEqual(convs[("bang keo dien nano 20 yard", "cay")], (10.0, "cuộn"))
         # 1 cuon 10m = 10 m
         self.assertEqual(convs[("luoi b40 ma kem kho 1 5m", "cuon 10m")], (10.0, "m"))
         # 1 thien = 1000 vien
-        self.assertEqual(convs[("gach ong 8x8x18 tuynel", "thien")], (1000.0, "vien"))
+        self.assertEqual(convs[("gach ong 8x8x18 tuynel", "thien")], (1000.0, "viên"))
 
 
 class LedgerBuildAndInvariantsTests(unittest.TestCase):
@@ -341,3 +342,59 @@ class LedgerBuildAndInvariantsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CatalogAndConversionDiscoveryTests(unittest.TestCase):
+    """Layouts below were seen in official shop files (columns are shuffled in exports)."""
+
+    def test_name_has_matches_names_written_without_separators(self):
+        from src.cleaning import name_has, norm_key
+        # public dev_005 "DanhSachSanPham.xlsx", train biz_117 "DanhMuc.xlsx"
+        self.assertTrue(name_has(norm_key("DanhSachSanPham"), ["san pham"]))
+        self.assertTrue(name_has(norm_key("QuanLy/DanhMuc"), ["danh muc"]))
+        self.assertFalse(name_has(norm_key("SoBanHang"), ["san pham", "danh muc"]))
+
+    def test_pick_catalog_columns_ignores_barcode_and_description(self):
+        from src.ledger import pick_catalog_columns
+        # train biz_111 san_pham.csv: barcode and description columns come before the real ones
+        cat = pd.DataFrame({
+            "Mã barcode": [None, None, None],
+            "SKU": ["SP0001", "SP0002", "SP0003"],
+            "Giá": ["25000", "30000", "35000"],
+            "Mô tả sản phẩm": [None, None, None],
+            "Mã HH Liên quan": [None, None, None],
+            "Sản phẩm": ["Cà phê đen (M)", "Cà phê sữa (M)", "Bạc xỉu (M)"],
+        })
+        self.assertEqual(pick_catalog_columns(cat, ["SP0001", "SP0003"]), ("SKU", "Sản phẩm"))
+
+    def test_pick_catalog_columns_prefers_code_over_ean(self):
+        from src.ledger import pick_catalog_columns
+        # train biz_123 pos.sqlite san_pham: EAN barcode column precedes MaHangHoa
+        cat = pd.DataFrame({
+            "ma_vach_ean": ["8937439774399", "8937439774400"],
+            "MaHangHoa": ["SP0001", "SP0002"],
+            "TenGoi": ["Panadol Extra hộp 15 vỉ x 12 viên", "Hapacol 250 hộp 24 gói"],
+            "DanhMuc": ["giảm đau hạ sốt", "giảm đau hạ sốt"],
+        })
+        self.assertEqual(pick_catalog_columns(cat, ["SP0002"]), ("MaHangHoa", "TenGoi"))
+
+    def _conv(self, name, df):
+        return load_unit_conversions([RawTable(name, df, [name + ".xlsx"], [])])
+
+    def test_conversion_table_named_danhmuc_large_small_units(self):
+        # train biz_117 DanhMuc.xlsx
+        df = pd.DataFrame({"Hàng": ["Xi măng Hà Tiên PCB40 bao 50kg"], "ĐV lớn": ["tấn"],
+                           "ĐV nhỏ": ["bao"], "Hệ số QĐ": [20]})
+        self.assertEqual(self._conv("DanhMuc", df)[("xi mang ha tien pcb40 bao 50kg", "tan")], (20.0, "bao"))
+
+    def test_conversion_table_with_unit_type_and_base_unit(self):
+        # public dev_004 DanhMuc.xlsx
+        df = pd.DataFrame({"Hàng": ["Đá 4x6"], "Hệ số": [4], "ĐV gốc": ["m3"], "Loại ĐV": ["xe 4m3"]})
+        self.assertEqual(self._conv("DanhMuc", df)[("da 4x6", "xe 4m3")], (4.0, "m3"))
+
+    def test_conversion_written_in_catalog_cell(self):
+        # public dev_013 QuanLy.xlsx[DanhMuc]: "Quy đổi" = "1 thùng = 4 bịch"
+        df = pd.DataFrame({"Tên hàng": ["Tã quần Bobby size L 54 miếng", "Tã dán Bobby size M 76 miếng"],
+                           "Nhóm": ["bỉm tã", "bỉm tã"], "ĐVT": ["bịch", "bịch"],
+                           "Quy đổi": ["1 thùng = 4 bịch", "1 thùng = 4 bịch"]})
+        self.assertEqual(self._conv("QuanLy/DanhMuc", df)[("ta quan bobby size l 54 mieng", "thung")], (4.0, "bịch"))

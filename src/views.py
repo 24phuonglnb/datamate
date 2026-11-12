@@ -48,6 +48,7 @@ from src.cleaning import (
     infer_kinds,
     is_blank,
     load_business,
+    name_has,
     nfc,
     norm_key,
     parse_date,
@@ -64,6 +65,7 @@ from src.ledger import (
     STATUS_SHIPPING,
     build_ledger,
     load_unit_conversions,
+    pick_catalog_columns,
 )
 from src.mapping import Mapping, propose_mapping
 
@@ -148,6 +150,14 @@ def item_match_key(s: Any) -> str:
     # Normalize spaces between digits and letters: "1000 mg" -> "1000mg", "d 32" -> "d32"
     k = re.sub(r"(\d)\s+([a-z])", r"\1\2", k)
     return k
+
+
+def customer_match_key(s: Any) -> str:
+    """Key for customers identified by the name written on the order (rulebook §3: names that
+    differ only in how they are written are one customer; different letters or digits are two).
+    Digit groups are joined so a phone number copied as "0327 988 481" or "0327988481" matches."""
+    k = norm_key(s) if s is not None else ""
+    return re.sub(r"(?<=\d)\s+(?=\d)", "", k)
 
 
 def _has_vietnamese_diacritics(s: str) -> bool:
@@ -329,19 +339,25 @@ def _build_item_catalog_and_canonicalize_lines(
 
     # 2. Discover catalog table (if any) and extract item metadata
     catalog_records: list[dict[str, Any]] = []
+    sales_item_codes = [x for x in df["item_code"].dropna().unique()] if "item_code" in df.columns else []
     for t in tables:
         tk = norm_key(t.name)
-        if any(w in tk for w in ["quy doi", "don vi", "khach hang", "nha cung cap", "nhan vien", "chi phi", "thu chi", "ghi tat", "tra hang", "phieu nhap", "nhap kho", "ton kho", "kiem ke"]):
+        if name_has(tk, ["quy doi", "don vi", "khach hang", "nha cung cap", "nhan vien", "chi phi", "thu chi", "ghi tat", "tra hang", "phieu nhap", "nhap kho", "ton kho", "kiem ke"]):
             continue
-        if not any(w in tk for w in ["san pham", "hang hoa", "danh muc", "thuc don", "menu", "bang gia", " thuoc", "vat tu", "linh kien", "phu tung", "cay", "mon"]):
+        if not name_has(tk, ["san pham", "hang hoa", "danh muc", "thuc don", "menu", "bang gia", " thuoc", "vat tu", "linh kien", "phu tung", "cay", "mon"]):
             continue
         t_df, _ = split_summary_rows(t.df)
         cols = [c for c in t_df.columns if c not in META_COLS]
-        name_c = next((c for c in cols if any(w in norm_key(c) for w in ["ten hang", "ten sp", "ten san pham", "ten thuoc", "ten mon", "ten vat tu", "ten cay", "ten dịch vu", "ten"])), None)
+        # Pick code / name columns from the contents (shuffled exports carry look-alikes such as
+        # "Mã barcode", "Mã HH liên quan", "Mô tả sản phẩm"); fall back to header keywords.
+        code_c, name_c = pick_catalog_columns(t_df, sales_item_codes)
+        if not name_c:
+            name_c = next((c for c in cols if any(w in norm_key(c) for w in ["ten hang", "ten sp", "ten san pham", "ten thuoc", "ten mon", "ten vat tu", "ten cay", "ten dịch vu", "ten"])), None)
         if not name_c:
             continue
-        code_c = next((c for c in cols if c != name_c and any(w in norm_key(c) for w in ["ma hang", "ma sp", "ma san pham", "ma thuoc", "ma mon", "ma vat tu", "ma cay", "sku", "code", "ma"])), None)
-        cat_c = next((c for c in cols if c not in (name_c, code_c) and any(w in norm_key(c) for w in ["nhom", "loai", "danh muc", "nganh", "phan loai", "category"])), None)
+        if not code_c:
+            code_c = next((c for c in cols if c != name_c and not any(w in norm_key(c) for w in ["barcode", "ma vach", "ean", "lien quan"]) and any(w in norm_key(c) for w in ["ma hang", "ma sp", "ma san pham", "ma thuoc", "ma mon", "ma vat tu", "ma cay", "sku", "code", "ma"])), None)
+        cat_c = next((c for c in cols if c not in (name_c, code_c) and not re.search(r"(^|\s)(dv|dvt|don vi)(\s|$)", norm_key(c)) and any(w in norm_key(c) for w in ["nhom", "loai", "danh muc", "nganh", "phan loai", "category"])), None)
         unit_c = next((c for c in cols if c not in (name_c, code_c, cat_c) and any(w in norm_key(c) for w in ["dvt co ban", "don vi co ban", "dvt", "don vi", "unit"])), None)
         alias_c = next((c for c in cols if c not in (name_c, code_c, cat_c, unit_c) and any(w in norm_key(c) for w in ["goi khac", "ten tat", "ghi tat", "biet duoc", "alias"])), None)
         sell_c = next((c for c in cols if any(w in norm_key(c) for w in ["gia ban", "don gia ban", "gia niem yet", "gia le", "don gia"])), None)
@@ -635,7 +651,7 @@ def _build_item_catalog_and_canonicalize_lines(
     cust_code_to_official_name: dict[str, str] = {}
     for t in tables:
         tk = norm_key(t.name)
-        if any(w in tk for w in ["khach hang", "khach_hang", "khachhang", "doi tac", "customer", "hoi vien"]):
+        if name_has(tk, ["khach hang", "doi tac", "customer", "hoi vien"]):
             t_df, _ = split_summary_rows(t.df)
             cols = [c for c in t_df.columns if c not in META_COLS]
             c_code = next((c for c in cols if any(w in norm_key(c) for w in ["ma kh", "ma khach", "so kh", "customer id", "ma doi tac", "ma"])), None)
@@ -689,7 +705,7 @@ def _build_item_catalog_and_canonicalize_lines(
         else:
             if not nm:
                 continue
-            ck = norm_key(nm)
+            ck = customer_match_key(nm)
             if ck:
                 ckey_to_names.setdefault(ck, []).append(nm)
 
@@ -729,7 +745,7 @@ def _build_item_catalog_and_canonicalize_lines(
                 final_ckeys.append(None)
                 final_cgroups.append(None)
             else:
-                ck = norm_key(nm)
+                ck = customer_match_key(nm)
                 c_nm = canon_cust_name_map.get(ck, nm)
                 c_gr = gr_str or cust_group_map.get(f"NAME:{ck}")
                 final_ccodes.append(None)

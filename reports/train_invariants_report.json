@@ -136,7 +136,7 @@
     "rows": 137983,
     "single_date_and_status_per_order": {
       "status": "PASS",
-      "single_date_ratio": 0.9959369413294328,
+      "single_date_ratio": 1.0,
       "single_status_ratio": 1.0,
       "total_orders": 86142
     },
@@ -346,13 +346,16 @@
     },
     "cancellation_rate": {
       "status": "PASS",
-      "cancellation_rate": 0.0,
-      "cancelled_lines": 0,
+      "cancellation_rate": 0.0204625416334381,
+      "cancelled_lines": 2181,
       "total_lines": 106585
     },
     "date_range_matches_readme": {
-      "status": "N/A",
-      "message": "Could not find max date in README or no valid dates in ledger"
+      "status": "PASS",
+      "readme_max_date": "2026-08-19",
+      "actual_max_date": "2026-08-19",
+      "actual_min_date": "2025-01-01",
+      "diff_days": 0
     }
   },
   {
@@ -523,7 +526,7 @@
     "rows": 33332,
     "single_date_and_status_per_order": {
       "status": "PASS",
-      "single_date_ratio": 0.9923959445037354,
+      "single_date_ratio": 1.0,
       "single_status_ratio": 1.0,
       "total_orders": 14992
     },
@@ -768,13 +771,16 @@
     },
     "cancellation_rate": {
       "status": "PASS",
-      "cancellation_rate": 0.0,
-      "cancelled_lines": 0,
+      "cancellation_rate": 0.010308310292660024,
+      "cancelled_lines": 988,
       "total_lines": 95845
     },
     "date_range_matches_readme": {
-      "status": "N/A",
-      "message": "Could not find max date in README or no valid dates in ledger"
+      "status": "PASS",
+      "readme_max_date": "2026-05-25",
+      "actual_max_date": "2026-05-25",
+      "actual_min_date": "2025-01-01",
+      "diff_days": 0
     }
   },
   {
@@ -862,13 +868,16 @@
     },
     "cancellation_rate": {
       "status": "PASS",
-      "cancellation_rate": 0.0,
-      "cancelled_lines": 0,
+      "cancellation_rate": 0.0187929193330891,
+      "cancelled_lines": 2411,
       "total_lines": 128293
     },
     "date_range_matches_readme": {
-      "status": "N/A",
-      "message": "Could not find max date in README or no valid dates in ledger"
+      "status": "PASS",
+      "readme_max_date": "2026-07-28",
+      "actual_max_date": "2026-07-28",
+      "actual_min_date": "2025-03-01",
+      "diff_days": 0
     }
   },
   {
@@ -924,13 +933,16 @@
     },
     "cancellation_rate": {
       "status": "PASS",
-      "cancellation_rate": 0.0,
-      "cancelled_lines": 0,
+      "cancellation_rate": 0.018827459633349142,
+      "cancelled_lines": 2739,
       "total_lines": 145479
     },
     "date_range_matches_readme": {
-      "status": "N/A",
-      "message": "Could not find max date in README or no valid dates in ledger"
+      "status": "PASS",
+      "readme_max_date": "2026-08-14",
+      "actual_max_date": "2026-08-14",
+      "actual_min_date": "2025-01-01",
+      "diff_days": 0
     }
   },
   {
