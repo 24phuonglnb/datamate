@@ -1,4 +1,4 @@
-# DataMate — Offline Vietnamese Business QA Agent
+# DataMate - Offline Vietnamese Business QA Agent
 
 **Track:** Zalo AI Challenge 2026 — DataMate
 **Status:** V2 baseline complete. Synthetic benchmark: 74/105 (70.48%). Unit tests: 92 passed.
