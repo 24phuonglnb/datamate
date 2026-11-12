@@ -1,6 +1,7 @@
 """Data-layer invariants per shop, computed at inference time (no gold needed).
 
-A shop whose views look worse than ANY train shop on one of the metrics is flagged `low_confidence`; the router then
+A shop whose views look worse than ANY train shop on one of the HIGH_IS_BAD metrics is flagged `low_confidence`
+(amount_ratio is a logged warning only); the router then
 abstains for the whole shop (reason logged).  Thresholds: src/router/invariant_thresholds.json, derived once from the
 30 train shops by scripts/data_invariants.py (worst value seen in train), never tuned on public data.
 
@@ -101,8 +102,23 @@ def load_thresholds(path: Path | str | None = None) -> dict[str, Any]:
     return json.loads(Path(path or THRESHOLDS_PATH).read_text(encoding="utf-8"))
 
 
+def warnings(metrics: dict[str, Any], thr: dict[str, Any]) -> list[str]:
+    """Logged only, never a reason to abstain.
+
+    amount_ratio = view total / raw column total.  It depends on how a file writes the invoice total (repeated on every
+    line gives about 1/3) and on how many export duplicates are removed, so it does not reflect parse errors."""
+    r = metrics.get("amount_ratio")
+    if r is not None and "amount_ratio" in thr:
+        lo, hi = thr["amount_ratio"]["min"], thr["amount_ratio"]["max"]
+        if r < lo - 1e-9 or r > hi + 1e-9:
+            return [f"amount_ratio={r:.4g} outside train [{lo:.4g},{hi:.4g}] (warning only)"]
+    return []
+
+
 def flags(metrics: dict[str, Any], thr: dict[str, Any]) -> list[str]:
-    """Reasons for low_confidence; a metric that could not be computed is not a reason by itself."""
+    """Reasons for low_confidence (the shop abstains): unparsed dates, unknown statuses, unconverted units or a
+    month with revenue <= 0 beyond the train worst case (0), duplicate share above the train worst case.
+    A metric that could not be computed is not a reason by itself."""
     reasons = []
     if metrics.get("no_ledger"):
         return ["no_ledger"]
@@ -110,9 +126,4 @@ def flags(metrics: dict[str, Any], thr: dict[str, Any]) -> list[str]:
         v = metrics.get(k)
         if v is not None and k in thr and v > thr[k]["worst"] + 1e-9:
             reasons.append(f"{k}={v:.4g}>train_worst={thr[k]['worst']:.4g}")
-    r = metrics.get("amount_ratio")
-    if r is not None and "amount_ratio" in thr:
-        lo, hi = thr["amount_ratio"]["min"], thr["amount_ratio"]["max"]
-        if r < lo - 1e-9 or r > hi + 1e-9:
-            reasons.append(f"amount_ratio={r:.4g} outside train [{lo:.4g},{hi:.4g}]")
     return reasons

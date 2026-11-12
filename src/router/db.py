@@ -17,6 +17,7 @@ class ConnectionProvider:
         self.max_open = max_open
         self._open: dict[str, BusinessDB] = {}
         self._flags: dict[str, list[str]] = {}
+        self._warnings: dict[str, list[str]] = {}
         cal = self.root / "calendar.csv"
         self._calendar = cal if cal.is_file() else None
 
@@ -38,10 +39,16 @@ class ConnectionProvider:
             conn = self.connection(shop)
             try:
                 m = invariants.compute(self.root / "data" / shop, conn)
-                self._flags[shop] = invariants.flags(m, invariants.load_thresholds())
+                thr = invariants.load_thresholds()
+                self._flags[shop] = invariants.flags(m, thr)
+                self._warnings[shop] = invariants.warnings(m, thr)
             except Exception as exc:  # cannot even check the shop: do not trust it
                 self._flags[shop] = [f"invariants_error:{type(exc).__name__}"]
         return self._flags[shop]
+
+    def warnings(self, shop: str) -> list[str]:
+        self.flags(shop)
+        return self._warnings.get(shop, [])
 
     def close(self) -> None:
         for db in self._open.values():

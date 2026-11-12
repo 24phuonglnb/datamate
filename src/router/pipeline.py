@@ -40,4 +40,11 @@ def solve(question: dict[str, Any], agent: Any, router: Router | None, normalize
     else:
         answer, log = agent.solve(question)
     log["router"] = decision.log()
+    if provider is not None and hasattr(provider, "warnings"):
+        try:
+            w = provider.warnings(str(question.get("business_id", "")))
+        except Exception:
+            w = []
+        if w:
+            log["router"]["shop_warnings"] = w
     return answer, log

@@ -230,7 +230,13 @@ def test_invariant_flags_use_train_worst_values():
     ok = {"amount_ratio": 0.5, "unparsed_dates_pct": 0.0, "dup_pct": 2.9, "nonpositive_months": 0, "no_ledger": 0}
     assert inv.flags(ok, thr) == []
     assert inv.flags(dict(ok, unparsed_dates_pct=3.0), thr)[0].startswith("unparsed_dates_pct")
-    assert inv.flags(dict(ok, amount_ratio=0.2), thr) and inv.flags(dict(ok, amount_ratio=1.2), thr)
+    # amount_ratio is a warning only: never a low_confidence reason
+    assert inv.flags(dict(ok, amount_ratio=0.2), thr) == [] and inv.flags(dict(ok, amount_ratio=1.2), thr) == []
+    assert inv.warnings(dict(ok, amount_ratio=0.2), thr) and inv.warnings(ok, thr) == []
+    assert inv.flags(dict(ok, nonpositive_months=1), thr)[0].startswith("nonpositive_months")
+    assert inv.flags(dict(ok, status_unknown_pct=0.5), thr)[0].startswith("status_unknown_pct")
+    assert inv.flags(dict(ok, unit_unconverted_pct=0.1), thr)[0].startswith("unit_unconverted_pct")
+    assert inv.flags(dict(ok, dup_pct=3.5), thr)[0].startswith("dup_pct")
     assert inv.flags({"no_ledger": 1}, thr) == ["no_ledger"]
     assert inv.flags(dict(ok, amount_ratio=None), thr) == []  # not computable is not a reason by itself
 

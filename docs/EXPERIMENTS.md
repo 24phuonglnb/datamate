@@ -167,4 +167,4 @@ derived by `scripts/data_invariants.py derive`; never tuned on public). Flagged 
 
 | date | set | result |
 |---|---|---|
-| 2026-11-13 | public_test, 14 shops | flagged: dev_004 (54% of sales dates unparsed: day/month cells without year), dev_007 and dev_008 (amount_ratio 0.3321 / 0.3323, marginally below the train minimum 0.3333), dev_012 (views not built). Leaderboard v1 router-only: 0.165 (221 answered) |
+| 2026-11-13 | public_test, 14 shops | flagged: dev_004 (54% of sales rows with unparsed dates: day/month cells without year) and dev_012 (views not built, router not applicable). amount_ratio is a logged warning only (dev_007 0.3321, dev_008 0.3323 vs train min 0.3333). Leaderboard v1 router-only: 0.165 (221 answered) |

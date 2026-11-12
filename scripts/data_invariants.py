@@ -59,8 +59,9 @@ def main():
         L = ["| shop | " + " | ".join(cols) + " | flag |", "|---|" + "---|" * (len(cols) + 1)]
         for s, m in res.items():
             fl = inv.flags(m, thr)
+            wn = inv.warnings(m, thr)
             cells = ["-" if m.get(c) is None else (f"{m[c]:.4g}" if isinstance(m[c], float) else str(m[c])) for c in cols]
-            L.append(f"| {s} | " + " | ".join(cells) + f" | {'LOW_CONFIDENCE: ' + '; '.join(fl) if fl else 'ok'} |")
+            L.append(f"| {s} | " + " | ".join(cells) + f" | {'LOW_CONFIDENCE: ' + '; '.join(fl) if fl else 'ok'}{' [warn: ' + '; '.join(wn) + ']' if wn else ''} |")
         text = "\n".join(L)
         print(text)
         if a.out:

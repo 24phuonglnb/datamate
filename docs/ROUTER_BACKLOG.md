@@ -86,3 +86,17 @@ Tổng dev rơi xuống LLM: 1331 câu; trong đó 984 câu intent ngoài TARGET
 3. **Khó / chặn bởi tầng dữ liệu** (234 câu) (cần view nhập hàng, tồn kho, lô/hạn dùng, công nợ theo ngày): purchase_*, stock_*, expiry_*, debt_*, profit.
 
 Cần Nghiệp: v_purchases, v_stock, v_batches, công nợ theo ngày (v_debt_at). Template dùng lại SQL của Nghiệp phải giữ nguyên SQL gốc và được duyệt.
+
+## Chặn bởi tầng dữ liệu (việc của Nghiệp; router không sửa file của Nghiệp)
+
+- **dev_004 (public): ngày `d/m` không ghi năm không được parse.** 3906/15337 ô ngày không rỗng (≈25%) của sổ bán hàng
+  là dạng `3/6`, `27/2`; các dòng đó (54,05% dòng sổ bị ảnh hưởng) rơi khỏi view nên doanh thu, số đơn của shop sai.
+  Rulebook §8 (Ngày không ghi năm): năm là năm của sheet chứa dòng đó (sheet tên dạng `T05-2025`, cột `__year` đã có
+  sau khi nạp). Cần `parse_date(..., year=<năm của sheet>)` cho các ô này. Router đang abstain cả shop nhờ chỉ số
+  `unparsed_dates_pct`; khi sửa xong, chạy lại `scripts/data_invariants.py report`.
+- **Test của Nghiệp phụ thuộc thứ tự chạy:** `tests/test_smoke.py::RegressionTests::test_create_demo_no_connection_leak`
+  fail khi chạy sau `tests/test_ingestion_cache.py` (`pytest tests/test_ingestion_cache.py tests/test_smoke.py`).
+  Đã fail từ commit merge branch của Nghiệp vào `feat/question-normalization` (trước mọi code router), không fail trên
+  branch của Nghiệp. Chưa rõ nguyên nhân gốc; có thể có kết nối SQLite bị rò rỉ ở test cache.
+- `tests/test_rule_regression.py` (2 test) fail vì đòi cấu trúc `data/train/data/...`, không khớp dữ liệu chính thức.
+
