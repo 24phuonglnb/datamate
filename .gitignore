@@ -81,3 +81,8 @@ zalo_data/
 /reports/mappings
 /reports/profiles/
 /reports/*.json
+
+
+# Per-question raw rows and error examples derive from private data
+eval/reports/*.per_question.jsonl
+eval/reports/*_errors.md
