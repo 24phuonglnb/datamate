@@ -59,13 +59,13 @@ Dựa trên bảng `lines` (kết quả của `SalesLedger` đã chuẩn hoá t�
 | `qty` | `REAL` | Số lượng bán theo đơn vị trên dòng (`unit`). |
 | `factor` | `REAL` | Hệ số quy đổi về đơn vị nhỏ nhất (`qty_base = qty * factor`, **§10**). |
 | `qty_base` | `REAL` | Số lượng đã quy đổi về đơn vị nhỏ nhất (`base_unit`). Dùng cột này cho mọi câu hỏi tổng số lượng bán / xếp hạng bán chạy theo số lượng (**§3, §10**). |
-| `base_unit` | `TEXT` | Tên đơn vị nhỏ nhất của mặt hàng (**§10**). |
+| `base_unit` | `TEXT` | Tên đơn vị nhỏ nhất của mặt hàng (**§10**), giữ đúng chính tả có dấu như trong file (`viên`, `hộp`, `gói`; không phải `vien`, `hop`, `goi`). Khi lọc theo đơn vị, so sánh với dạng có dấu. |
 | `unit_price` | `REAL` | Đơn giá bán theo đơn vị trên dòng (`unit`). |
 | `unit_price_base` | `REAL` | Đơn giá quy đổi về đơn vị nhỏ nhất (`unit_price / factor`, **§5**). |
 | `line_amount` | `REAL` | Thành tiền của dòng sau chiết khấu dòng (**§1**). |
 | `customer_code` | `TEXT` | Mã khách hàng (`NULL` nếu là khách lẻ). |
 | `customer_name` | `TEXT` | Tên khách hàng chuẩn hoá có dấu (`NULL` nếu là khách lẻ). |
-| `customer_key` | `TEXT` | Khoá định danh khách hàng để `GROUP BY` / `COUNT(DISTINCT customer_key)` (**§3**): bằng `customer_code` nếu tiệm có dùng mã khách (đơn không ghi mã khách là khách lẻ -> `NULL`), ngược lại bằng `norm_key(customer_name)`. Mọi nhãn khách vãng lai (`Khách lẻ`, `Lẻ`, `KL`, `Khách vãng lai`, `Vãng lai`, trống) đều có `customer_key = NULL`. |
+| `customer_key` | `TEXT` | Khoá định danh khách hàng để `GROUP BY` / `COUNT(DISTINCT customer_key)` (**§3**): bằng `customer_code` nếu tiệm có dùng mã khách (đơn không ghi mã khách là khách lẻ -> `NULL`), ngược lại bằng tên khách đã chuẩn hoá: bỏ dấu, viết thường, bỏ dấu câu, và nối các cụm chữ số liền nhau, nên `Triệu Linh An - 0327 988 481` và `Triệu Linh An 0327988481` là cùng một khách (tên chỉ khác cách viết là một khách; khác chữ hoặc khác số là hai khách). Mọi nhãn khách vãng lai (`Khách lẻ`, `Lẻ`, `KL`, `Khách vãng lai`, `Vãng lai`, trống) đều có `customer_key = NULL`. |
 | `customer_group` | `TEXT` | Nhóm / hạng khách hàng (nếu có trong bảng khách hàng hoặc sổ bán). |
 | `staff` | `TEXT` | Nhân viên bán hàng / thu ngân. |
 | `channel` | `TEXT` | Kênh bán hàng. |
@@ -145,7 +145,7 @@ WHERE status NOT IN ('huy', 'tra_hang');
 | `item_name` | `TEXT` | Tên hàng chuẩn đầy đủ dấu tiếng Việt (dùng để xuất câu trả lời theo **§9**). |
 | `name_aliases` | `TEXT` | Danh sách mọi cách viết xuất hiện trong các file của tiệm (tên chuẩn, tên viết tắt trong sheet `Ghi tắt`, cột `Tên gọi khác`, biến thể không dấu/dư khoảng trắng), ngăn cách bởi `' \| '`. |
 | `category` | `TEXT` | Nhóm hàng / loại hàng. |
-| `base_unit` | `TEXT` | Đơn vị tính nhỏ nhất (**§10**). |
+| `base_unit` | `TEXT` | Đơn vị tính nhỏ nhất (**§10**), chính tả có dấu như trong file. |
 | `sell_price` | `REAL` | Giá bán niêm yết trong bảng danh mục (nếu có). |
 | `cost_price` | `REAL` | Giá vốn / giá nhập chuẩn trong bảng danh mục (nếu có, dùng cho **§2**). |
 | `active_ingredient` | `TEXT` | Hoạt chất (đối với nhà thuốc, nếu có). |
