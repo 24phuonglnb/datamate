@@ -135,3 +135,12 @@ python3 eval/evaluate.py \
 Results are written to `eval_results/my_run/summary.json` and `eval_results/my_run/per_question.jsonl`.
 
 The reference V2 results are preserved in `eval_results/qwen3_full/`.
+
+### Legacy ingestion vs rulebook views (branch exp/legacy-vs-views)
+
+| date | branch | model | question set | PA | notes |
+|---|---|---|---|---|---|
+| 2026-11-12 | exp/legacy-vs-views | Qwen3-8B, legacy ingestion | all 709 questions of the 6 hold-out shops | -0.4090 | run COMPLETED (709/709; progress was -0.474 at 460/709): correct 3.5%, abstain 52.1%, wrong 44.4%, answered precision 7.4%, 21 s/question; current prompt (written for raw tables). Report `eval/reports/2026-11-12_Qwen3-8B-legacy_holdout.md` |
+| 2026-11-12 | exp/legacy-vs-views | Qwen3-8B, views (default) | hold-out 709 | not run | no GPU with >= 19.5 GB free for 3 h on the shared server; stopped for the switch to Qwen3-14B. Cancelled, not a result |
+
+The views arm was never started, so there is no legacy-vs-views comparison. 8B is dropped in favour of Qwen3-14B (run by Phuong).

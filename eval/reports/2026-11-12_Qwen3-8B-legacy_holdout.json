@@ -1,0 +1,214 @@
+{
+ "date": "2026-11-12",
+ "model": "Qwen3-8B-legacy",
+ "model_path": "/mnt/disk1/23nhi.ttt/hf/hub/models--Qwen--Qwen3-8B/snapshots/b968826d9c46dd6066d109eabc6255188de91218",
+ "backend": "transformers",
+ "set": "holdout_all",
+ "percent_mode": "strict",
+ "overall": {
+  "n": 709,
+  "pa": -0.409,
+  "accuracy": 0.0353,
+  "abstain_rate": 0.5205,
+  "wrong_rate": 0.4443
+ },
+ "by_fold": {
+  "holdout": {
+   "n": 709,
+   "pa": -0.409,
+   "accuracy": 0.0353,
+   "abstain_rate": 0.5205,
+   "wrong_rate": 0.4443
+  }
+ },
+ "by_type": {
+  "boolean": {
+   "n": 5,
+   "pa": -0.2,
+   "accuracy": 0.2,
+   "abstain_rate": 0.4,
+   "wrong_rate": 0.4
+  },
+  "date": {
+   "n": 28,
+   "pa": -0.5,
+   "accuracy": 0.0,
+   "abstain_rate": 0.5,
+   "wrong_rate": 0.5
+  },
+  "list": {
+   "n": 62,
+   "pa": -0.5968,
+   "accuracy": 0.0484,
+   "abstain_rate": 0.3065,
+   "wrong_rate": 0.6452
+  },
+  "number": {
+   "n": 451,
+   "pa": -0.4967,
+   "accuracy": 0.02,
+   "abstain_rate": 0.4634,
+   "wrong_rate": 0.5166
+  },
+  "percent": {
+   "n": 123,
+   "pa": -0.1301,
+   "accuracy": 0.0,
+   "abstain_rate": 0.8699,
+   "wrong_rate": 0.1301
+  },
+  "string": {
+   "n": 17,
+   "pa": -0.2353,
+   "accuracy": 0.0588,
+   "abstain_rate": 0.6471,
+   "wrong_rate": 0.2941
+  },
+  "table": {
+   "n": 7,
+   "pa": -0.5714,
+   "accuracy": 0.0,
+   "abstain_rate": 0.4286,
+   "wrong_rate": 0.5714
+  },
+  "unanswerable": {
+   "n": 16,
+   "pa": 0.625,
+   "accuracy": 0.6875,
+   "abstain_rate": 0.25,
+   "wrong_rate": 0.0625
+  }
+ },
+ "by_intent": {
+  "cong_no": {
+   "n": 52,
+   "pa": -0.2115,
+   "accuracy": 0.0385,
+   "abstain_rate": 0.7115,
+   "wrong_rate": 0.25
+  },
+  "doanh_thu": {
+   "n": 284,
+   "pa": -0.4401,
+   "accuracy": 0.0211,
+   "abstain_rate": 0.5176,
+   "wrong_rate": 0.4613
+  },
+  "gia_tang_gia": {
+   "n": 34,
+   "pa": -0.1765,
+   "accuracy": 0.0,
+   "abstain_rate": 0.8235,
+   "wrong_rate": 0.1765
+  },
+  "huy_tra": {
+   "n": 61,
+   "pa": -0.6066,
+   "accuracy": 0.0,
+   "abstain_rate": 0.3934,
+   "wrong_rate": 0.6066
+  },
+  "khac": {
+   "n": 118,
+   "pa": -0.4237,
+   "accuracy": 0.0678,
+   "abstain_rate": 0.4407,
+   "wrong_rate": 0.4915
+  },
+  "loi_nhuan": {
+   "n": 7,
+   "pa": 0.0,
+   "accuracy": 0.0,
+   "abstain_rate": 1.0,
+   "wrong_rate": 0.0
+  },
+  "nhap_hang": {
+   "n": 5,
+   "pa": 0.0,
+   "accuracy": 0.0,
+   "abstain_rate": 1.0,
+   "wrong_rate": 0.0
+  },
+  "so_don": {
+   "n": 44,
+   "pa": -0.5682,
+   "accuracy": 0.0682,
+   "abstain_rate": 0.2955,
+   "wrong_rate": 0.6364
+  },
+  "so_sanh_ky": {
+   "n": 46,
+   "pa": -0.0652,
+   "accuracy": 0.0217,
+   "abstain_rate": 0.8913,
+   "wrong_rate": 0.087
+  },
+  "ton_kho": {
+   "n": 9,
+   "pa": -0.3333,
+   "accuracy": 0.1111,
+   "abstain_rate": 0.4444,
+   "wrong_rate": 0.4444
+  },
+  "xep_hang": {
+   "n": 49,
+   "pa": -0.6122,
+   "accuracy": 0.0816,
+   "abstain_rate": 0.2245,
+   "wrong_rate": 0.6939
+  }
+ },
+ "by_shop": {
+  "biz_102": {
+   "n": 119,
+   "pa": -0.5714,
+   "accuracy": 0.0,
+   "abstain_rate": 0.4286,
+   "wrong_rate": 0.5714
+  },
+  "biz_109": {
+   "n": 118,
+   "pa": -0.3644,
+   "accuracy": 0.0424,
+   "abstain_rate": 0.5508,
+   "wrong_rate": 0.4068
+  },
+  "biz_112": {
+   "n": 118,
+   "pa": -0.4492,
+   "accuracy": 0.0593,
+   "abstain_rate": 0.4322,
+   "wrong_rate": 0.5085
+  },
+  "biz_116": {
+   "n": 118,
+   "pa": -0.4831,
+   "accuracy": 0.0085,
+   "abstain_rate": 0.5,
+   "wrong_rate": 0.4915
+  },
+  "biz_123": {
+   "n": 118,
+   "pa": -0.0932,
+   "accuracy": 0.0169,
+   "abstain_rate": 0.8729,
+   "wrong_rate": 0.1102
+  },
+  "biz_129": {
+   "n": 118,
+   "pa": -0.4915,
+   "accuracy": 0.0847,
+   "abstain_rate": 0.339,
+   "wrong_rate": 0.5763
+  }
+ },
+ "timing": {
+  "model_load_s": 15.9,
+  "sec_per_question_mean": 20.97,
+  "sec_per_question_median": 15.94,
+  "sec_per_question_p95": 56.48,
+  "wall_s_this_process": 14868.8
+ },
+ "answered_rate": 0.4795,
+ "answered_precision": 0.0735
+}
