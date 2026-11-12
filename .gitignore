@@ -78,3 +78,6 @@ zalo_data/
 .dockerignore
 
 /eval_results/
+/reports/mappings
+/reports/profiles/
+/reports/*.json
