@@ -1,19 +1,19 @@
 {
  "dev": {
   "n": 2291,
-  "template": 960,
-  "template_pct": 41.9,
-  "template_correct": 960,
+  "template": 968,
+  "template_pct": 42.25,
+  "template_correct": 968,
   "template_acc_pct": 100.0,
   "template_pa": 1.0,
-  "pa_lower_bound": 0.419,
+  "pa_lower_bound": 0.4225,
   "wrong": 0,
   "by_intent": {
    "revenue": {
-    "n": 293,
-    "template": 293,
+    "n": 296,
+    "template": 296,
     "template_pct": 100.0,
-    "template_correct": 293,
+    "template_correct": 296,
     "template_acc_pct": 100.0,
     "template_pa": 1.0,
     "pa_lower_bound": 1.0,
@@ -40,10 +40,10 @@
     "wrong": 0
    },
    "cancel_rate": {
-    "n": 77,
-    "template": 77,
+    "n": 78,
+    "template": 78,
     "template_pct": 100.0,
-    "template_correct": 77,
+    "template_correct": 78,
     "template_acc_pct": 100.0,
     "template_pa": 1.0,
     "pa_lower_bound": 1.0,
@@ -60,20 +60,20 @@
     "wrong": 0
    },
    "best_day": {
-    "n": 101,
-    "template": 101,
+    "n": 103,
+    "template": 103,
     "template_pct": 100.0,
-    "template_correct": 101,
+    "template_correct": 103,
     "template_acc_pct": 100.0,
     "template_pa": 1.0,
     "pa_lower_bound": 1.0,
     "wrong": 0
    },
    "topk_items": {
-    "n": 41,
-    "template": 41,
+    "n": 43,
+    "template": 43,
     "template_pct": 100.0,
-    "template_correct": 41,
+    "template_correct": 43,
     "template_acc_pct": 100.0,
     "template_pa": 1.0,
     "pa_lower_bound": 1.0,
@@ -117,7 +117,6 @@
    "normalizer_residual_teencode": 41,
    "unit_mismatch": 29,
    "item_specific_revenue": 14,
-   "before_data_start": 8,
    "empty_result": 2,
    "item_not_found": 1
   },
@@ -127,19 +126,19 @@
  },
  "holdout": {
   "n": 709,
-  "template": 298,
-  "template_pct": 42.03,
-  "template_correct": 298,
+  "template": 299,
+  "template_pct": 42.17,
+  "template_correct": 299,
   "template_acc_pct": 100.0,
   "template_pa": 1.0,
-  "pa_lower_bound": 0.4203,
+  "pa_lower_bound": 0.4217,
   "wrong": 0,
   "by_intent": {
    "revenue": {
-    "n": 83,
-    "template": 83,
+    "n": 84,
+    "template": 84,
     "template_pct": 100.0,
-    "template_correct": 83,
+    "template_correct": 84,
     "template_acc_pct": 100.0,
     "template_pa": 1.0,
     "pa_lower_bound": 1.0,
@@ -242,8 +241,7 @@
    "extra_filter_or_subintent": 27,
    "normalizer_residual_teencode": 14,
    "item_specific_revenue": 8,
-   "unit_mismatch": 4,
-   "before_data_start": 1
+   "unit_mismatch": 4
   },
   "wrong_attribution": {},
   "intent_accuracy_pct": 100.0,

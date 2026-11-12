@@ -150,10 +150,12 @@ PA = point average (+1 correct / -1 wrong / 0 abstain, rulebook section 9), scor
 ### Intent router (branch feat/intent-router, CPU only, no LLM)
 
 Router = rules on the normalized question -> SQL templates over the rulebook views (templates copied from
-`scripts/analysis/rule_regression.py`, need the data-layer author's approval); everything uncertain goes to the LLM.
-Report: `eval/reports/2026-11-13_router.md` (ids only). Scored with `eval/pa_score.py`.
+`scripts/analysis/rule_regression.py`, need the data-layer author's approval); a period entirely before the shop's
+data is answered `unanswerable` (rulebook section 7); everything uncertain goes to the LLM.
+Report: `eval/reports/2026-11-13_router.md` (ids only). Scored with `eval/pa_score.py`. Backlog of the rest: `docs/ROUTER_BACKLOG.md`.
 
 | date | branch | model | question set | PA | notes |
 |---|---|---|---|---|---|
-| 2026-11-13 | feat/intent-router | none (rules + SQL) | dev (24 shops, 2291 q) | template route 1.000 (960/960); lower bound 0.419 | 41.9% of questions answered by template, rest -> LLM |
-| 2026-11-13 | feat/intent-router | none (rules + SQL) | hold-out (6 shops, 709 q) | template route 1.000 (298/298); lower bound 0.420 | 42.0% by template; first run 296/298 (threshold orders), fixed on dev evidence |
+| 2026-11-13 | feat/intent-router | none (rules + SQL) | dev (24 shops, 2291 q) | router-answered 968/968 correct (960 template + 8 unanswerable); PA lower bound 0.4225 | 42.25% answered by the router, rest -> LLM |
+| 2026-11-13 | feat/intent-router | none (rules + SQL) | hold-out (6 shops, 709 q) | router-answered 299/299 correct (298 template + 1 unanswerable); PA lower bound 0.4217 | first run 296/298 (threshold orders), fixed on dev evidence only |
+| 2026-11-13 | feat/intent-router | none (rules + SQL), router-only submission | public_test (14 shops, 1000 q), no gold | not scored (leaderboard) | 221 answered, 779 abstain (dev_012: views not built, 0 answered); intent mix differs from train |

@@ -12,6 +12,7 @@ from .agent import Agent
 from .llm import LocalVLLM
 from .nlu.normalize import RuleNormalizer
 from .router import Router
+from .router.db import ConnectionProvider
 from .router.pipeline import solve as solve_routed
 
 
@@ -29,6 +30,7 @@ def run(data_dir: Path, result_dir: Path, model, max_attempts: int = 2) -> int:
     use_router = os.environ.get("DATAMATE_ROUTER", "1").lower() not in ("0", "false", "no")
     router = Router() if use_router else None
     normalizer = RuleNormalizer(data_dir / "calendar.csv") if use_router else None
+    provider = ConnectionProvider(data_dir) if use_router else None
     count = 0
     try:
         # Open in write mode for a clean, deterministic run. Flush each answer.
@@ -40,7 +42,7 @@ def run(data_dir: Path, result_dir: Path, model, max_attempts: int = 2) -> int:
                     continue
                 try:
                     question = json.loads(line)
-                    answer, log = solve_routed(question, agent, router, normalizer)
+                    answer, log = solve_routed(question, agent, router, normalizer, provider)
                 except Exception as exc:
                     qid = ""
                     try:
@@ -58,6 +60,8 @@ def run(data_dir: Path, result_dir: Path, model, max_attempts: int = 2) -> int:
                     print(f"Processed {count} questions", file=sys.stderr, flush=True)
     finally:
         agent.close()
+        if provider is not None:
+            provider.close()
     return count
 
 

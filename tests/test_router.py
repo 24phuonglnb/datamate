@@ -121,11 +121,20 @@ def test_template_answers_and_formats():
     ("tháng 3/2026 bán được bao nhiêu chai bia hơi", "item_not_found"),
     ("tháng 3/2026 bán được bao nhiêu chai mì hảo hảo", "unit_mismatch"),
     ("tháng 3/2026 tồn kho còn bao nhiêu", "not_target"),
-    ("doanh thu tháng 1/2020 là bao nhiêu", "before_data_start"),
 ])
 def test_unsafe_goes_to_llm(text, reason):
     d = route(text)
     assert d.route == "llm" and d.reason.split(":")[0] == reason
+
+
+def test_period_before_data_is_unanswerable():
+    d = route("doanh thu tháng 1/2020 là bao nhiêu")
+    assert d.route == "unanswerable" and d.reason == "before_data_start"
+    assert d.answer["type"] == "unanswerable" and isinstance(d.answer["reason"], str) and d.answer["id"] == "t1"
+    d = route("doanh thu tháng 2/2026 là bao nhiêu")           # data starts 2026-02-10: partly covered -> answered
+    assert d.route == "template" and d.answer["answer"] == 100000
+    d = route("doanh thu tháng 1/2026 là bao nhiêu")           # ends before the first data day (2026-02-10)
+    assert d.route == "unanswerable"
 
 
 def test_order_threshold():
@@ -176,15 +185,13 @@ def test_pipeline_routes_template_and_falls_back(monkeypatch):
     from src.nlu.normalize import RuleNormalizer
     from src.router.pipeline import solve
 
-    class FakeDB:
-        connection = _db()
+    class FakeProvider:
+        def connection(self, biz):
+            return _db()
 
     class FakeAgent:
         def __init__(self):
             self.calls = 0
-
-        def _db(self, biz):
-            return FakeDB()
 
         def solve(self, q):
             self.calls += 1
@@ -192,10 +199,13 @@ def test_pipeline_routes_template_and_falls_back(monkeypatch):
 
     agent, norm = FakeAgent(), RuleNormalizer(None)
     q = {"id": "t1", "business_id": "x", "as_of_date": AS_OF, "question": "doanh thu tháng 3/2026 là bao nhiêu"}
-    ans, log = solve(q, agent, Router(), norm)
+    ans, log = solve(q, agent, Router(), norm, FakeProvider())
     assert ans["answer"] == 350000 and agent.calls == 0 and log["router"]["route"] == "template"
     q2 = dict(q, id="t2", question="tháng 3/2026 tồn kho còn bao nhiêu")
-    ans, log = solve(q2, agent, Router(), norm)
+    ans, log = solve(q2, agent, Router(), norm, FakeProvider())
     assert agent.calls == 1 and log["router"]["route"] == "llm"
     ans, log = solve(q, agent, None, None)  # disabled -> straight to the agent
     assert agent.calls == 2 and log["router"]["reason"] == "router_disabled"
+    q3 = dict(q, id="t3", question="doanh thu tháng 1/2020 là bao nhiêu")
+    ans, log = solve(q3, agent, Router(), norm, FakeProvider())
+    assert ans["type"] == "unanswerable" and agent.calls == 2 and log["router"]["route"] == "unanswerable"

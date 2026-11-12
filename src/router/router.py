@@ -1,7 +1,7 @@
 """Route a question to a deterministic template over the rulebook views, or hand it to the LLM agent.
 
 Safety rule: the template answers only when intent, period and parameters are all certain. Anything else is
-routed to "llm" with a reason (route "abstain" is reserved for questions the router knows have no answer).
+routed to "llm" with a reason (route "unanswerable" = period entirely before the shop's data, rulebook section 7; "abstain" is not produced yet).
 No logic on shop or question identifiers; valid-order definition, statuses and unit conversion come from the views.
 """
 from __future__ import annotations
@@ -17,7 +17,7 @@ from .templates import ANSWER_TYPE, run_template
 
 @dataclass
 class RouteDecision:
-    route: str                      # "template" | "llm" | "abstain"
+    route: str                      # "template" | "unanswerable" | "llm" | "abstain"
     reason: str
     intent: str | None = None
     answer: dict[str, Any] | None = None
@@ -74,7 +74,10 @@ class Router:
             return RouteDecision("llm", "no_views", intent, params=params)
         min_date = conn.execute("SELECT MIN(order_date) FROM v_orders").fetchone()[0]
         if min_date and end < min_date:
-            return RouteDecision("llm", "before_data_start", intent, params=params)
+            # rulebook section 7: a period entirely outside the shop's data range is unanswerable, not 0
+            ans = {"id": qid, "type": "unanswerable",
+                   "reason": "Kỳ được hỏi nằm hoàn toàn trước ngày đầu tiên có dữ liệu của cửa hàng (rulebook mục 7)."}
+            return RouteDecision("unanswerable", "before_data_start", intent, ans, params)
         kw: dict[str, Any] = {}
         if intent == "topk_items":
             k = I.topk_k(s)

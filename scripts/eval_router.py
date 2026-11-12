@@ -88,9 +88,9 @@ def main():
                 g = gold[q["id"]]
                 row = {"id": q["id"], "fold": "holdout" if biz in hold else "dev", "route": d.route, "reason": d.reason,
                        "intent": d.intent, "gold_type": g["type"], "gran": None}
-                if d.route == "template":
+                if d.route in ("template", "unanswerable"):
                     row["score"], row["status"] = pa_score.score_one(d.answer, g)
-                    row["answer"], row["gold"], row["params"] = d.answer["answer"], g["answer"], d.params
+                    row["answer"], row["gold"], row["params"] = d.answer.get("answer"), g.get("answer"), d.params
                     if row["score"] != 1:
                         row["attr"] = attribute(db.connection, d, g)
                 rows.append(row)
@@ -100,7 +100,7 @@ def main():
 
     def agg(rs):
         n = len(rs)
-        tm = [r for r in rs if r["route"] == "template"]
+        tm = [r for r in rs if r["route"] in ("template", "unanswerable")]
         ok = sum(r["score"] == 1 for r in tm)
         return {"n": n, "template": len(tm), "template_pct": round(100 * len(tm) / max(n, 1), 2),
                 "template_correct": ok, "template_acc_pct": round(100 * ok / max(len(tm), 1), 2),
@@ -111,10 +111,10 @@ def main():
     rep = {}
     for fold in ("dev", "holdout"):
         rs = [r for r in rows if r["fold"] == fold]
-        tm = [r for r in rs if r["route"] == "template"]
+        tm = [r for r in rs if r["route"] in ("template", "unanswerable")]
         rep[fold] = {**agg(rs),
-                     "by_intent": {i: agg([r for r in rs if r["intent"] == i and r["route"] == "template"]) for i in TARGET_INTENTS},
-                     "llm_reasons": dict(collections.Counter(r["reason"].split(":")[0] for r in rs if r["route"] != "template").most_common()),
+                     "by_intent": {i: agg([r for r in rs if r["intent"] == i and r["route"] in ("template", "unanswerable")]) for i in TARGET_INTENTS},
+                     "llm_reasons": dict(collections.Counter(r["reason"].split(":")[0] for r in rs if r["route"] not in ("template", "unanswerable")).most_common()),
                      "wrong_attribution": dict(collections.Counter(r["attr"].split("(")[0] for r in tm if r["score"] != 1 and "attr" in r)),
                      "intent_accuracy_pct": round(100 * (1 - sum(1 for r in tm if str(r.get("attr", "")).startswith("intent_error")) / max(len(tm), 1)), 2),
                      "errors": [{"id": r["id"], "intent": r["intent"], "gold_type": r["gold_type"], "attr": r["attr"], "reason_params": sorted(r["params"])}
