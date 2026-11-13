@@ -6,8 +6,9 @@ row of the TRAIN rulebook, no rule text stored).  An intent is disabled when a r
 rows that did not exist in the reference are reported and, when a question contains all content words of such a row's
 name, the question goes to the LLM (a new rule may redefine what the question asks).
 
-`reviewed_rule_changes.json` may list "<section>|<row>" keys a human has checked as compatible with the templates;
-those are not treated as changes.  Nothing is added there automatically.
+`reviewed_rule_changes.json` lists, under "approved", the "<section>|<row>" keys a human has checked as compatible with
+the templates (each with a "reason"); those are not treated as changes.  "pending" rows stay switched off.  Nothing is
+added there automatically.
 """
 from __future__ import annotations
 
@@ -100,6 +101,15 @@ def _in_order_close(toks: list[str], words: list[str], max_gap: int = 2) -> bool
     return False
 
 
+def _load_reviewed(path: Path) -> set[str]:
+    """Approved keys. Accepts {"approved": [{"key", "reason", ...}], "pending": [...]} or a plain list of keys."""
+    if not path.is_file():
+        return set()
+    data = json.loads(path.read_text(encoding="utf-8"))
+    items = data.get("approved", []) if isinstance(data, dict) else data
+    return {(x["key"] if isinstance(x, dict) else x) for x in items}
+
+
 class RuleGuard:
     def __init__(self, reference: dict[str, str], running_text: str, reviewed: set[str] | None = None):
         self.reviewed = reviewed or set()
@@ -125,7 +135,7 @@ class RuleGuard:
     def load(cls, running_rulebook: Path | str) -> "RuleGuard":
         ref = json.loads(REFERENCE_PATH.read_text(encoding="utf-8"))["rows"]
         rp = Path(os.environ.get("DATAMATE_REVIEWED_RULES") or REVIEWED_PATH)  # env: analysis only
-        rev = set(json.loads(rp.read_text(encoding="utf-8"))) if rp.is_file() else set()
+        rev = _load_reviewed(rp)
         return cls(ref, Path(running_rulebook).read_text(encoding="utf-8"), rev)
 
     def defines(self, sec: str, prefix: str) -> bool:

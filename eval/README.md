@@ -36,6 +36,15 @@ python -m eval.run_baseline \
 * **Question set** (`--subset`): `sample` = fixed 600 (default); `holdout` = all 709 questions of the
   6 hold-out shops; `full` = all 3000 (`--full` is an alias).
 * **Order**: questions are sorted by shop so the 2-entry DB cache is not thrashed. Decoding is greedy.
+* `--router` (branch `feat/intent-router` only) puts the intent router in front of the agent, like `predict.py`; rows get a `route`
+  field and the report name a `_router` suffix. Example for the 14B run on the hold-out shops, with and without the router:
+  ```bash
+  python -m eval.run_baseline --model-path /path/to/Qwen3-14B --model-name Qwen3-14B --backend vllm \
+      --tensor-parallel-size 2 --subset holdout            # agent only
+  python -m eval.run_baseline ... --subset holdout --router # router + agent
+  python -m eval.compare_runs eval/reports/<date>_Qwen3-14B_holdout.per_question.jsonl \
+      eval/reports/<date>_Qwen3-14B_holdout_router.per_question.jsonl --show 10
+  ```
 * `--resume` continues from the `.per_question.jsonl` of the same tag (safe after a crash/preemption).
 * **Ingestion flag** (when the data-layer branch `feat/p3-data-cleaning` is checked out): views are on by
   default; `DATAMATE_LEGACY_INGESTION=1` selects the old ingestion. Set a different `--date`

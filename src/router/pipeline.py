@@ -9,6 +9,18 @@ from typing import Any, Callable
 from .router import RouteDecision, Router
 
 
+class AbstainAgent:
+    """Stand-in for the LLM agent in router-only runs (no model, no GPU): every question the router leaves abstains."""
+
+    def solve(self, question: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+        qid = str(question.get("id", ""))
+        answer = {"id": qid, "type": "abstain"}
+        return answer, {"id": qid, "answer": answer, "elapsed_ms": 0, "thinking": None, "code": None, "output": None}
+
+    def close(self) -> None:
+        pass
+
+
 def solve(question: dict[str, Any], agent: Any, router: Router | None, normalizer: Callable[..., Any] | None,
           provider: Any = None) -> tuple[dict[str, Any], dict[str, Any]]:
     """-> (answer, log). log["router"] = {route, reason, intent, params} for every question."""

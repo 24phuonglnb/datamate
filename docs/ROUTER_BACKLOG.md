@@ -92,16 +92,40 @@ Cần Nghiệp: v_purchases, v_stock, v_batches, công nợ theo ngày (v_debt_a
 
 ## Chặn bởi tầng dữ liệu (việc của Nghiệp; router không sửa file của Nghiệp)
 
-- **dev_004 (public): chẩn đoán cũ "ngày d/m không ghi năm không parse được" là SAI (đã sửa 2026-11-13).** Khi parse
-  với năm của sheet (đúng như `build_ledger` làm), cả 15337 ô ngày không rỗng của sổ bán hàng đều parse được. 54% dòng
-  được `build_ledger` đếm vào `issues["unparsed_dates"]` là các ô ngày **bỏ trống** (ngày chỉ ghi ở dòng đầu mỗi đơn,
-  ledger điền xuống; ledger cuối không còn dòng nào thiếu ngày). Bộ đếm `unparsed_dates` của Nghiệp vì vậy đếm cả ô trống;
-  router không dùng nó nữa mà tự đếm ô không rỗng parse lỗi (`src/router/invariants.py`). dev_004 không còn bị cờ.
-  Lỗi của dev_004 nếu có (leaderboard: bỏ 28 câu của shop này tăng/giảm điểm +14 ròng, tức ≈21 đúng/7 sai, 75% so với ≈89% các shop khác)
-  chưa rõ nguyên nhân; chưa có bằng chứng về lỗi parse ngày.
-- **Test của Nghiệp phụ thuộc thứ tự chạy:** `tests/test_smoke.py::RegressionTests::test_create_demo_no_connection_leak`
-  fail khi chạy sau `tests/test_ingestion_cache.py` (`pytest tests/test_ingestion_cache.py tests/test_smoke.py`).
-  Đã fail từ commit merge branch của Nghiệp vào `feat/question-normalization` (trước mọi code router), không fail trên
-  branch của Nghiệp. Chưa rõ nguyên nhân gốc; có thể có kết nối SQLite bị rò rỉ ở test cache.
-- `tests/test_rule_regression.py` (2 test) fail vì đòi cấu trúc `data/train/data/...`, không khớp dữ liệu chính thức.
+Các view còn thiếu so với nhu cầu của backlog (bảng 1 ở trên), theo số câu dev bị chặn:
 
+| thiếu | nhóm câu bị chặn | số câu dev |
+|---|---|---|
+| `v_purchases` (phiếu nhập: ngày phiếu, nhà cung cấp, số lượng/đơn vị nhập, tiền, trạng thái huỷ) | `purchase_avg_price`, `purchase_total`, `supplier_top`, `purchase_minus_sales` | 93 |
+| `v_stock` (tồn cuối ngày theo mặt hàng, đơn vị lớn/lẻ; giá vốn cho giá trị tồn) | `stock_qty`, `stock_large_unit`, `stock_value`, `stockout_count` | 64 |
+| lô/hạn dùng (nhà thuốc) | `expiry_list`, `expiry_nearest_lot` | 7 |
+| công nợ theo ngày (nợ một đơn tại ngày X, nợ thêm/trả nợ trong kỳ, tuổi nợ, nợ theo khách) | `debt_*` | 67 |
+| ca (giờ thu tiền cho "báo cáo tiền mặt theo ca", chỉ có ở rulebook public) | `shift` dùng `order_time` hiện có; báo cáo ca cần bảng thu tiền theo giờ | 66 |
+| lãi gộp/lãi ròng (giá vốn, chi phí) | `gross_profit`, `net_profit`, `profit_item_top` | 8 |
+
+Ghi chú khác cho Nghiệp:
+
+- **Bộ đếm `unparsed_dates`**: ở bản cũ (387c263) bộ đếm tính cả ô ngày bỏ trống trước khi điền xuống theo đơn nên báo nhầm
+  ("54% ngày không parse" ở dev_004, thực ra không có ô ngày lỗi). Commit `6ae1a0e` (2026-11-12) đã sửa; đã kiểm tra lại
+  trên bản đã merge: `unparsed_dates = 0` ở dev_004 và dev_014. Router không dùng bộ đếm này mà tự đếm ô không rỗng parse lỗi.
+  Lỗi của dev_004 nếu có (leaderboard: ≈21 đúng / 7 sai trong 28 câu) chưa rõ nguyên nhân; chưa có bằng chứng về lỗi parse ngày.
+- **Test phụ thuộc thứ tự chạy:** `tests/test_smoke.py::RegressionTests::test_create_demo_no_connection_leak` fail khi chạy sau
+  `tests/test_ingestion_cache.py` (`pytest tests/test_ingestion_cache.py tests/test_smoke.py`) trên branch `feat/question-normalization`
+  (không thấy trên branch của Nghiệp một mình); chưa rõ nguyên nhân gốc, có thể có kết nối SQLite rò rỉ. Gần đây test này pass khi chạy cả bộ.
+- **`tests/test_rule_regression.py` (2 test)** fail vì đòi cấu trúc `data/train/data/...`, trong khi dữ liệu chính thức là `data/train/train/data/...`.
+- **Mã router copy từ code của Nghiệp cần duyệt:** `src/router/templates.py` (10 SQL nguyên văn từ `rule_regression.py`),
+  `src/router/_tagger_rules.py` (nguyên văn từ `intent_tagger.py`), regex bộ lọc trong `src/router/intents.py`.
+- **Luật đổi cần Nghiệp xem:** `reviewed_rule_changes.json` ghi `2|den het ngay x…` đã duyệt (lý do trong file) và `1|don thuoc ky nao`
+  còn chờ (view loại cả đơn có dòng trả hàng; dữ liệu train không có cột ngày trả nên chưa kiểm được "trả sau kỳ").
+
+## Luật chỉ có trong rulebook public (không có ở train; chỉ tên dòng)
+
+Mục dành cho An (prompt LLM). Router không xử lý các dòng này; câu chứa cue của chúng được chuyển xuống LLM (`new_rule_cue`).
+Dòng đổi so với train: §1 "Đơn thuộc kỳ nào", §2 "Đến hết ngày X", §6 "Giao nhiều đợt". Dòng bị bỏ khỏi bản public (có ở train): §5 "Giá bán X ngày D",
+"Giá nhập bình quân một mặt hàng trong tháng", "Tồn theo đơn vị lớn".
+
+Dòng mới (24): §1 báo cáo tiền mặt theo ca; §2 trung bình mỗi ngày thứ X của kỳ; §3 giờ cao điểm, khách hay đổi ý nhất, khách sộp nhất,
+khách trung thành nhất, mặt hàng được ưa chuộng nhất, ngày đắt khách nhất, nhân viên/thợ chăm chỉ nhất; §5 nhà cung cấp chính;
+§6 bảo hành, dòng máy/hãng, dòng xe/biển số, khách quen/xe tới nhiều lần, khách thành viên mới trong tháng, lượt xe/phiếu, số sữa/size bỉm,
+thợ làm nhiều nhất, thu máy cũ, tiền giảm voucher/điểm/phí ship, topping ghi chung ô với món, trả góp, việc ghi trong ô "làm gì"; §8 sổ không có cột trạng thái.
+Chi tiết từng dòng: `rulebook.md` của bộ public (`python scripts/build_rule_reference.py diff --rulebook <public rulebook>` liệt kê khoá dòng đổi/mất/mới).

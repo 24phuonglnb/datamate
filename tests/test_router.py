@@ -500,3 +500,43 @@ def test_summary_rows_are_not_counted_as_unparsed_dates(tmp_path):
     finally:
         db.close()
     assert m["unparsed_dates_pct"] == 0 and m["unparsed_spans"] == []
+
+
+def test_reviewed_file_format_has_reasons_and_pending_stays_off(tmp_path):
+    import json as _json
+    from src.router import rule_guard as rg
+    data = _json.loads(rg.REVIEWED_PATH.read_text(encoding="utf-8"))
+    assert all(x.get("reason") for x in data["approved"])
+    approved = rg._load_reviewed(rg.REVIEWED_PATH)
+    assert "2|den het ngay x, tinh den hom nay" in approved and "1|don thuoc ky nao" not in approved
+    f = tmp_path / "r.json"
+    f.write_text('["1|don thuoc ky nao"]', encoding="utf-8")
+    assert rg._load_reviewed(f) == {"1|don thuoc ky nao"}   # plain list still accepted
+
+
+def test_router_only_run_needs_no_model(tmp_path):
+    """predict.run with model=None: router answers, everything else abstains, no model object is touched."""
+    import json as _json
+    from scripts.create_demo_data import create_demo
+    from src.predict import run
+    root = tmp_path / "data_root"
+    create_demo(root)
+    out = tmp_path / "result"
+    n = run(root, out, None)
+    answers = [_json.loads(x) for x in (out / "submission.jsonl").read_text(encoding="utf-8").splitlines()]
+    logs = [_json.loads(x) for x in (out / "logs" / "questions.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert n == len(answers) == len(logs) and n > 0
+    assert all(a["type"] in ("abstain", "unanswerable", "number", "percent", "date", "string", "list") for a in answers)
+    assert all("router" in l for l in logs)
+
+
+def test_questions_are_processed_grouped_by_shop(tmp_path):
+    import json as _json
+    from src.predict import _lines_grouped_by_shop
+    rows = [{"id": "a1", "business_id": "s2"}, {"id": "b1", "business_id": "s1"}, {"id": "a2", "business_id": "s2"},
+            {"id": "b2", "business_id": "s1"}]
+    f = tmp_path / "q.jsonl"
+    f.write_text("\n".join(_json.dumps(r) for r in rows) + "\nnot json\n", encoding="utf-8")
+    out = _lines_grouped_by_shop(f)
+    ids = [(_json.loads(l)["id"] if l.startswith("{") else "bad") for l in out]
+    assert ids == ["b1", "b2", "a1", "a2", "bad"]

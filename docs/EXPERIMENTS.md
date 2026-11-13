@@ -186,3 +186,14 @@ guard (`rule_guard.py`), answer sanity checks (`sanity.py`). Reports: `eval/repo
 |---|---|---|---|---|---|
 | 2026-11-13 | feat/intent-router | none | dev (24 shops, 2291 q) | router-answered 1048/1048 correct; PA lower bound 0.4574 | 45.74% answered; new intents: item_revenue 32, category_rev 11, sell_price_on_day 21, unans_subjective 4 (all 100%) |
 | 2026-11-13 | feat/intent-router | none | hold-out (709 q), run exactly once after the dev work | router-answered 339/339 correct; PA lower bound 0.4781 | 47.81% answered |
+
+### Milestones (all PA on the official train/public sets; each row's detail is in the sections above)
+
+| date | what | set | PA | where |
+|---|---|---|---|---|
+| 2026-11-11 | baseline agent, Qwen3-8B | sample 600 (dev 480 / hold-out 120) | -0.4067 | `eval/reports/2026-11-11_Qwen3-8B.md` |
+| 2026-11-12 | baseline agent, Qwen3-8B, legacy ingestion | all 709 hold-out questions | -0.4090 | branch `exp/legacy-vs-views`, `eval/reports/2026-11-12_Qwen3-8B-legacy_holdout.md` (views arm never run: no free GPU) |
+| 2026-11-13 | router only (lower bound, rest abstains) | hold-out 709 | 0.4203 (first report) | `eval/reports/2026-11-13_router_*.md` of the first router commit, then replaced |
+| 2026-11-13 | router + new intents (lower bound) | hold-out 709, run once | 0.4781 | `eval/reports/2026-11-13_router_holdout.md` |
+| 2026-11-13 | leaderboard v1, router only | public 1000 | 0.165 | 221 answered; 193 correct / 28 wrong |
+| 2026-11-13 | leaderboard, v1 without the 28 dev_004 answers | public 1000 | 0.151 | dev_004: about 21 correct / 7 wrong. Correction: dev_004 has no date-parsing error; the earlier "unparsed dates" alarm counted blank date cells that the ledger fills down |
