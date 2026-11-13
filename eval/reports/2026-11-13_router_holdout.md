@@ -3,7 +3,7 @@
 | fold | questions | template route | % | correct | accuracy % | template PA | PA lower bound | wrong | intent acc % |
 |---|---|---|---|---|---|---|---|---|---|
 | dev | 0 | 0 | 0.0 | 0 | 0.0 | 0.0 | 0.0 | 0 | 100.0 |
-| holdout | 709 | 339 | 47.81 | 339 | 100.0 | 1.0 | 0.4781 | 0 | 100.0 |
+| holdout | 709 | 356 | 50.21 | 356 | 100.0 | 1.0 | 0.5021 | 0 | 100.0 |
 
 ## dev: by intent (template route)
 
@@ -34,8 +34,13 @@ Wrong attribution: {}
 | category_rev | 8 | 8 | 100.0 |
 | sell_price_on_day | 14 | 14 | 100.0 |
 | unans_subjective | 3 | 3 | 100.0 |
+| best_month | 1 | 1 | 100.0 |
+| monthly_series | 4 | 4 | 100.0 |
+| streak_bool | 5 | 5 | 100.0 |
+| payment_method_rev | 1 | 1 | 100.0 |
+| unit_total_qty | 6 | 6 | 100.0 |
 
-LLM/other reasons: {'not_target': 275, 'extra_filter_or_subintent': 30, 'multi_intent': 28, 'normalizer_residual_teencode': 14, 'category_not_found': 9, 'item_specific_revenue': 8, 'unit_mismatch': 4, 'period_count': 1, 'item_not_found': 1}
+LLM/other reasons: {'not_target': 241, 'extra_filter_or_subintent': 37, 'multi_intent': 28, 'normalizer_residual_teencode': 14, 'category_not_found': 9, 'item_specific_revenue': 8, 'several_named': 5, 'unit_mismatch': 4, 'group_not_found': 4, 'period_count': 1, 'item_not_found': 1, 'none_named': 1}
 Wrong attribution: {}
 
 ### holdout errors (id, intent, gold type, attribution)

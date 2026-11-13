@@ -93,18 +93,41 @@ SQL_TEMPLATES.update({
     "price_on_day_by_name": "SELECT DISTINCT ROUND(unit_price_base, 2) FROM v_lines WHERE order_date = ? AND item_name = ?",
 })
 
+SQL_TEMPLATES.update({
+    "group_revenue": (
+        "SELECT CAST(ROUND(COALESCE(SUM(revenue), 0)) AS INTEGER) FROM v_valid_orders "
+        "WHERE order_date BETWEEN ? AND ? AND customer_group = ?"
+    ),
+    # IN (...) lists are filled by run_template (placeholders only, values are bound parameters)
+    "payment_revenue": (
+        "SELECT CAST(ROUND(COALESCE(SUM(revenue), 0)) AS INTEGER) FROM v_valid_orders "
+        "WHERE order_date BETWEEN ? AND ? AND payment_method IN ({ph})"
+    ),
+    "channel_revenue": (
+        "SELECT CAST(ROUND(COALESCE(SUM(revenue), 0)) AS INTEGER) FROM v_valid_orders "
+        "WHERE order_date BETWEEN ? AND ? AND channel IN ({ph})"
+    ),
+    "unit_total_qty": (
+        "SELECT COALESCE(SUM(qty_base), 0) FROM v_valid_lines "
+        "WHERE order_date BETWEEN ? AND ? AND is_service_fee = 0 AND base_unit IN ({ph})"
+    ),
+})
+
 # answer type per intent (rulebook section 9)
 ANSWER_TYPE = {
     "revenue": "number", "order_count": "number", "cancel_count": "number", "aov": "number",
     "item_qty": "number", "cancel_rate": "percent", "rev_change_pct": "percent",
     "best_day": "date", "best_item": "string", "topk_items": "list",
     "item_revenue": "number", "category_rev": "number", "sell_price_on_day": "number",
+    "cust_group_rev": "number", "payment_method_rev": "number", "channel_rev": "number", "unit_total_qty": "number",
+    "best_month": "date", "monthly_series": "list", "streak_bool": "boolean",
 }
 
 
 def run_template(conn: sqlite3.Connection, intent: str, start: str, end: str, *,
                  k: int | None = None, item: tuple[str | None, str] | None = None,
-                 prev: tuple[str, str] | None = None, threshold: float | None = None) -> Any:
+                 prev: tuple[str, str] | None = None, threshold: float | None = None,
+                 values: list[str] | None = None) -> Any:
     """Execute the template of *intent*; returns the answer value (None when the template has no result)."""
     if intent == "rev_change_pct":
         assert prev is not None
@@ -133,6 +156,21 @@ def run_template(conn: sqlite3.Connection, intent: str, start: str, end: str, *,
             return None
         v = float(next(iter(vals)))
         return int(v) if abs(v - round(v)) < 1e-9 else v
+    if intent == "cust_group_rev":
+        assert item is not None
+        row = conn.execute(SQL_TEMPLATES["group_revenue"], (start, end, item[1])).fetchone()
+        return int(row[0]) if row and row[0] is not None else None
+    if intent in ("payment_method_rev", "channel_rev", "unit_total_qty"):
+        assert values
+        sql = SQL_TEMPLATES[{"payment_method_rev": "payment_revenue", "channel_rev": "channel_revenue",
+                             "unit_total_qty": "unit_total_qty"}[intent]].format(ph=",".join("?" * len(values)))
+        row = conn.execute(sql, (start, end, *values)).fetchone()
+        if row is None or row[0] is None:
+            return None
+        if intent == "unit_total_qty":
+            v = float(row[0])
+            return int(round(v)) if abs(v - round(v)) < 1e-6 else round(v, 2)
+        return int(row[0])
     if intent == "item_qty":
         assert item is not None
         code, name = item
@@ -151,3 +189,8 @@ def run_template(conn: sqlite3.Connection, intent: str, start: str, end: str, *,
     if intent == "cancel_rate":
         return float(row[0])
     return row[0]
+
+
+def monthly_revenue(conn: sqlite3.Connection, months: list[tuple[str, str]]) -> list[int]:
+    """Revenue (valid orders, rounded to an integer) of each (start, end) month window, in the given order."""
+    return [int(conn.execute(SQL_TEMPLATES["revenue"], (a, b)).fetchone()[0] or 0) for a, b in months]

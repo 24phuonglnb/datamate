@@ -47,6 +47,14 @@ SPECS: dict[tuple[str, str], dict] = {
         "must": [r"ky truoc", r"am"],
         "contradict": [r"so voi ky (sau|ke tiep)", r"giam[^.;]{0,15}(ra )?so duong"],
         "canon": "so voi ky truoc; giam thi ra so am"},
+    ("1", "doanh thu theo nhom khach"): {
+        "must": [r"cot nhom khach", r"(khong ghi khach|vang lai)[^.]{0,40}khong thuoc nhom"],
+        "contradict": [r"khach vang lai (la|thuoc|tinh vao|vao) nhom", r"(?<!ke ca )(?<!khong thuoc )tinh (vao )?nhom le"],
+        "canon": "nhom theo cot nhom khach. don khong ghi khach (khach vang lai) khong thuoc nhom nao, ke ca nhom le"},
+    ("1", "doanh thu theo hinh thuc thanh toan"): {
+        "must": [r"ghi tren don", r"cod", r"hinh thuc rieng"],
+        "contradict": [r"(?<!khong )theo lan tra no", r"don cod (la|tinh vao|thuoc) tien mat"],
+        "canon": "theo hinh thuc ghi tren don, khong theo lan tra no ve sau. don cod la hinh thuc rieng, khong tinh vao tien mat"},
     ("3", "gia tri trung binh mot don"): {
         "must": [r"lam tron ve dong", r"nua dong lam tron len"],
         "contradict": [r"lam tron xuong", r"nua dong lam tron xuong", r"lam tron (den|toi) (ca )?(nghin|tram)"],

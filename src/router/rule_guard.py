@@ -45,6 +45,13 @@ DEPENDENCIES: dict[str, list[tuple[str, str]]] = {
     "item_revenue": _ORDER + [("1", "ban duoc bao nhieu tien"), ("3", "mat hang")],
     "category_rev": _ORDER + [("1", "ban duoc bao nhieu tien"), ("3", "nhom hang")],
     "sell_price_on_day": [("5", "gia ban x ngay d"), ("10", "don vi co ban")] + _STATUS + [("2", "ngay x, hom nay, hom qua")],
+    "best_month": _ORDER + [("1", "doanh thu mot don")],
+    "monthly_series": _ORDER + [("1", "doanh thu mot don")],
+    "streak_bool": _ORDER + [("1", "doanh thu mot don")],
+    "cust_group_rev": _ORDER + [("1", "doanh thu theo nhom khach")],
+    "payment_method_rev": _ORDER + [("1", "doanh thu theo hinh thuc thanh toan")],
+    "channel_rev": _ORDER + [("1", "ban duoc bao nhieu tien")],
+    "unit_total_qty": _ORDER + [("3", "ban duoc bao nhieu"), ("10", "don vi co ban")],
     "rev_change_pct": _ORDER + [("1", "ban duoc bao nhieu tien"), ("1", "doanh thu mot don"),
                                 ("1", "phan tram thay doi")],
 }

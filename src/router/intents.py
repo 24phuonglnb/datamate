@@ -18,8 +18,11 @@ TARGET_INTENTS = (
     "revenue", "order_count", "cancel_count", "cancel_rate", "aov",
     "best_day", "topk_items", "best_item", "item_qty", "rev_change_pct",
 )
-EXTRA_INTENTS = ("item_revenue", "category_rev", "sell_price_on_day", "unans_subjective")
-ENABLED_EXTRA = ("item_revenue", "category_rev", "sell_price_on_day", "unans_subjective")  # see eval report: 100% on dev
+EXTRA_INTENTS = ("item_revenue", "category_rev", "sell_price_on_day", "unans_subjective",
+                 "best_month", "monthly_series", "streak_bool", "cust_group_rev", "payment_method_rev", "channel_rev",
+                 "unit_total_qty")
+ENABLED_EXTRA = EXTRA_INTENTS  # an intent is listed in EXTRA_INTENTS only after it reached 100% on dev (eval report)
+MONTHLY_INTENTS = ("best_month", "monthly_series", "streak_bool")
 _RULE_RX = dict(T.RULES)
 GENERIC = {"revenue"}  # may co-occur with a more specific intent ("doanh thu ... tang bao nhieu %")
 # The tagger rules are ordered specific -> general, so a general rule always also matches a specific question
@@ -71,6 +74,13 @@ _SKIP["item_revenue"] = r"nhom|khach|\bca\b|so voi|%|phan tram|top|nhat|tang|gia
 _SKIP["category_rev"] = r"khach|\bca\b|so voi|%|phan tram|top|nhat|tang|giam|moi|quy|nhan vien|kenh|ke don|hoat chat|size|nhom (than thiet|si|le|vip)"
 _SKIP["sell_price_on_day"] = r"khach|so voi|%|phan tram|top|nhat|tang gia|ke tu|nhom|\bca\b"
 _SKIP["unans_subjective"] = r"$^"
+_SKIP["best_month"] = r"khach|\bnhom\b|\bca\b|nhan vien|\bkenh\b|%|phan tram|so voi|\bhang\b|\bmon\b"
+_SKIP["monthly_series"] = r"khach|\bnhom\b|\bca\b|nhan vien|\bkenh\b|%|phan tram|so voi|\bhang\b|\bmon\b|moi den cu"
+_SKIP["streak_bool"] = r"khach|\bnhom\b|\bca\b|nhan vien|\bkenh\b|%|phan tram|\bhang\b|\bmon\b|don\b"
+_SKIP["cust_group_rev"] = r"%|phan tram|chiem|so voi|ti trong|moi nhom|tung nhom|\bca\b|nhan vien|\bkenh\b|\bhang\b|\bmon\b|\btop\b|\bnhat\b"
+_SKIP["payment_method_rev"] = r"%|phan tram|chiem|so voi|ti trong|moi (ben|hinh thuc)|lan luot|\bca\b|nhan vien|\bkenh\b|\bkhach\b|\bnhom\b|\bhang\b|\bmon\b|\btop\b|\bnhat\b|\btang\b|\bgiam\b"
+_SKIP["channel_rev"] = r"%|phan tram|chiem|so voi|ti trong|moi (ben|kenh)|lan luot|\bca\b|nhan vien|\bkhach\b|\bnhom\b|\bhang\b|\bmon\b|\btop\b|\bnhat\b|\btang\b|\bgiam\b"
+_SKIP["unit_total_qty"] = r"%|phan tram|so voi|\bkhach\b|\bnhom\b|\bca\b|nhan vien|\bkenh\b|\btop\b|\bnhat\b|\btang\b|\bgiam\b"
 # revenue also: item-specific revenue ("ban <mat hang> ... bao nhieu tien")
 _ITEM_REV = re.compile(r"\b(ban|bans)\b")
 _ITEM_REV_OK = re.compile(r"cua\s*\w*\s+hang\s*\w*\s+(?:ban|bans)\s+\S+\s+(tong cong|total|toongr cong|bao nhieu|bnhiu|bn)")
@@ -175,3 +185,46 @@ def asked_unit_after_mot(s: str) -> str | None:
     """Unit of "gia ... mot <don vi>" (price per one unit)."""
     m = _MOT_UNIT.search(s)
     return m.group(1) if m else None
+
+
+def match_group(groups: list[str], s: str) -> tuple[str | None, str]:
+    """Customer group named after "nhom": exact key match of one of the shop's group values (several matches or none: no)."""
+    hits = {g for g in groups if re.search(r"\bnhom\s+" + re.escape(item_match_key(g)) + r"\b", s)} if groups else set()
+    hits = {g for g in hits if len(item_match_key(g)) >= 2}
+    if len(hits) != 1:
+        return None, "group_not_found" if not hits else "group_ambiguous"
+    return next(iter(hits)), "ok"
+
+
+_PAY = {"tien mat": ("tien mat", "cash"), "chuyen khoan": ("chuyen khoan", "transfer"),
+        "vi dien tu": ("vi dien tu", "ewallet"), "cod": ("cod", "thu ho"), "ghi no": ("ghi no", "debt")}
+_CHAN = {"tai quay": ("tai quay", "store", "quay"), "zalo oa": ("zalo oa", "zalo"), "dien thoai": ("dien thoai", "phone")}
+
+
+def _match_raw(table: dict[str, tuple[str, ...]], raw_values: list[str], s: str, cues: dict[str, str]) -> tuple[list[str] | None, str]:
+    """Which one entry of `table` does the question name (cue regex per entry) and which raw values of the shop mean it."""
+    named = [k for k, rx in cues.items() if re.search(rx, s)]
+    if len(named) != 1:
+        return None, "none_named" if not named else "several_named"
+    keys = set(table[named[0]])
+    vals = [v for v in raw_values if any(item_match_key(v).startswith(k) or item_match_key(v) == k for k in keys)]
+    return (vals, "ok") if vals else (None, "no_raw_value")
+
+
+def match_payment(raw_values: list[str], s: str) -> tuple[list[str] | None, str]:
+    cues = {"tien mat": r"\btien mat\b", "chuyen khoan": r"\bchuyen khoan\b", "vi dien tu": r"\bvi dien tu\b",
+            "cod": r"\bcod\b", "ghi no": r"\bghi no\b"}
+    return _match_raw(_PAY, raw_values, s, cues)
+
+
+def match_channel(raw_values: list[str], s: str) -> tuple[list[str] | None, str]:
+    cues = {"tai quay": r"\btai quay\b", "zalo oa": r"\bzalo\b", "dien thoai": r"\b(dien thoai|goi dien)\b"}
+    return _match_raw(_CHAN, raw_values, s, cues)
+
+
+_THEO_UNIT = re.compile(r"(?:tinh theo|theo)\s+" + T.U + r"\b")
+
+
+def unit_for_total(s: str) -> str | None:
+    m = _THEO_UNIT.search(s)
+    return m.group(1) if m else asked_unit(s)

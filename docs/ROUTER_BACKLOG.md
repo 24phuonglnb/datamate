@@ -1,7 +1,8 @@
 # Backlog router: phần rơi xuống LLM (chỉ dev, 24 shop)
 
 > Cập nhật 2026-11-13: đã thêm vào router (100% trên dev, hold-out chạy một lần 339/339): `orders_threshold` (qua order_count),
-> `unans_subjective`, `item_revenue`, `category_rev`, `sell_price_on_day`. Các số bên dưới là của lần đo trước khi thêm các intent này.
+> `unans_subjective`, `item_revenue`, `category_rev`, `sell_price_on_day`, và (đợt 2) `best_month`, `monthly_series`, `streak_bool`, `cust_group_rev`,
+> `payment_method_rev`/`channel_rev` (một giá trị), `unit_total_qty`. Các số bên dưới là của lần đo trước khi thêm các intent này.
 
 Nguồn: `scripts/eval_router.py` (run 2026-11-13). Chỉ dùng dev; không có câu hỏi hay đáp án, chỉ id. Nhóm theo nhãn của tagger hiện có
 (`src/router/_tagger_rules.py`, nhãn gần đúng ±10%, có gắn nhầm). Độ khó = ước lượng công viết template + kiểm chứng, không phải độ khó dữ liệu.
@@ -101,6 +102,7 @@ Các view còn thiếu so với nhu cầu của backlog (bảng 1 ở trên), th
 | lô/hạn dùng (nhà thuốc) | `expiry_list`, `expiry_nearest_lot` | 7 |
 | công nợ theo ngày (nợ một đơn tại ngày X, nợ thêm/trả nợ trong kỳ, tuổi nợ, nợ theo khách) | `debt_*` | 67 |
 | ca (giờ thu tiền cho "báo cáo tiền mặt theo ca", chỉ có ở rulebook public) | `shift` dùng `order_time` hiện có; báo cáo ca cần bảng thu tiền theo giờ | 66 |
+| `v_items.active_ingredient` / `is_prescription` (đang rỗng ở shop nhà thuốc: dữ liệu nằm ở bảng thô `danh_sach_thuoc` cột `hoat_chat`, `thuoc_ke_don`) | `ingredient_revenue`, `rx_nonrx_revenue`, `rx_share` | 79 |
 | lãi gộp/lãi ròng (giá vốn, chi phí) | `gross_profit`, `net_profit`, `profit_item_top` | 8 |
 
 Ghi chú khác cho Nghiệp:

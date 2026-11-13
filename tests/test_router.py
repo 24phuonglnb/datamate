@@ -45,7 +45,7 @@ def test_non_target_goes_to_llm(text):
 
 
 @pytest.mark.parametrize("text", [
-    "doanh thu tháng 3/2026 của nhóm khách thân thiết",
+    "doanh thu tháng 3/2026 của nhân viên Lan",
     "doanh thu ca sáng tháng 3/2026",
     "doanh thu tháng 3/2026 so với tháng 2/2026",
 ])
@@ -386,7 +386,8 @@ def _guard(running):
 
 
 ALL_INTENTS = {"revenue", "order_count", "cancel_count", "cancel_rate", "aov", "best_day", "topk_items", "best_item",
-               "item_qty", "item_revenue", "category_rev", "sell_price_on_day", "rev_change_pct"}
+               "item_qty", "item_revenue", "category_rev", "sell_price_on_day", "rev_change_pct", "best_month",
+               "monthly_series", "streak_bool", "cust_group_rev", "payment_method_rev", "channel_rev", "unit_total_qty"}
 
 
 def test_rule_guard_canonical_rulebook_disables_nothing():
@@ -734,3 +735,70 @@ def test_llm_gate_builder_thresholds_and_unknown_kinds(tmp_path):
     gate = load_gate(out)
     assert llm_allowed(gate, "stock_qty") and not llm_allowed(gate, "debt_total") and not llm_allowed(gate, "never_seen")
     assert llm_allowed(None, "anything")
+
+
+def _db_ext():
+    """Synthetic shop with channel / payment / customer group columns and unit-priced lines."""
+    c = sqlite3.connect(":memory:")
+    _OPEN.append(c)
+    c.executescript("""
+    CREATE TABLE v_orders(order_id, order_date, order_time, status, revenue, channel, payment_method, customer_group);
+    CREATE VIEW v_valid_orders AS SELECT * FROM v_orders WHERE status NOT IN ('huy','tra_hang');
+    CREATE TABLE v_valid_lines(order_date, item_code, item_name, qty_base, base_unit, is_service_fee, line_amount, category);
+    CREATE TABLE v_items(item_code, item_name, name_aliases, base_unit, category);
+    INSERT INTO v_items VALUES('C1','Cà phê sữa','Cà phê sữa','ly','Cà phê'),('C2','Trà đào','Trà đào','ly','Trà');
+    """)
+    rows = [(1, "2026-01-05", "09:00", "hoan_thanh", 100, "store", "Tiền mặt", "sỉ"),
+            (2, "2026-01-06", "10:00", "hoan_thanh", 200, "zalo_oa", "Chuyển khoản", "thân thiết"),
+            (3, "2026-01-07", "10:00", "huy", 999, "store", "Tiền mặt", "sỉ"),
+            (4, "2026-02-05", "11:00", "hoan_thanh", 400, "store", "Thu hộ (COD)", None),
+            (5, "2026-02-09", "11:00", "hoan_thanh", 50, "phone", "Tiền mặt", "sỉ"),
+            (6, "2026-03-02", "11:00", "hoan_thanh", 300, "store", "Ghi nợ", "thân thiết")]
+    c.executemany("INSERT INTO v_orders VALUES(?,?,?,?,?,?,?,?)", rows)
+    c.executemany("INSERT INTO v_valid_lines VALUES(?,?,?,?,?,?,?,?)", [
+        ("2026-01-05", "C1", "Cà phê sữa", 3, "ly", 0, 90, "Cà phê"), ("2026-01-06", "C2", "Trà đào", 2, "ly", 0, 100, "Trà"),
+        ("2026-01-06", None, "Phí phục vụ", 1, "ly", 1, 10, None)])
+    return c
+
+
+def test_monthly_intents_best_month_series_and_streak():
+    c = _db_ext()
+    d = route("từ tháng 1/2026 tới tháng 3/2026, tháng nào doanh thu cao nhất", c)
+    assert d.route == "template" and d.intent == "best_month" and d.answer == {"id": "t1", "type": "date", "answer": "2026-02"}
+    d = route("doanh thu 3 tháng liền nhau kết thúc ở tháng 3/2026 là bao nhiêu mỗi tháng, từ tháng cũ đến tháng mới", c)
+    assert d.intent == "monthly_series" and d.answer["type"] == "list" and d.answer["answer"] == [300, 450, 300]
+    d = route("từ tháng 1/2026 qua tháng 2/2026 rồi tháng 3/2026, doanh thu có tăng liên tục không", c)
+    assert d.intent == "streak_bool" and d.answer == {"id": "t1", "type": "boolean", "answer": False}
+    d = route("từ tháng 1/2026 qua tháng 2/2026, doanh thu có tăng liên tục không", c)
+    assert d.answer["answer"] is True
+    d = route("tháng 1/2026 tháng 2/2026 và tháng 3/2026 tháng nào doanh thu cao nhất", c)   # months named in the order given
+    assert d.route == "template"
+
+
+def test_monthly_tie_goes_to_the_llm_and_month_before_data_too():
+    c = _db_ext()
+    c.execute("INSERT INTO v_orders VALUES(7,'2026-03-03','12:00','hoan_thanh',150,'store','Tiền mặt',NULL)")  # March = 450 = Feb
+    d = route("từ tháng 1/2026 tới tháng 3/2026, tháng nào doanh thu cao nhất", c)
+    assert d.route == "llm" and d.reason == "best_month_tie_or_empty"
+    d = route("từ tháng 11/2025 tới tháng 1/2026, tháng nào doanh thu cao nhất", c)
+    assert d.route == "llm" and d.reason == "month_before_data_start"
+
+
+def test_group_payment_channel_and_unit_totals():
+    c = _db_ext()
+    d = route("doanh thu các đơn của khách nhóm sỉ tháng 1/2026", c)
+    assert d.intent == "cust_group_rev" and d.answer["answer"] == 100            # the cancelled sỉ order is not valid
+    d = route("doanh thu các đơn trả bằng chuyển khoản tháng 1/2026 là bao nhiêu", c)
+    assert d.intent == "payment_method_rev" and d.answer["answer"] == 200
+    d = route("doanh thu các đơn trả bằng COD tháng 2/2026 là bao nhiêu", c)
+    assert d.answer["answer"] == 400                                             # "Thu hộ (COD)" is its own method
+    d = route("doanh thu các đơn bán tại quầy tháng 2/2026 là bao nhiêu", c)
+    assert d.intent == "channel_rev" and d.answer["answer"] == 400
+    d = route("doanh thu các đơn bán qua zalo oa và bán tại quầy tháng 1/2026", c)   # two channels: not a single number
+    assert d.route == "llm"
+    d = route("tháng 1/2026 tổng cộng bán được bao nhiêu ly", c)
+    assert d.intent == "unit_total_qty" and d.answer["answer"] == 5                 # service fee line excluded
+    d = route("tháng 1/2026 bán được tổng cộng bao nhiêu ly cà phê sữa", c)         # a named item: not the all-items total
+    assert d.route == "llm"
+    d = route("tháng 1/2026 tổng cộng bán được bao nhiêu chai", c)
+    assert d.route == "llm" and d.reason == "unit_not_a_base_unit"

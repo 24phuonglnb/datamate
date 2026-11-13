@@ -18,7 +18,8 @@ from typing import Any
 
 def check(intent: str, value: Any, conn: sqlite3.Connection, start: str, end: str) -> str | None:
     """-> violated rule or None."""
-    if intent in ("revenue", "order_count", "cancel_count", "item_qty", "aov", "item_revenue", "category_rev", "sell_price_on_day"):
+    if intent in ("revenue", "order_count", "cancel_count", "item_qty", "aov", "item_revenue", "category_rev", "sell_price_on_day",
+                  "cust_group_rev", "payment_method_rev", "channel_rev", "unit_total_qty"):
         if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value) or value < 0:
             return "number_not_finite_nonnegative"
     if intent == "cancel_count":
@@ -48,4 +49,18 @@ def check(intent: str, value: Any, conn: sqlite3.Connection, start: str, end: st
         known = {r[0] for r in conn.execute("SELECT item_name FROM v_items")}
         if not known or any(n not in known for n in names):
             return "item_name_not_in_catalog"
+    return None
+
+
+def check_monthly(intent: str, value: Any, months: list) -> str | None:
+    """best_month: 'YYYY-MM' of one of the named months; monthly_series: non-negative ints, one per month; streak_bool: bool."""
+    if intent == "best_month":
+        names = {a.isoformat()[:7] for a, _ in months}
+        return None if isinstance(value, str) and value in names else "best_month_not_a_named_month"
+    if intent == "monthly_series":
+        ok = isinstance(value, list) and len(value) == len(months) and all(
+            isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in value)
+        return None if ok else "monthly_series_shape"
+    if intent == "streak_bool":
+        return None if isinstance(value, bool) else "streak_not_boolean"
     return None

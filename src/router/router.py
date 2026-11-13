@@ -14,7 +14,7 @@ from typing import Any
 from . import intents as I
 from . import sanity
 from .invariants import blocked_by_spans
-from .templates import ANSWER_TYPE, run_template
+from .templates import ANSWER_TYPE, monthly_revenue, run_template
 
 
 @dataclass
@@ -64,6 +64,8 @@ class Router:
             as_of_d = dt.date.fromisoformat(as_of[:10])
         except ValueError:
             return RouteDecision("llm", "no_as_of", intent)
+        if intent in I.MONTHLY_INTENTS:
+            return self._monthly(qid, intent, s, res, as_of_d, conn, blocked_spans)
         prev = None
         if intent == "rev_change_pct":
             if len(res.periods) == 1 and res.comparison is not None:
@@ -127,6 +129,32 @@ class Router:
                     return RouteDecision("llm", "unit_mismatch", intent, params=params)
             kw["item"] = (m[0], m[1])
             params["item"] = m[1]
+        elif intent == "cust_group_rev":
+            groups = [r[0] for r in conn.execute("SELECT DISTINCT customer_group FROM v_valid_orders WHERE customer_group IS NOT NULL")]
+            g, why = I.match_group(groups, s)
+            if g is None:
+                return RouteDecision("llm", why, intent, params=params)
+            kw["item"] = (None, g)
+            params["group"] = g
+        elif intent in ("payment_method_rev", "channel_rev"):
+            col = "payment_method" if intent == "payment_method_rev" else "channel"
+            raw = [r[0] for r in conn.execute(f"SELECT DISTINCT {col} FROM v_valid_orders WHERE {col} IS NOT NULL")]
+            vals, why = (I.match_payment if intent == "payment_method_rev" else I.match_channel)(raw, s)
+            if vals is None:
+                return RouteDecision("llm", why, intent, params=params)
+            kw["values"] = vals
+            params["values"] = vals
+        elif intent == "unit_total_qty":
+            unit = I.unit_for_total(s)
+            bases = [r[0] for r in conn.execute("SELECT DISTINCT base_unit FROM v_items WHERE base_unit IS NOT NULL")]
+            vals = [b for b in bases if unit and I.item_match_key(b) == I.item_match_key(unit)]
+            catalog = conn.execute("SELECT item_code, item_name, name_aliases, base_unit FROM v_items").fetchall()
+            if I.match_item(catalog, s)[0] is not None:   # a named item: the question is about that item, not all items
+                return RouteDecision("llm", "item_named", intent, params=params)
+            if not vals:
+                return RouteDecision("llm", "unit_not_a_base_unit", intent, params=params)
+            kw["values"] = vals
+            params["values"] = vals
         elif intent == "category_rev":
             cats = [r[0] for r in conn.execute("SELECT DISTINCT category FROM v_items WHERE category IS NOT NULL")]
             c, why = I.match_category(cats, s)
@@ -153,3 +181,46 @@ class Router:
             return RouteDecision("abstain", f"sanity:{bad_answer}", intent, params=params)
         ans = {"id": qid, "type": ANSWER_TYPE[intent], "answer": value}
         return RouteDecision("template", "ok", intent, ans, params)
+
+    def _monthly(self, qid, intent, s, res, as_of_d, conn, blocked_spans):
+        """best_month / monthly_series / streak_bool: months named by the question, revenue of each month (valid orders)."""
+        if res.comparison is not None or not res.periods:
+            return RouteDecision("llm", "period_missing" if not res.periods else "period_count", intent)
+        months: list[tuple[dt.date, dt.date]] = []
+        for p in res.periods:
+            if p.start is None or p.granularity not in ("month", "month_series"):
+                return RouteDecision("llm", "period_not_months", intent)
+            y, m = p.start.year, p.start.month
+            while (y, m) <= (p.end.year, p.end.month):
+                first = dt.date(y, m, 1)
+                last = dt.date(y + (m == 12), (m % 12) + 1, 1) - dt.timedelta(days=1)
+                months.append((first, min(last, as_of_d)))
+                y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+        if not 2 <= len(months) <= 24 or len({a for a, _ in months}) != len(months):
+            return RouteDecision("llm", "month_count", intent)
+        params: dict[str, Any] = {"months": [a.isoformat()[:7] for a, _ in months]}
+        for a, b in months:
+            if blocked_spans and blocked_by_spans(blocked_spans, a.isoformat(), b.isoformat()):
+                return RouteDecision("abstain", "period_overlaps_unparsed_dates", intent, params=params)
+        if not conn.execute("SELECT 1 FROM sqlite_master WHERE name='v_valid_orders'").fetchone():
+            return RouteDecision("llm", "no_views", intent, params=params)
+        min_date = conn.execute("SELECT MIN(order_date) FROM v_orders").fetchone()[0]
+        if min_date and any(b.isoformat() < min_date for _, b in months):
+            return RouteDecision("llm", "month_before_data_start", intent, params=params)
+        win = [(a.isoformat(), b.isoformat()) for a, b in months]
+        rev = monthly_revenue(conn, win)
+        ordered = sorted(zip([a for a, _ in months], rev))           # chronological
+        if intent == "monthly_series":
+            value: Any = [v for _, v in ordered]
+        elif intent == "streak_bool":
+            seq = [v for _, v in zip([a for a, _ in months], rev)]     # months in the order the question names them
+            value = all(x < y for x, y in zip(seq, seq[1:]))
+        else:
+            top = max(rev)
+            if rev.count(top) != 1 or top <= 0:
+                return RouteDecision("llm", "best_month_tie_or_empty", intent, params=params)
+            value = months[rev.index(top)][0].isoformat()[:7]
+        bad_answer = sanity.check_monthly(intent, value, months)
+        if bad_answer:
+            return RouteDecision("abstain", f"sanity:{bad_answer}", intent, params=params)
+        return RouteDecision("template", "ok", intent, {"id": qid, "type": ANSWER_TYPE[intent], "answer": value}, params)

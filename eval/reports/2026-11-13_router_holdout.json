@@ -148,6 +148,76 @@
     "template_pa": 0.0,
     "pa_lower_bound": 0.0,
     "wrong": 0
+   },
+   "best_month": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "monthly_series": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "streak_bool": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "cust_group_rev": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "payment_method_rev": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "channel_rev": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "unit_total_qty": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
    }
   },
   "llm_reasons": {},
@@ -157,12 +227,12 @@
  },
  "holdout": {
   "n": 709,
-  "template": 339,
-  "template_pct": 47.81,
-  "template_correct": 339,
+  "template": 356,
+  "template_pct": 50.21,
+  "template_correct": 356,
   "template_acc_pct": 100.0,
   "template_pa": 1.0,
-  "pa_lower_bound": 0.4781,
+  "pa_lower_bound": 0.5021,
   "wrong": 0,
   "by_intent": {
    "revenue": {
@@ -304,18 +374,91 @@
     "template_pa": 1.0,
     "pa_lower_bound": 1.0,
     "wrong": 0
+   },
+   "best_month": {
+    "n": 1,
+    "template": 1,
+    "template_pct": 100.0,
+    "template_correct": 1,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "monthly_series": {
+    "n": 4,
+    "template": 4,
+    "template_pct": 100.0,
+    "template_correct": 4,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "streak_bool": {
+    "n": 5,
+    "template": 5,
+    "template_pct": 100.0,
+    "template_correct": 5,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "cust_group_rev": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "payment_method_rev": {
+    "n": 1,
+    "template": 1,
+    "template_pct": 100.0,
+    "template_correct": 1,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "channel_rev": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "unit_total_qty": {
+    "n": 6,
+    "template": 6,
+    "template_pct": 100.0,
+    "template_correct": 6,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
    }
   },
   "llm_reasons": {
-   "not_target": 275,
-   "extra_filter_or_subintent": 30,
+   "not_target": 241,
+   "extra_filter_or_subintent": 37,
    "multi_intent": 28,
    "normalizer_residual_teencode": 14,
    "category_not_found": 9,
    "item_specific_revenue": 8,
+   "several_named": 5,
    "unit_mismatch": 4,
+   "group_not_found": 4,
    "period_count": 1,
-   "item_not_found": 1
+   "item_not_found": 1,
+   "none_named": 1
   },
   "wrong_attribution": {},
   "intent_accuracy_pct": 100.0,

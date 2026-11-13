@@ -28,6 +28,12 @@ Mỗi câu ghi `log["router"] = {route, reason, intent, params, shop_warnings?}`
 | `rev_change_pct` | percent | kỳ hỏi và kỳ so (từ `Period`) |
 | `item_revenue`, `category_rev` | number | mới (template của Nhi, cần Nghiệp duyệt) |
 | `sell_price_on_day` | number | giá một đơn vị cơ bản ngày D, `v_lines`; nhiều giá/không có đơn → agent |
+| `best_month` | date `YYYY-MM` | tháng có doanh thu lớn nhất trong các tháng được nêu; hoà → agent |
+| `monthly_series` | list (int) | doanh thu từng tháng, từ tháng cũ đến mới |
+| `streak_bool` | boolean | doanh thu tăng liên tục qua các tháng theo thứ tự nêu |
+| `cust_group_rev` | number | `v_valid_orders.customer_group`, tên nhóm sau chữ "nhóm" |
+| `payment_method_rev`, `channel_rev` | number | đúng một hình thức/kênh được nêu (tiền mặt/chuyển khoản/ví/COD/ghi nợ; tại quầy/Zalo OA/điện thoại); nhiều giá trị hoặc phần trăm → agent |
+| `unit_total_qty` | number | tổng `qty_base` mọi mặt hàng có đơn vị cơ bản = đơn vị hỏi; nêu tên mặt hàng → agent |
 | câu chủ quan (hay khen, lễ phép…) | unanswerable | §7 |
 | kỳ nằm hoàn toàn trước dữ liệu của shop | unanswerable | §7 |
 
