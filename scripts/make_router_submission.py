@@ -41,6 +41,8 @@ def valid_line(a: dict) -> str | None:
         return None if isinstance(v, str) and DATE.match(v) else "bad date"
     if t == "string":
         return None if isinstance(v, str) and v.strip() else "bad string"
+    if t == "boolean":
+        return None if isinstance(v, bool) else "bad boolean"
     if t == "list":
         return None if isinstance(v, list) and v else "bad list"
     return f"unsupported type {t!r}"
