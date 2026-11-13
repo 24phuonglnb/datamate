@@ -47,7 +47,7 @@ Dữ liệu: `bash scripts/download_data.sh` (xem README). Cấu trúc `data/tra
 
 Biến môi trường của router (`DATAMATE_ROUTER`, `DATAMATE_ROUTER_ONLY`, `DATAMATE_CACHE_DIR`, `DATAMATE_LEGACY_INGESTION`, …): `docs/ROUTER.md`.
 Image router-only: không cần weights, không cần GPU; cần `requirements.txt` hiện có (pandas, openpyxl; `torch/vllm` chỉ nạp khi chạy có model).
-Đo trên public (1000 câu, một tiến trình CPU): 8 phút 24 giây, bộ nhớ đỉnh khoảng 0,75 GB (bản `98205ca`; lần đầu mỗi shop còn tính bất biến).
+Đo trên public (1000 câu, một tiến trình CPU, router trả lời 265 câu): khoảng 10 phút (9 phút 53 giây đo được), bộ nhớ đỉnh khoảng 0,75 GB (lần đầu mỗi shop còn tính bất biến).
 
 ## 4. Số đo mới nhất
 
@@ -60,14 +60,18 @@ PA = (đúng − sai) / số câu; abstain 0 điểm. Chi tiết và nguồn: `d
 | router (cận dưới: phần router trả lời, còn lại abstain) | hold-out | 0,42 → 0,478 (sau khi thêm intent), đúng 339/339 câu router trả lời |
 | bảng xếp hạng v1, router-only | public 1000 câu | 0,165 (221 câu trả lời, 193 đúng) |
 | bảng xếp hạng, v1 bỏ 28 câu của dev_004 | public | 0,151 |
+| v2 router-only (chưa nộp) | public | chưa có điểm; 265 câu trả lời (v1: 221): 220 giữ nguyên đáp án v1, 0 đổi, 45 mới, 1 câu bị bỏ do cue luật mới |
 
 Đính chính: dev_004 không có lỗi parse ngày. Cảnh báo "54% ngày không parse" trước đây là do bộ đếm cũ tính cả ô ngày để trống rồi được điền xuống theo đơn; `6ae1a0e` của Nghiệp đã sửa bộ đếm.
+
+## Guard rulebook (tự động)
+
+Router không cần ai duyệt khi rulebook đổi (Docker nộp 16/11 chạy private một mình). Mỗi dòng luật mà template dùng có "ý chính" và "cụm mâu thuẫn" trong `src/router/rule_specs.py`; intent chỉ bị tắt khi dòng đó mất, không còn ý chính hoặc có cụm mâu thuẫn. Thêm câu/ví dụ/dòng mới không tắt gì; dòng mới tạo "cue" chuyển câu khớp xuống LLM. `src/router/reviewed_rule_changes.json` chỉ là sổ ghi chú. Kiểm tra: `python scripts/build_rule_reference.py diff --rulebook <rulebook.md>`; trên rulebook train không tắt gì, trên rulebook public chỉ tắt `sell_price_on_day` (dòng "Giá bán X ngày D" không còn trong bản public).
 
 ## 5. Việc còn mở
 
 | việc | ai | ghi chú |
 |---|---|---|
-| quyết định dòng luật `1|don thuoc ky nao` (bản public thêm: đơn trả sau kỳ vẫn bị loại) | Nhi | dòng này đang tắt; **chừng nào chưa duyệt, router tắt mọi intent trên public và bản router-only trả lời 0/1000 câu**. Đã kiểm trên dev: 6041 đơn trả hàng, 0 đơn nằm trong `v_valid_orders`; dữ liệu train không có cột ngày trả nên chưa đếm được "trả sau kỳ" |
 | 14B TP=2, đo hold-out có/không `--router`, Docker | Phương | chọn bản nộp trước 16/11 |
 | prompt LLM cho phần router không xử lý | An | `docs/ROUTER_BACKLOG.md` (nhóm intent, view cần dùng, độ khó, luật chỉ có ở rulebook public); agent hiện nhận câu gốc, không nhận `Period`/câu chuẩn hoá (đề xuất interface trong `docs/ROUTER.md`) |
 | duyệt mã router copy từ code của Nghiệp | Nghiệp | `src/router/templates.py`, `_tagger_rules.py`, regex trong `intents.py` |
