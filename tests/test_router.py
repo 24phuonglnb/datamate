@@ -502,13 +502,13 @@ def test_summary_rows_are_not_counted_as_unparsed_dates(tmp_path):
     assert m["unparsed_dates_pct"] == 0 and m["unparsed_spans"] == []
 
 
-def test_reviewed_file_format_has_reasons_and_pending_stays_off(tmp_path):
+def test_reviewed_file_format_has_reasons(tmp_path):
     import json as _json
     from src.router import rule_guard as rg
     data = _json.loads(rg.REVIEWED_PATH.read_text(encoding="utf-8"))
     assert all(x.get("reason") for x in data["approved"])
     approved = rg._load_reviewed(rg.REVIEWED_PATH)
-    assert "2|den het ngay x, tinh den hom nay" in approved and "1|don thuoc ky nao" not in approved
+    assert {"2|den het ngay x, tinh den hom nay", "1|don thuoc ky nao"} <= approved
     f = tmp_path / "r.json"
     f.write_text('["1|don thuoc ky nao"]', encoding="utf-8")
     assert rg._load_reviewed(f) == {"1|don thuoc ky nao"}   # plain list still accepted

@@ -6,12 +6,13 @@
       "reason": "The public rulebook only adds 'chua giao' to the examples of remaining-count questions (owed, in stock, still to deliver). The router answers period aggregates (revenue, order counts, rankings), not remaining-state questions, so the row's meaning for them is unchanged.",
       "approved_by": "Nhi",
       "date": "2026-11-13"
-    }
-  ],
-  "pending": [
+    },
     {
       "key": "1|don thuoc ky nao",
-      "note": "Public adds: an order returned after the period, even after today, is still excluded from the placement period's revenue. Checked on the 24 dev shops: 6041 returned orders, 0 of them in v_valid_orders and 0 returned lines in v_valid_lines, so the views exclude a returned order whatever the period. NOT proven as asked: the data has no return-date column, so orders returned after their period cannot be counted. Left switched off until a human decides."
+      "reason": "Dữ liệu không có ngày trả; view loại cả đơn có dòng trả bất kể kỳ (dev: 6041 đơn trả, 0 trong v_valid_orders/v_valid_lines), khớp luật mới.",
+      "approved_by": "Nhi",
+      "date": "2026-11-13"
     }
-  ]
+  ],
+  "pending": []
 }
