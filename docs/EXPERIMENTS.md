@@ -197,3 +197,4 @@ guard (`rule_guard.py`), answer sanity checks (`sanity.py`). Reports: `eval/repo
 | 2026-11-13 | router + new intents (lower bound) | hold-out 709, run once | 0.4781 | `eval/reports/2026-11-13_router_holdout.md` |
 | 2026-11-13 | leaderboard v1, router only | public 1000 | 0.165 | 221 answered; 193 correct / 28 wrong |
 | 2026-11-13 | leaderboard, v1 without the 28 dev_004 answers | public 1000 | 0.151 | dev_004: about 21 correct / 7 wrong. Correction: dev_004 has no date-parsing error; the earlier "unparsed dates" alarm counted blank date cells that the ledger fills down |
+| 2026-11-13 | leaderboard v2, router only (guard rulebook theo ý chính) | public 1000 | 0.195 | 265 answered: 220 identical to v1, 0 changed, 45 new, 1 dropped (new-rule cue). Gain +0.030 = +30 net points over v1: the 45 new answers are about 37-38 correct / 7-8 wrong (the dropped one counts +/-1). File not committed |

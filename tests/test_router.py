@@ -593,3 +593,144 @@ def test_questions_are_processed_grouped_by_shop(tmp_path):
     out = _lines_grouped_by_shop(f)
     ids = [(_json.loads(l)["id"] if l.startswith("{") else "bad") for l in out]
     assert ids == ["b1", "b2", "a1", "a2", "bad"]
+
+
+class _P:
+    def connection(self, shop):
+        return _db()
+
+    def flags(self, shop):
+        return []
+
+    def spans(self, shop):
+        return []
+
+
+def _q(text, qid="t1"):
+    return {"id": qid, "business_id": "x", "as_of_date": AS_OF, "question": text}
+
+
+def test_hints_reach_an_agent_that_accepts_them():
+    from src.nlu.normalize import RuleNormalizer
+    from src.router.pipeline import solve
+
+    class NewAgent:
+        got = None
+
+        def solve(self, question, hints=None):
+            NewAgent.got = hints
+            return {"id": question["id"], "type": "abstain"}, {}
+
+    solve(_q("tháng 3/2026 tồn kho mì hảo hảo còn bao nhiêu"), NewAgent(), Router(), RuleNormalizer(None), _P())
+    h = NewAgent.got
+    assert h["fallthrough_reason"].startswith("not_target") and h["normalized_text"]
+    assert h["period"] == [{"start": "2026-03-01", "end": "2026-03-31", "granularity": "month", "source": "thang 3/2026"}]
+    assert h["where_sql"][0]["sql"] == "order_date BETWEEN '2026-03-01' AND '2026-03-31'"
+    assert h["entities"]["item"]["item_name"] == "Mì Hảo Hảo"
+    assert h["comparison_period"] is None and h["flags"] == []
+
+
+def test_hints_part_of_day_and_comparison_where_sql():
+    from src.nlu.normalize import RuleNormalizer
+    from src.router.pipeline import solve
+
+    class A:
+        got = None
+
+        def solve(self, question, **kw):   # **kwargs also counts as accepting hints
+            A.got = kw.get("hints")
+            return {"id": question["id"], "type": "abstain"}, {}
+
+    solve(_q("tháng 3/2026 ca chiều bán được bao nhiêu tiền so với tháng 2/2026"), A(), Router(), RuleNormalizer(None), _P())
+    sqls = [w["sql"] for w in A.got["where_sql"]]
+    assert any("BETWEEN '14:00' AND '21:59'" in q for q in sqls) and len(sqls) == 2
+
+
+def test_old_agent_without_hints_still_runs():
+    from src.nlu.normalize import RuleNormalizer
+    from src.router.pipeline import solve
+
+    class OldAgent:
+        calls = 0
+
+        def solve(self, question):
+            OldAgent.calls += 1
+            return {"id": question["id"], "type": "abstain"}, {}
+
+    ans, log = solve(_q("tháng 3/2026 tồn kho còn bao nhiêu"), OldAgent(), Router(), RuleNormalizer(None), _P())
+    assert OldAgent.calls == 1 and log["router"]["route"] == "llm"
+
+
+def test_type_error_inside_the_agent_is_not_retried():
+    from src.nlu.normalize import RuleNormalizer
+    from src.router.pipeline import solve
+
+    class Broken:
+        calls = 0
+
+        def solve(self, question, hints=None):
+            Broken.calls += 1
+            raise TypeError("bug inside the model call")
+
+    with pytest.raises(TypeError):
+        solve(_q("tháng 3/2026 tồn kho còn bao nhiêu"), Broken(), Router(), RuleNormalizer(None), _P())
+    assert Broken.calls == 1
+
+
+def test_llm_gate_enables_only_listed_kinds_and_default_is_open():
+    from src.nlu.normalize import RuleNormalizer
+    from src.router import gate as G
+    from src.router.pipeline import solve
+
+    class A:
+        calls = 0
+
+        def solve(self, question, hints=None):
+            A.calls += 1
+            return {"id": question["id"], "type": "number", "answer": 1}, {}
+
+    text = "tháng 3/2026 tồn kho còn bao nhiêu"        # tagger label stock_qty
+    ans, log = solve(_q(text), A(), Router(), RuleNormalizer(None), _P())                      # no gate: LLM answers
+    assert ans["type"] == "number" and log["router"]["reason"].startswith("not_target:stock_qty")
+    off = {"enabled": ["debt_total"]}
+    ans, log = solve(_q(text), A(), Router(), RuleNormalizer(None), _P(), off)
+    assert ans["type"] == "abstain" and log["router"]["route"] == "abstain" and log["router"]["reason"] == "llm_gate:stock_qty"
+    on = {"enabled": ["stock_qty"]}
+    ans, log = solve(_q(text), A(), Router(), RuleNormalizer(None), _P(), on)
+    assert ans["type"] == "number"
+    assert A.calls == 2
+    assert G.gate_key(type("D", (), {"reason": "extra_filter_or_subintent", "intent": "revenue"})()) == "revenue"
+    assert G.gate_key(type("D", (), {"reason": "period_missing", "intent": None})()) == "period_missing"
+
+
+def test_llm_gate_builder_thresholds_and_unknown_kinds(tmp_path):
+    import json as _json
+    from eval import llm_gate
+    rows = []
+    rows += [{"route": "llm", "gate_key": "stock_qty", "status": "correct", "fold": "holdout"}] * 8
+    rows += [{"route": "llm", "gate_key": "stock_qty", "status": "wrong", "fold": "holdout"}] * 2          # 0.8, 10 answered
+    rows += [{"route": "llm", "gate_key": "debt_total", "status": "correct", "fold": "holdout"}] * 4
+    rows += [{"route": "llm", "gate_key": "debt_total", "status": "wrong", "fold": "holdout"}] * 8          # 0.33
+    rows += [{"route": "llm", "gate_key": "tet", "status": "correct", "fold": "holdout"}] * 3               # too few
+    rows += [{"route": "llm", "gate_key": "shift", "status": "abstain", "fold": "holdout"}] * 20            # never answers
+    rows += [{"route": "template", "gate_key": "stock_qty", "status": "correct", "fold": "holdout"}] * 50   # not llm route
+    g = llm_gate.build_gate(rows, 0.6, 10)
+    assert g["enabled"] == ["stock_qty"]
+    assert g["disabled"] == {"debt_total": "low_accuracy", "shift": "insufficient_answers", "tet": "insufficient_answers"}
+    assert g["stats"]["stock_qty"]["accuracy"] == 0.8 and g["stats"]["stock_qty"]["n"] == 10
+    assert g["llm_route"]["questions"] == 10 + 12 + 3 + 20
+    assert g["llm_route"]["pa_with_gate"] > g["llm_route"]["pa_llm_answers_all"]
+    # rows without gate_key fall back to the router fields
+    assert llm_gate.key_of({"router_reason": "not_target:stock_qty", "router_intent": None}) == "stock_qty"
+    # file round trip through the CLI path and the pipeline's loader
+    f = tmp_path / "pq.jsonl"
+    f.write_text("\n".join(_json.dumps(r) for r in rows), encoding="utf-8")
+    out = tmp_path / "gate.json"
+    import sys as _sys
+    from unittest import mock
+    with mock.patch.object(_sys, "argv", ["llm_gate", "--per-question", str(f), "--out", str(out)]):
+        llm_gate.main()
+    from src.router.gate import llm_allowed, load_gate
+    gate = load_gate(out)
+    assert llm_allowed(gate, "stock_qty") and not llm_allowed(gate, "debt_total") and not llm_allowed(gate, "never_seen")
+    assert llm_allowed(None, "anything")

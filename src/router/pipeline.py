@@ -3,9 +3,12 @@
 `provider` = ConnectionProvider (src/router/db.py): shop views via the ingestion layer, not via the agent."""
 from __future__ import annotations
 
+import inspect
 import time
 from typing import Any, Callable
 
+from . import gate as G
+from .hints import build_hints
 from .router import RouteDecision, Router
 
 
@@ -21,12 +24,34 @@ class AbstainAgent:
         pass
 
 
+def _accepts_hints(agent: Any) -> bool:
+    try:
+        params = inspect.signature(agent.solve).parameters
+    except (TypeError, ValueError):
+        return False
+    return "hints" in params or any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
+
+
+def call_agent(agent: Any, question: dict[str, Any], hints: dict[str, Any] | None) -> tuple[dict[str, Any], dict[str, Any]]:
+    """agent.solve(question, hints=hints) when the agent takes `hints`, else agent.solve(question) as before.
+
+    The signature is inspected instead of catching TypeError so that a TypeError raised inside a (slow) model call is
+    never mistaken for 'no hints parameter' and the call is never repeated."""
+    if hints is not None and _accepts_hints(agent):
+        return agent.solve(question, hints=hints)
+    return agent.solve(question)
+
+
 def solve(question: dict[str, Any], agent: Any, router: Router | None, normalizer: Callable[..., Any] | None,
-          provider: Any = None) -> tuple[dict[str, Any], dict[str, Any]]:
-    """-> (answer, log). log["router"] = {route, reason, intent, params} for every question."""
+          provider: Any = None, gate: dict[str, Any] | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
+    """-> (answer, log). log["router"] = {route, reason, intent, params} for every question.
+
+    Questions that fall to the LLM go to `call_agent` with hints (normalized text, periods, where_sql, matched entities,
+    fallthrough reason).  With a `gate` (llm_gate.json) a question whose kind is not enabled abstains instead."""
     qid = str(question.get("id", ""))
     began = time.monotonic()
     decision = RouteDecision("llm", "router_disabled")
+    nq = conn = None
     if router is not None and normalizer is not None and provider is not None:
         try:
             nq = normalizer(str(question.get("question", "")), str(question.get("as_of_date", "")))
@@ -51,7 +76,19 @@ def solve(question: dict[str, Any], agent: Any, router: Router | None, normalize
         log = {"id": qid, "answer": answer, "elapsed_ms": int((time.monotonic() - began) * 1000),
                "thinking": None, "code": None, "output": None}
     else:
-        answer, log = agent.solve(question)
+        key = G.gate_key(decision)
+        if not G.llm_allowed(gate, key):
+            answer = {"id": qid, "type": "abstain"}
+            log = {"id": qid, "answer": answer, "elapsed_ms": 0, "thinking": None, "code": None, "output": None}
+            decision = RouteDecision("abstain", f"llm_gate:{key}", decision.intent, params=decision.params)
+        else:
+            hints = None
+            if nq is not None:
+                try:
+                    hints = build_hints(question, nq, decision, conn)
+                except Exception:
+                    hints = None
+            answer, log = call_agent(agent, question, hints)
     log["router"] = decision.log()
     if provider is not None and hasattr(provider, "warnings"):
         try:

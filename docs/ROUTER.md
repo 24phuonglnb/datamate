@@ -63,6 +63,7 @@ Biến môi trường (tất cả tuỳ chọn):
 | `DATAMATE_CACHE_DIR` | thư mục cache SQLite theo shop (mặc định `/tmp/datamate_cache`) |
 | `DATAMATE_NO_CACHE=1` | không dùng cache đĩa |
 | `DATAMATE_LEGACY_INGESTION=1` | nạp dữ liệu kiểu cũ, không có view (router không áp dụng được) |
+| `DATAMATE_LLM_GATE=<json>` | bật cổng abstain cho câu rơi xuống LLM (mặc định tắt: LLM trả lời hết) |
 | `DATAMATE_REVIEWED_RULES=<json>` | chỉ để phân tích: thay sổ ghi chú `reviewed_rule_changes.json` (không đổi quyết định) |
 
 Pipeline đầy đủ (router + LLM): `bash predict.sh` (hoặc `python -m src.predict --data-dir … --result-dir … --model-path … --tensor-parallel-size 2`).
@@ -83,15 +84,54 @@ Công cụ CPU: `scripts/eval_router.py` (đo trên train, `--fold dev|holdout|b
 `scripts/build_rule_reference.py` (build/diff rulebook: in intent bị tắt và lý do, dòng đổi/mất/mới), `scripts/make_router_submission.py` (bản nộp router-only từ public, có `--guard`),
 `scripts/make_probes.py` (file dò leaderboard).
 
-## Agent nhận gì từ router (cho An)
+## Agent nhận gì từ router (cho An): `hints`
 
-Hiện tại câu rơi xuống agent chỉ nhận **câu gốc** (`agent.solve(question)`, nguyên dict `questions.jsonl`). Router KHÔNG truyền
-câu đã chuẩn hoá, `Period` hay lý do chuyển xuống. `Agent` (branch `feat/question-normalization`) đã có tham số tuỳ chọn
-`normalizer` (khi bật: dùng `nq.text`, chèn khối `RESOLVED TIME PERIODS`), nhưng `predict.py` không bật nó vì chưa đo ablation.
+Câu rơi xuống agent (route `llm`) được gọi qua `pipeline.call_agent(agent, question, hints)`:
 
-Đề xuất interface (chưa làm, không sửa `agent.py`): `Agent.solve(question, hints=None)` với
-`hints = {"text": nq.text, "period_block": format_for_prompt(nq.period), "flags": nq.flags, "router_reason": decision.reason}`;
-`pipeline.solve` đã có sẵn `nq` và `decision`, nên chỉ cần truyền thêm một dict.
+- Nếu `agent.solve` có tham số `hints` (hoặc `**kwargs`) → `agent.solve(question, hints=hints)`.
+- Nếu không → `agent.solve(question)` như cũ (agent hiện tại không đổi gì). Chữ ký được kiểm bằng `inspect`, không bắt `TypeError`,
+  để lỗi thật bên trong một lần gọi model chậm không bị coi là "không có hints" và gọi lặp lại.
+
+`question` vẫn là dict gốc của `questions.jsonl` (câu gốc). `hints` (JSON thường, mọi trường có thể rỗng):
+
+| trường | nội dung |
+|---|---|
+| `normalized_text` | câu đã chuẩn hoá (`NormalizedQuestion.text`) |
+| `period` | danh sách `{start, end, granularity, source}`; `start = null` cho "đến hết ngày X" (xem `docs/NLU_API.md`) |
+| `comparison_period` | kỳ so sánh cùng dạng, hoặc `null` |
+| `part_of_day` | `{sang: [..], chieu: [..], baseline}` hoặc `null` |
+| `where_sql` | `[{period, sql}]`: điều kiện lọc sẵn trên `order_date` (và `order_time` nếu có ca một phía) cho từng kỳ + kỳ so sánh |
+| `ambiguous_period` | các đoạn chữ thời gian không giải được (agent tự xử lý hoặc abstain) |
+| `flags` | cờ chuẩn hoá (`no_diacritics`, `partial_no_diacritics`, `residual_teencode`) |
+| `entities` | `numbers`, `dates` trích từ câu gốc; `item` `{item_code, item_name, base_unit}` và `category` nếu khớp duy nhất trong `v_items` |
+| `fallthrough_reason`, `fallthrough_intent` | vì sao router không trả lời (ví dụ `not_target:stock_qty`, `extra_filter_or_subintent`) và intent nếu có |
+
+Mẫu cho An:
+
+```python
+def solve(self, question, hints=None):
+    hints = hints or {}
+    period_sql = "; ".join(w["sql"] for w in hints.get("where_sql", []))
+    text = hints.get("normalized_text") or question["question"]
+```
+
+Mã: `src/router/hints.py` (xây hints), `src/router/pipeline.py` (`call_agent`). `Agent(..., normalizer=…)` của branch
+`feat/question-normalization` vẫn là đường riêng (không bật trong `predict.py`).
+
+## Cổng abstain cho LLM (`llm_gate.json`)
+
+Mặc định LLM trả lời mọi câu rơi xuống (để đo được). Khi đã có kết quả đo 14B trên hold-out:
+
+```bash
+python -m eval.run_baseline --model-path <14B> --model-name Qwen3-14B --backend vllm --tensor-parallel-size 2 --subset holdout --router
+python -m eval.llm_gate --per-question eval/reports/<date>_Qwen3-14B_holdout_router.per_question.jsonl --fold holdout --out src/router/llm_gate.json
+DATAMATE_LLM_GATE=src/router/llm_gate.json bash predict.sh      # bật cổng
+```
+
+`eval/llm_gate.py` gom theo "loại câu" (nhãn tagger của câu không thuộc intent router, hoặc intent router, hoặc lý do rơi xuống), tính số câu,
+số câu đã trả lời, độ chính xác = đúng / đã trả lời và PA nếu bật. Bật khi đã trả lời ≥ 10 câu và độ chính xác ≥ 0,6; còn lại (kể cả loại câu
+chưa thấy trong lần đo) abstain. Câu bị chặn ghi `route=abstain`, `reason=llm_gate:<loại>`. Chưa có đầu ra 14B thật nên chưa có `llm_gate.json`;
+chạy lệnh trên khi có.
 
 ## Mã copy từ code của Nghiệp (cần Nghiệp duyệt)
 

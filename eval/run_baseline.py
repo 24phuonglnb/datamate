@@ -224,7 +224,12 @@ def main() -> None:
                     "elapsed_s": round(log.get("elapsed_ms", 0) / 1000, 3), "error": log.get("error"),
                 }
                 if "router" in log:
+                    from src.router.gate import gate_key
+                    from types import SimpleNamespace
                     row["route"] = log["router"]["route"]
+                    row["router_intent"] = log["router"].get("intent")
+                    row["router_reason"] = log["router"].get("reason")
+                    row["gate_key"] = gate_key(SimpleNamespace(reason=row["router_reason"], intent=row["router_intent"]))
                 if status in ("abstain", "missing", "unreadable"):
                     row["abstain_cause"] = abstain_cause(log)
                 row["group"] = error_group(row)

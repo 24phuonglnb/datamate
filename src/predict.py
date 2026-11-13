@@ -14,6 +14,7 @@ from .nlu.normalize import RuleNormalizer
 from .router import Router
 from .router.db import ConnectionProvider
 from .router.rule_guard import RuleGuard
+from .router.gate import load_gate
 from .router.pipeline import AbstainAgent, solve as solve_routed
 
 
@@ -54,6 +55,7 @@ def run(data_dir: Path, result_dir: Path, model, max_attempts: int = 2) -> int:
     tet_bare = rule_guard.defines("2", "tet") if rule_guard is not None else True  # undefined Tết stays ambiguous
     normalizer = RuleNormalizer(data_dir / "calendar.csv", tet_bare=tet_bare) if use_router else None
     provider = ConnectionProvider(data_dir) if use_router else None
+    gate = load_gate(os.environ.get("DATAMATE_LLM_GATE")) if use_router else None  # None: the LLM answers everything
     count = 0
     try:
         # Open in write mode for a clean, deterministic run. Flush each answer.
@@ -62,7 +64,7 @@ def run(data_dir: Path, result_dir: Path, model, max_attempts: int = 2) -> int:
             for line in _lines_grouped_by_shop(questions_file):
                 try:
                     question = json.loads(line)
-                    answer, log = solve_routed(question, agent, router, normalizer, provider)
+                    answer, log = solve_routed(question, agent, router, normalizer, provider, gate)
                 except Exception as exc:
                     qid = ""
                     try:
