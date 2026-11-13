@@ -277,6 +277,36 @@ class LedgerBuildAndInvariantsTests(unittest.TestCase):
         ord2 = ledger[ledger["order_id"] == "ORD_02"]
         self.assertEqual(set(ord2["status"]), {STATUS_CANCELLED})
 
+    def test_yearless_dates_use_sheet_year_and_blank_cells_are_not_unparsed(self):
+        # Rulebook §8: "3/6" takes the year of its sheet; blank continuation cells take the order's date
+        df = pd.DataFrame({
+            "order_id": ["ORD_01", None, "ORD_02", "ORD_03"],
+            "date": ["3/6", None, "27/2", "khong ro"],
+            "item": ["Bút bi", "Vở", "Thước", "Tẩy"],
+            "qty": [1, 1, 1, 1],
+            "price": [5000, 10000, 3000, 2000],
+            "amount": [5000, 10000, 3000, 2000],
+            "__file": ["f.xlsx"] * 4,
+            "__sheet": ["T06-2025", "T06-2025", "T02-2026", "T02-2026"],
+            "__row": [1, 2, 3, 4],
+            "__year": [2025, 2025, 2026, 2026],
+            "__month": [6, 6, 2, 2],
+        })
+        table = RawTable("sales", df, ["f.xlsx"])
+        mapping = Mapping(
+            sales_table="sales",
+            sales_columns={"order_id": "order_id", "order_date": "date", "item_name": "item",
+                           "qty": "qty", "unit_price": "price", "line_amount": "amount"},
+            assignments={},
+        )
+        ledger, issues = build_ledger([table], mapping)
+        dates = dict(zip(ledger["item_name"], ledger["order_date"]))
+        self.assertEqual(dates["Bút bi"], dt.date(2025, 6, 3))
+        self.assertEqual(dates["Vở"], dt.date(2025, 6, 3))
+        self.assertEqual(dates["Thước"], dt.date(2026, 2, 27))
+        self.assertEqual(issues["unparsed_date_cells"], 1)
+        self.assertEqual(issues["unparsed_dates"], 1)  # only "khong ro" stays without a date
+
     def test_canonical_columns_present(self):
         df = pd.DataFrame({
             "order_id": ["ORD_01"],

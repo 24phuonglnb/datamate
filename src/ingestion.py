@@ -328,13 +328,18 @@ class BusinessDB:
 
         # Check for cache hit
         if cache_file.is_file():
+            conn = None
             try:
                 conn = sqlite3.connect(str(cache_file))
                 # Validate SQLite integrity
                 conn.execute("SELECT 1 FROM sqlite_master LIMIT 1")
                 return conn
             except sqlite3.Error as exc:
-                logger.warning("Cache file %s corrupted (%s), rebuilding...", cache_file, exc)
+                # Close before logging: a captured log record keeps `exc` (and its frame) alive,
+                # so an unclosed connection would only be finalised later, in some other test.
+                if conn is not None:
+                    conn.close()
+                logger.warning("Cache file %s corrupted (%s), rebuilding...", cache_file, str(exc))
                 try:
                     cache_file.unlink(missing_ok=True)
                 except OSError:
@@ -345,15 +350,17 @@ class BusinessDB:
             target_cache_dir.mkdir(parents=True, exist_ok=True)
             tmp_cache = target_cache_dir / f"{b_hash}.tmp.{os.getpid()}_{time.time_ns()}.sqlite"
             build_conn = build_database(self.business_dir, self.calendar_path, db_path=tmp_cache)
-            _create_legacy_alias_views(build_conn)
-            build_conn.commit()
-            build_conn.close()
+            try:
+                _create_legacy_alias_views(build_conn)
+                build_conn.commit()
+            finally:
+                build_conn.close()
 
             # Atomic rename into permanent cache file
             tmp_cache.replace(cache_file)
             return sqlite3.connect(str(cache_file))
         except (OSError, sqlite3.Error) as exc:
-            logger.warning("Failed to build cached SQLite file in %s (%s); falling back to :memory:", target_cache_dir, exc)
+            logger.warning("Failed to build cached SQLite file in %s (%s); falling back to :memory:", target_cache_dir, str(exc))
             mem_conn = build_database(self.business_dir, self.calendar_path, db_path=":memory:")
             _create_legacy_alias_views(mem_conn)
             mem_conn.commit()
