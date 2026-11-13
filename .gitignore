@@ -73,9 +73,9 @@ credentials.*
 private_data/
 official_data/
 zalo_data/
-
-# ── Docker build cache ────────────────────────────────────────────────────
-.dockerignore
+train/
+public_test/
+predictions/
 
 /eval_results/
 /reports/mappings
