@@ -253,14 +253,24 @@ class SyntheticRules(unittest.TestCase):
         r = resolve("Q1/2026", "2026-09-07")
         self.assertEqual((r.periods[0].start, r.periods[0].end), (D("2026-01-01"), D("2026-03-31")))
 
-    def test_short_slash_two_digit_year_default_and_overrides(self):
-        r = resolve("doanh thu 6/25", "2026-09-07")  # default: 20..39 can only be a year
-        self.assertEqual((r.periods[0].start, r.periods[0].end), (D("2025-06-01"), D("2025-06-30")))
-        r = resolve("doanh thu 6/45", "2026-09-07")  # not a plausible year: still not guessed
-        self.assertEqual(r.periods, [])
-        self.assertEqual(r.ambiguous[0]["candidates"], ["month_year", "month_day"])
-        r = resolve("doanh thu 6/25", "2026-09-07", short_slash="month_day")
-        self.assertEqual((r.periods[0].start, r.periods[0].end), (D("2026-06-25"), D("2026-06-25")))
+    def test_short_slash_convention_by_keyword(self):
+        def one(q, asof="2026-09-07"):
+            r = resolve(q, asof)
+            return ([(str(p.start), str(p.end)) for p in r.periods], bool(r.ambiguous))
+        # keyword "ngay": day a, month b (year by the rule for a month without year)
+        self.assertEqual(one("doanh thu ngay 25/6"), ([("2026-06-25", "2026-06-25")], False))
+        self.assertEqual(one("doanh thu ngay 25/10"), ([("2025-10-25", "2025-10-25")], False))  # after today -> last year
+        self.assertEqual(one("doanh thu ngay 6/25")[1], True)                                   # month 25 impossible
+        # keyword "thang": month a, year 20b (20..39 only)
+        self.assertEqual(one("doanh thu thang 6/25"), ([("2025-06-01", "2025-06-30")], False))
+        self.assertEqual(one("doanh thu th6/26"), ([("2026-06-01", "2026-06-30")], False))
+        self.assertEqual(one("doanh thu thang 6/15")[1], True)
+        self.assertEqual(one("doanh thu thang 6/45")[1], True)
+        # no keyword
+        self.assertEqual(one("doanh thu 6/25"), ([("2025-06-01", "2025-06-30")], False))
+        self.assertEqual(one("doanh thu 3/6"), ([("2026-06-03", "2026-06-03")], False))      # b <= 12: day a month b
+        self.assertEqual(one("doanh thu 6/15")[1], True)                                       # 13..19: ambiguous
+        self.assertEqual(one("doanh thu 6/45")[1], True)                                       # >= 40: ambiguous
 
     def test_day_month_still_day_month(self):
         r = resolve("ngay 1/1", "2026-04-27")
@@ -298,3 +308,37 @@ def test_calendar_without_lunar_columns_is_tolerated(tmp_path):
     f = tmp_path / "calendar.csv"
     f.write_text("date,weekday\n2026-01-01,Thu\n", encoding="utf-8")
     assert LunarCalendar(f).tet(2026) is None
+
+
+class TetWithoutYear(unittest.TestCase):
+    CAL = None
+
+    @classmethod
+    def setUpClass(cls):
+        import tempfile
+        from src.timeutil import LunarCalendar
+        cls.tmp = tempfile.TemporaryDirectory()
+        f = Path(cls.tmp.name) / "calendar.csv"
+        # synthetic calendar: Tet 2025 = 2025-01-22..2025-02-08, Tet 2026 = 2026-02-10..2026-02-27
+        f.write_text("date,lunar_year,lunar_month,lunar_day,lunar_leap\n"
+                     "2025-01-22,2024,12,23,false\n2025-02-08,2025,1,10,false\n"
+                     "2026-02-10,2025,12,23,false\n2026-02-27,2026,1,10,false\n", encoding="utf-8")
+        cls.CAL = LunarCalendar(f)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def tet(self, asof, **kw):
+        r = resolve("doanh thu dip tet", asof, calendar=self.CAL, **kw)
+        return ([(str(p.start), str(p.end)) for p in r.periods], bool(r.ambiguous))
+
+    def test_latest_tet_that_has_started(self):
+        self.assertEqual(self.tet("2025-12-01"), ([("2025-01-22", "2025-02-08")], False))   # 2026 not started yet
+        self.assertEqual(self.tet("2026-02-10"), ([("2026-02-10", "2026-02-27")], False))   # starts today
+        self.assertEqual(self.tet("2026-05-01"), ([("2026-02-10", "2026-02-27")], False))
+        self.assertEqual(self.tet("2025-01-10")[1], True)                                    # none started in the calendar
+
+    def test_ambiguous_when_rulebook_does_not_define_tet_or_no_calendar(self):
+        self.assertEqual(self.tet("2026-05-01", tet_bare=False)[1], True)
+        self.assertEqual(resolve("doanh thu dip tet", "2026-05-01").ambiguous[0]["text"], "dip tet")

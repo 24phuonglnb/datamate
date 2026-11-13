@@ -60,7 +60,7 @@ def main() -> None:
         qs = [q for q in qs if q["business_id"] in a.only_shops]
     from src.router.rule_guard import RuleGuard
     guard = RuleGuard.load(data / "rulebook.md") if a.guard and (data / "rulebook.md").is_file() else None
-    router, norm, prov = Router(guard), RuleNormalizer(data / "calendar.csv"), ConnectionProvider(data)
+    router, norm, prov = Router(guard), RuleNormalizer(data / "calendar.csv", tet_bare=(guard.defines("2", "tet") if guard else True)), ConnectionProvider(data)
     t0 = time.monotonic()
     meta, out, per_shop, shop_err, reasons = [], [], collections.defaultdict(collections.Counter), {}, collections.Counter()
     for q in sorted(qs, key=lambda x: x["business_id"]):  # grouped by shop only for speed; file order is irrelevant

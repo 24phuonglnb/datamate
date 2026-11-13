@@ -105,6 +105,7 @@ class RuleGuard:
         self.reviewed = reviewed or set()
         run = parse_rulebook(running_text)
         run_h = {k: _h(v) for k, v in run.items()}
+        self._running_keys = set(run)
         self.changed = sorted(k for k in run_h if k in reference and run_h[k] != reference[k] and k not in self.reviewed)
         self.removed = sorted(k for k in reference if k not in run_h and k not in self.reviewed)
         self.new = sorted(k for k in run_h if k not in reference and k not in self.reviewed)
@@ -126,6 +127,10 @@ class RuleGuard:
         rp = Path(os.environ.get("DATAMATE_REVIEWED_RULES") or REVIEWED_PATH)  # env: analysis only
         rev = set(json.loads(rp.read_text(encoding="utf-8"))) if rp.is_file() else set()
         return cls(ref, Path(running_rulebook).read_text(encoding="utf-8"), rev)
+
+    def defines(self, sec: str, prefix: str) -> bool:
+        """Does the running rulebook still have a row (section, name starting with prefix)?"""
+        return any(k.startswith(f"{sec}|{prefix}") for k in self._running_keys)
 
     def check(self, intent: str, folded_question: str) -> str | None:
         """Reason to leave the question to the LLM, else None."""

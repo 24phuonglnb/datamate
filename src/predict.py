@@ -33,7 +33,8 @@ def run(data_dir: Path, result_dir: Path, model, max_attempts: int = 2) -> int:
     if use_router and (data_dir / "rulebook.md").is_file():
         rule_guard = RuleGuard.load(data_dir / "rulebook.md")  # intents whose rulebook rows changed are switched off
     router = Router(rule_guard) if use_router else None
-    normalizer = RuleNormalizer(data_dir / "calendar.csv") if use_router else None
+    tet_bare = rule_guard.defines("2", "tet") if rule_guard is not None else True  # undefined Tết stays ambiguous
+    normalizer = RuleNormalizer(data_dir / "calendar.csv", tet_bare=tet_bare) if use_router else None
     provider = ConnectionProvider(data_dir) if use_router else None
     count = 0
     try:

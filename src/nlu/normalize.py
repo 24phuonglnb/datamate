@@ -170,13 +170,13 @@ def compute_flags(text: str, original: str) -> list[str]:
 
 
 def normalize(question: str, as_of: str | date | None = None, calendar: LunarCalendar | None = None,
-              short_slash: str | None = None) -> NormalizedQuestion:
+              short_slash: str | None = None, tet_bare: bool = True) -> NormalizedQuestion:
     original = question
     text = unicodedata.normalize("NFC", question)
     text = re.sub(r"\s+", " ", text).strip()
     text, changes = fix_tokens(text)
     flags = compute_flags(text, original)
-    period = resolve(text, as_of, calendar, short_slash) if as_of else ResolveResult()
+    period = resolve(text, as_of, calendar, short_slash, tet_bare) if as_of else ResolveResult()
     return NormalizedQuestion(text=text, original=original, period=period, entities=extract_entities(original),
                               flags=flags, changes=changes)
 
@@ -184,9 +184,10 @@ def normalize(question: str, as_of: str | date | None = None, calendar: LunarCal
 class RuleNormalizer:
     """Callable wrapper used by Agent: binds the lunar calendar once."""
 
-    def __init__(self, calendar_path: str | Path | None = None, short_slash: str | None = None):
+    def __init__(self, calendar_path: str | Path | None = None, short_slash: str | None = None, tet_bare: bool = True):
+        self.tet_bare = tet_bare
         self.calendar = LunarCalendar(calendar_path) if calendar_path and Path(calendar_path).is_file() else None
         self.short_slash = short_slash
 
     def __call__(self, question: str, as_of: str | date | None) -> NormalizedQuestion:
-        return normalize(question, as_of, self.calendar, self.short_slash)
+        return normalize(question, as_of, self.calendar, self.short_slash, self.tet_bare)
