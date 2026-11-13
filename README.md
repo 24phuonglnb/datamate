@@ -90,6 +90,46 @@ pip install torch transformers accelerate openpyxl
 
 ---
 
+## Dữ liệu chính thức
+
+Dữ liệu ZAC 2026 nằm ở dataset **private** trên Hugging Face: `nyla111/zaic-data`. Nhắn Nhi để được cấp quyền.
+Không commit dữ liệu, token hay weights (đã chặn trong `.gitignore`).
+
+### Tải về
+```bash
+pip install -U "huggingface_hub[cli]"
+huggingface-cli login            # token HF cá nhân, quyền read
+bash scripts/download_data.sh    # mặc định tải về ./data
+```
+
+### Cấu trúc
+Cấu trúc thật trên HF có **hai cấp lồng nhau** (`train/train/`, `public_test/public_test/`):
+```
+data/
+├── train/train/
+│   ├── questions.jsonl, answers.jsonl
+│   ├── rulebook.md, calendar.csv
+│   └── data/            # biz_101 … biz_130
+└── public_test/public_test/
+    ├── questions.jsonl, rulebook.md, calendar.csv
+    └── data/            # dev_001 … dev_014, không có đáp án
+```
+
+- Chỉ dùng train để phát triển và đánh giá. public_test chỉ để chạy và nộp leaderboard, không dùng để tune hay sinh dữ liệu.
+- Shop hold-out cố định trong `eval/folds.json`. Không tune trên các shop này.
+- Trên server dùng chung, đặt `HF_HOME` vào thư mục đủ quota.
+- Docker lúc nộp đọc dữ liệu từ `/data` (offline). Script này chỉ dùng cho môi trường dev.
+
+### Trỏ code tới dữ liệu
+`src/predict.py` đọc `<DATA_DIR>/questions.jsonl`, `<DATA_DIR>/rulebook.md`, `<DATA_DIR>/calendar.csv` và `<DATA_DIR>/data/<business_id>/`,
+nên `DATA_DIR` phải trỏ vào thư mục lồng bên trong (không di chuyển dữ liệu):
+```bash
+export DATA_DIR=$PWD/data/train/train          # hoặc data/public_test/public_test
+python -m src.predict --data-dir "$DATA_DIR" --result-dir /path/to/result --model-path /path/to/Qwen3-8B
+```
+
+---
+
 ## Running unit tests
 
 All 92 tests run offline — no GPU or model weights needed:
