@@ -356,54 +356,107 @@ def test_pipeline_passes_spans_from_provider():
     assert ans["type"] == "abstain" and A.calls == 0 and "period_overlaps_unparsed_dates" in log["router"]["reason"]
 
 
-RB = """# Rulebook
-## 1. Đơn hàng và doanh thu
-| Luật | Mặc định |
-|---|---|
-| Đơn tính vào doanh thu | đơn không huỷ và không trả hàng |
-| Đơn thuộc kỳ nào | theo **ngày đặt** |
-| Số đơn | chỉ tính đơn không huỷ, không trả |
-## 3. Xếp hạng
-| Luật | Mặc định |
-|---|---|
-| Mặt hàng | món, hàng |
-"""
-
-
-def _guard(running, reviewed=None):
+def _canon_rulebook(edit=None, extra_rows=""):
+    """A rulebook made of the canonical paraphrase of every row the templates use (rule_specs.canon)."""
+    import json as _json
     from src.router import rule_guard as rg
-    return rg.RuleGuard(rg.build_reference(RB), running, reviewed)
+    from src.router import rule_specs as rs
+    ref = _json.loads(rg.REFERENCE_PATH.read_text(encoding="utf-8"))["rows"]
+    by_sec: dict[str, list[str]] = {}
+    for (sec, prefix), spec in rs.SPECS.items():
+        text = spec["canon"]
+        if edit:
+            text = edit(prefix, text)
+        # use the full row name of the train rulebook so that the canonical rows are not "new rows"
+        full = min((k.split("|", 1)[1] for k in ref if k.startswith(f"{sec}|") and k.split("|", 1)[1].startswith(prefix)),
+                   key=len, default=prefix)
+        if text is not None:
+            by_sec.setdefault(sec, []).append(f"| {full} | {text} |")
+    out = ["# Rulebook"]
+    for sec, rows in sorted(by_sec.items(), key=lambda kv: int(kv[0])):
+        out += [f"## {sec}. Muc {sec}", "| Luat | Mac dinh |", "|---|---|"] + rows
+    return "\n".join(out) + "\n" + extra_rows
 
 
-def test_rule_guard_identical_rulebook_disables_nothing():
-    g = _guard(RB)
-    assert g.changed == g.removed == g.new == [] and g.disabled == {}
+def _guard(running):
+    import json as _json
+    from src.router import rule_guard as rg
+    ref = _json.loads(rg.REFERENCE_PATH.read_text(encoding="utf-8"))["rows"]
+    return rg.RuleGuard(ref, running)
 
 
-def test_rule_guard_changed_row_disables_dependent_intents_only():
-    g = _guard(RB.replace("theo **ngày đặt**", "theo **ngày giao**"))
-    assert g.changed == ["1|don thuoc ky nao"]
-    assert "revenue" in g.disabled and "order_count" in g.disabled
+ALL_INTENTS = {"revenue", "order_count", "cancel_count", "cancel_rate", "aov", "best_day", "topk_items", "best_item",
+               "item_qty", "item_revenue", "category_rev", "sell_price_on_day", "rev_change_pct"}
+
+
+def test_rule_guard_canonical_rulebook_disables_nothing():
+    assert _guard(_canon_rulebook()).disabled == {}
+
+
+def test_rule_guard_train_rulebook_disables_nothing():
+    f = ROOT / "data" / "train" / "train" / "rulebook.md"
+    if not f.is_file():
+        pytest.skip("train rulebook not available")
+    g = _guard(f.read_text(encoding="utf-8"))
+    assert g.disabled == {} and g.new == [] and g.changed == [] and g.removed == []
+
+
+def test_rule_guard_public_rulebook_only_switches_off_what_has_a_reason():
+    f = PUBLIC / "rulebook.md"
+    if not f.is_file():
+        pytest.skip("public rulebook not available")
+    g = _guard(f.read_text(encoding="utf-8"))
+    for intent, why in g.disabled.items():
+        assert why and all(("missing" in w or "contradicting" in w or "main idea absent" in w) for w in why), (intent, why)
+    # a row whose text was only extended (the public edit of "don thuoc ky nao") must not switch anything off
+    assert not any("don thuoc ky nao" in w for ws in g.disabled.values() for w in ws)
+
+
+def test_rule_guard_reversed_rule_switches_off_the_intents_that_use_it():
+    g = _guard(_canon_rulebook(lambda p, t: "don huy van tinh vao doanh thu, khong tra hang" if p == "don tinh vao doanh thu" else t))
+    assert set(g.disabled) == ALL_INTENTS - {"cancel_count", "cancel_rate", "sell_price_on_day"}
+    assert any("contradicting" in w for w in g.disabled["revenue"] if "don tinh vao doanh thu" in w)
     r = Router(g).route({"id": "t1", "as_of_date": AS_OF}, normalize("doanh thu tháng 3/2026", AS_OF), _db())
-    assert r.route == "llm" and r.reason.startswith("rulebook_changed:revenue")
-    g2 = _guard(RB.replace("theo **ngày đặt**", "theo **ngày giao**"), reviewed={"1|don thuoc ky nao"})
-    assert g2.disabled == {}  # a human marked the change as compatible
+    assert r.route == "llm" and r.reason.startswith("rulebook_guard:revenue")
 
 
-def test_rule_guard_new_row_cue_sends_matching_question_to_llm():
-    new = RB + "## 3b. x\n" + "| Ngày đắt khách nhất | ngày có nhiều đơn nhất |\n"
-    new = RB.replace("## 3. Xếp hạng", "## 3. Xếp hạng\n| Ngày đắt khách nhất | ngày có nhiều đơn nhất |")
-    g = _guard(new)
-    assert g.new == ["3|ngay dat khach nhat"] and g.disabled == {}
+def test_rule_guard_negation_is_respected():
+    only = lambda p, t, new: new if p == "doanh thu mot don" else t  # noqa: E731
+    bad = _guard(_canon_rulebook(lambda p, t: only(p, t, "tong thanh tien cac dong hang, tru giam gia tren ca don")))
+    assert "aov" in bad.disabled and "best_day" in bad.disabled
+    ok = _guard(_canon_rulebook(lambda p, t: only(p, t, "tong thanh tien cac dong hang (da tru giam gia tren tung dong), khong tru giam gia tren ca don")))
+    assert ok.disabled == {}
+
+
+def test_rule_guard_removed_row_or_section_switches_off():
+    g = _guard(_canon_rulebook(lambda p, t: None if p == "so don" else t))
+    assert set(g.disabled) == {"order_count", "aov"} and "missing" in g.disabled["order_count"][0]
+    g = _guard(_canon_rulebook(lambda p, t: None if p in ("ti le don huy trong ky", "gia ban x ngay d") else t))
+    assert set(g.disabled) == {"cancel_rate", "sell_price_on_day"}
+
+
+def test_rule_guard_extra_sentences_and_new_rows_do_not_switch_off_but_new_rows_make_cues():
+    g = _guard(_canon_rulebook(lambda p, t: t + ". them mot cau vi du moi, khong doi y nghia (vi du: don chua giao)",
+                               "## 3. Muc 3\n| Ngày đắt khách nhất | ngày có nhiều đơn nhất |\n"))
+    assert g.disabled == {} and g.new == ["3|ngay dat khach nhat"]
     d = Router(g).route({"id": "t1", "as_of_date": AS_OF}, normalize("tháng 3/2026 ngày nào đắt khách nhất", AS_OF), _db())
     assert d.route == "llm" and d.reason.startswith("new_rule_cue")
     d = Router(g).route({"id": "t1", "as_of_date": AS_OF}, normalize("tháng 3/2026 ngày nào bán được nhiều tiền nhất", AS_OF), _db())
     assert d.route == "template"
 
 
-def test_rule_guard_removed_row():
-    g = _guard(RB.replace("| Số đơn | chỉ tính đơn không huỷ, không trả |\n", ""))
-    assert g.removed == ["1|so don"] and "order_count" in g.disabled and "revenue" not in g.disabled
+def test_rule_guard_variants_of_the_main_idea_are_accepted():
+    g = _guard(_canon_rulebook(lambda p, t: "ngoai tru don huy va don tra hang, bo toan bo don co tra hang" if p == "don tinh vao doanh thu" else t))
+    assert g.disabled == {}
+
+
+def test_reviewed_notes_do_not_change_the_decision():
+    from src.router import rule_guard as rg
+    reversed_rb = _canon_rulebook(lambda p, t: "huy van tinh, khong tra hang, ca don" if p == "don tinh vao doanh thu" else t)
+    import json as _json
+    ref = _json.loads(rg.REFERENCE_PATH.read_text(encoding="utf-8"))["rows"]
+    g = rg.RuleGuard(ref, reversed_rb, reviewed={"1|don tinh vao doanh thu"})
+    assert "revenue" in g.disabled   # an approval note cannot re-enable a contradicted rule
 
 
 def test_rule_guard_reference_matches_row_count():

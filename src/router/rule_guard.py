@@ -1,14 +1,15 @@
 """Protection against a rulebook that differs from the one the templates were written for.
 
-The router's templates encode rulebook rows (valid orders, who counts as a customer, ...).  At inference the running
-`rulebook.md` is compared row by row with a reference (`rule_reference.json`: sha256 of the normalised text of every
-row of the TRAIN rulebook, no rule text stored).  An intent is disabled when a row it depends on changed or vanished;
-rows that did not exist in the reference are reported and, when a question contains all content words of such a row's
-name, the question goes to the LLM (a new rule may redefine what the question asks).
+Each template depends on rulebook rows (`DEPENDENCIES`); for every such row `rule_specs.SPECS` lists its main ideas
+(phrases that must still be there, with variants) and contradicting phrases.  At inference the running `rulebook.md` is
+read and an intent is switched off ONLY when a row it uses is missing, lost one of its main ideas, or contains a
+contradicting phrase.  Added sentences, examples and new rows do not switch anything off, and nobody has to approve a
+change: the decision is made from the text alone.
 
-`reviewed_rule_changes.json` lists, under "approved", the "<section>|<row>" keys a human has checked as compatible with
-the templates (each with a "reason"); those are not treated as changes.  "pending" rows stay switched off.  Nothing is
-added there automatically.
+Rows that did not exist in the train rulebook (names compared with `rule_reference.json`, hashes of the train rows, no
+rule text stored) are reported, and a question containing the words of such a row's name, in order and close together,
+goes to the LLM (a new rule may redefine what the question asks).  Changed-but-compatible rows are only reported.
+`reviewed_rule_changes.json` is a notebook of human reviews; it has no effect on the decision.
 """
 from __future__ import annotations
 
@@ -20,13 +21,14 @@ from pathlib import Path
 from typing import Any
 
 from ..timeutil import fold
+from .rule_specs import SPECS
 
 REFERENCE_PATH = Path(__file__).with_name("rule_reference.json")
 REVIEWED_PATH = Path(__file__).with_name("reviewed_rule_changes.json")
 
 _TIME = [("2", n) for n in (
     "ngay x, hom nay, hom qua", "den het ngay x", "tu x den y", "n ngay gan nhat", "tuan", "thang m/y", "thang nay",
-    "tu dau nam", "thang m, quy q khong ghi nam")]
+    "tu dau nam", "thang m, quy q khong ghi nam")]  # every prefix has an entry in rule_specs.SPECS
 _STATUS = [("8", "trang thai don"), ("8", "hai dong cua cung mot don"), ("8", "o de trong o cac dong sau"),
            ("8", "ten goi, nhan")]
 _ORDER = [("1", "don tinh vao doanh thu"), ("1", "don thuoc ky nao")] + _STATUS + _TIME
@@ -110,21 +112,45 @@ def _load_reviewed(path: Path) -> set[str]:
     return {(x["key"] if isinstance(x, dict) else x) for x in items}
 
 
+def _lookup(rows: dict[str, str], sec: str, prefix: str) -> tuple[str | None, str | None]:
+    """Row whose name starts with `prefix`: same section first, then any; the shortest name wins (exact before longer)."""
+    cands = [(k.split("|", 1)[0] != sec, len(k), k) for k in rows if k.split("|", 1)[1].startswith(prefix)]
+    if not cands:
+        return None, None
+    k = min(cands)[2]
+    return k, rows[k]
+
+
+def spec_problems(rows: dict[str, str]) -> dict[tuple[str, str], list[str]]:
+    """{(section, prefix): reasons} for every spec the running rulebook no longer satisfies."""
+    out: dict[tuple[str, str], list[str]] = {}
+    for (sec, prefix), spec in SPECS.items():
+        key, text = _lookup(rows, sec, prefix)
+        if text is None:
+            out[(sec, prefix)] = [f"row '{sec}|{prefix}' missing"]
+            continue
+        why = [f"main idea absent from '{key}': /{rx}/" for rx in spec["must"] if not re.search(rx, text)]
+        why += [f"contradicting phrase in '{key}': /{rx}/" for rx in spec["contradict"] if re.search(rx, text)]
+        if why:
+            out[(sec, prefix)] = why
+    return out
+
+
 class RuleGuard:
     def __init__(self, reference: dict[str, str], running_text: str, reviewed: set[str] | None = None):
-        self.reviewed = reviewed or set()
+        self.reviewed = reviewed or set()  # notes only
         run = parse_rulebook(running_text)
         run_h = {k: _h(v) for k, v in run.items()}
         self._running_keys = set(run)
-        self.changed = sorted(k for k in run_h if k in reference and run_h[k] != reference[k] and k not in self.reviewed)
-        self.removed = sorted(k for k in reference if k not in run_h and k not in self.reviewed)
-        self.new = sorted(k for k in run_h if k not in reference and k not in self.reviewed)
-        bad = set(self.changed) | set(self.removed)
+        self.changed = sorted(k for k in run_h if k in reference and run_h[k] != reference[k])   # report only
+        self.removed = sorted(k for k in reference if k not in run_h)                            # report only
+        self.new = sorted(k for k in run_h if k not in reference)
+        self.problems = spec_problems(run)
         self.disabled: dict[str, list[str]] = {}
         for intent, deps in DEPENDENCIES.items():
-            hit = sorted({k for sec, pre in deps for k in _find(set(reference) | set(run_h), sec, pre) if k in bad})
-            if hit:
-                self.disabled[intent] = hit
+            why = [f"{sec}|{pre}: {r}" for sec, pre in deps for r in self.problems.get((sec, pre), [])]
+            if why:
+                self.disabled[intent] = why
         self._cues = []
         for k in self.new:
             toks = [t for t in re.findall(r"[a-z0-9]+", k.split("|", 1)[1]) if t not in _STOP and len(t) > 1]
@@ -134,9 +160,8 @@ class RuleGuard:
     @classmethod
     def load(cls, running_rulebook: Path | str) -> "RuleGuard":
         ref = json.loads(REFERENCE_PATH.read_text(encoding="utf-8"))["rows"]
-        rp = Path(os.environ.get("DATAMATE_REVIEWED_RULES") or REVIEWED_PATH)  # env: analysis only
-        rev = _load_reviewed(rp)
-        return cls(ref, Path(running_rulebook).read_text(encoding="utf-8"), rev)
+        rp = Path(os.environ.get("DATAMATE_REVIEWED_RULES") or REVIEWED_PATH)  # notes; no effect on the decision
+        return cls(ref, Path(running_rulebook).read_text(encoding="utf-8"), _load_reviewed(rp))
 
     def defines(self, sec: str, prefix: str) -> bool:
         """Does the running rulebook still have a row (section, name starting with prefix)?"""
@@ -145,7 +170,7 @@ class RuleGuard:
     def check(self, intent: str, folded_question: str) -> str | None:
         """Reason to leave the question to the LLM, else None."""
         if intent in self.disabled:
-            return f"rulebook_changed:{intent}<-{';'.join(self.disabled[intent])}"
+            return f"rulebook_guard:{intent}<-{'; '.join(self.disabled[intent])[:300]}"
         words = re.findall(r"[a-z0-9]+", folded_question)
         for key, toks in self._cues:
             if _in_order_close(toks, words):
@@ -153,4 +178,5 @@ class RuleGuard:
         return None
 
     def report(self) -> dict[str, Any]:
-        return {"changed": self.changed, "removed": self.removed, "new": self.new, "disabled_intents": self.disabled}
+        return {"changed_text_report_only": self.changed, "removed_report_only": self.removed, "new": self.new,
+                "spec_problems": {f"{a}|{b}": v for (a, b), v in self.problems.items()}, "disabled_intents": self.disabled}

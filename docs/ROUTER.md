@@ -37,7 +37,7 @@ danh sách theo số câu, view cần dùng và độ khó nằm ở `docs/ROUTE
 Router KHÔNG trả lời (chuyển xuống agent) khi: intent ngoài danh sách (`not_target:<nhãn>`), có bộ lọc phụ (`extra_filter_or_subintent`),
 trùng nhiều intent (`multi_intent`), còn teencode (`normalizer_residual_teencode`), Period thiếu/mơ hồ/nhiều (`period_missing`,
 `period_ambiguous`, `period_count`), không khớp tên hàng/nhóm (`item_not_found`, `category_not_found`), sai đơn vị (`unit_mismatch`),
-dòng luật đã đổi (`rulebook_changed:<intent>`), câu chứa cue của luật mới (`new_rule_cue:<dòng>`).
+luật bị mất/mâu thuẫn (`rulebook_guard:<intent><-<lý do>`), câu chứa cue của luật mới (`new_rule_cue:<dòng>`).
 Router tự `abstain` khi: shop có cờ dữ liệu (`shop_low_confidence`), kỳ giao với ngày không parse được
 (`period_overlaps_unparsed_dates`), đáp án không hợp lý (`sanity:<luật>`).
 
@@ -47,7 +47,7 @@ Router tự `abstain` khi: shop có cờ dữ liệu (`shop_low_confidence`), k�
 |---|---|---|
 | bất biến shop | `invariants.py`, `invariant_thresholds.json` | tỉ lệ trạng thái lạ, đơn vị chưa quy đổi, tháng DT ≤ 0, dòng trùng so với mức tệ nhất của 30 shop train → cả shop abstain; `amount_ratio` chỉ cảnh báo; shop không dựng được view (`no_ledger`) → router bỏ qua, agent xử lý như cũ |
 | ngày không parse | `invariants.py` | ô ngày không rỗng parse lỗi (kể cả khi đã có năm sheet; bỏ dòng tổng cộng) → chỉ câu có Period giao với khoảng đó abstain |
-| luật đổi | `rule_guard.py`, `rule_reference.json`, `reviewed_rule_changes.json` | so từng dòng rulebook đang chạy với băm của rulebook train; dòng đổi/mất → tắt intent phụ thuộc; dòng mới → cue chuyển câu xuống agent. Khoá đã duyệt (có `reason`) trong `reviewed_rule_changes.json` |
+| luật đổi | `rule_guard.py`, `rule_specs.py`, `rule_reference.json` | **tự động, không cần người duyệt.** Mỗi dòng rulebook mà một template dùng có "ý chính" (cụm từ không dấu, có biến thể) và "cụm mâu thuẫn" trong `rule_specs.py`. Intent chỉ bị tắt khi dòng nó dùng **mất**, **không còn ý chính**, hoặc **có cụm mâu thuẫn**; thêm câu/ví dụ/dòng mới thì không tắt. Dòng chỉ có trong rulebook đang chạy (so tên với băm của rulebook train) tạo "cue": câu chứa các từ của tên dòng theo thứ tự và gần nhau chuyển xuống agent (`new_rule_cue`). `reviewed_rule_changes.json` chỉ là sổ ghi chú, không ảnh hưởng quyết định |
 | hợp lý đáp án | `sanity.py` | percent, cancel_rate 0–100, AOV trong [min,max] giá trị đơn, ngày trong kỳ, tên có trong `v_items`, số không âm |
 
 ## Chạy
@@ -63,7 +63,7 @@ Biến môi trường (tất cả tuỳ chọn):
 | `DATAMATE_CACHE_DIR` | thư mục cache SQLite theo shop (mặc định `/tmp/datamate_cache`) |
 | `DATAMATE_NO_CACHE=1` | không dùng cache đĩa |
 | `DATAMATE_LEGACY_INGESTION=1` | nạp dữ liệu kiểu cũ, không có view (router không áp dụng được) |
-| `DATAMATE_REVIEWED_RULES=<json>` | chỉ để phân tích: thay `reviewed_rule_changes.json` |
+| `DATAMATE_REVIEWED_RULES=<json>` | chỉ để phân tích: thay sổ ghi chú `reviewed_rule_changes.json` (không đổi quyết định) |
 
 Pipeline đầy đủ (router + LLM): `bash predict.sh` (hoặc `python -m src.predict --data-dir … --result-dir … --model-path … --tensor-parallel-size 2`).
 
@@ -80,7 +80,7 @@ Thời gian: 751 giây cho 1000 câu public trên một tiến trình CPU (bản
 Thư viện: chỉ `pandas` (kéo theo `numpy`) và `openpyxl` (đã có trong `requirements.txt`); `torch/vllm` chỉ được nạp khi chạy có model.
 
 Công cụ CPU: `scripts/eval_router.py` (đo trên train, `--fold dev|holdout|both`), `scripts/data_invariants.py` (derive/report),
-`scripts/build_rule_reference.py` (build/diff rulebook), `scripts/make_router_submission.py` (bản nộp router-only từ public, có `--guard`),
+`scripts/build_rule_reference.py` (build/diff rulebook: in intent bị tắt và lý do, dòng đổi/mất/mới), `scripts/make_router_submission.py` (bản nộp router-only từ public, có `--guard`),
 `scripts/make_probes.py` (file dò leaderboard).
 
 ## Agent nhận gì từ router (cho An)

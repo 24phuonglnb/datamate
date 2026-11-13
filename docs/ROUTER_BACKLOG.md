@@ -115,8 +115,8 @@ Ghi chú khác cho Nghiệp:
 - **`tests/test_rule_regression.py` (2 test)** fail vì đòi cấu trúc `data/train/data/...`, trong khi dữ liệu chính thức là `data/train/train/data/...`.
 - **Mã router copy từ code của Nghiệp cần duyệt:** `src/router/templates.py` (10 SQL nguyên văn từ `rule_regression.py`),
   `src/router/_tagger_rules.py` (nguyên văn từ `intent_tagger.py`), regex bộ lọc trong `src/router/intents.py`.
-- **Luật đổi cần Nghiệp xem:** `reviewed_rule_changes.json` ghi `2|den het ngay x…` đã duyệt (lý do trong file) và `1|don thuoc ky nao`
-  còn chờ (view loại cả đơn có dòng trả hàng; dữ liệu train không có cột ngày trả nên chưa kiểm được "trả sau kỳ").
+- **Luật đổi:** guard rulebook nay tự động (ý chính / cụm mâu thuẫn trong `src/router/rule_specs.py`); `reviewed_rule_changes.json` chỉ là sổ ghi chú
+  (đã ghi `2|den het ngay x…` và `1|don thuoc ky nao` kèm lý do). Nghiệp xem lại `rule_specs.py` nếu định nghĩa view đổi.
 
 ## Luật chỉ có trong rulebook public (không có ở train; chỉ tên dòng)
 
