@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .ingestion import BusinessDB
+from .timeutil import format_for_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +149,10 @@ def typed_result(typ: str, columns: list[str], rows: list[tuple[Any, ...]]) -> A
 
 
 class Agent:
-    def __init__(self, model: Any, root: Path, max_attempts: int = 2):
+    def __init__(self, model: Any, root: Path, max_attempts: int = 2, normalizer: Any = None):
+        # normalizer: optional callable (question, as_of) -> NormalizedQuestion (src.nlu.normalize).
+        # None keeps the original behaviour exactly.
+        self.normalizer = normalizer
         self.model = model
         self.root = root
         self.max_attempts = max_attempts
@@ -204,15 +208,25 @@ class Agent:
             description = self._read_text(self.root / "data" / biz / "README.md")
             as_of = str(question.get("as_of_date", ""))
             raw_question = str(question.get("question", ""))
-            # Annotate informal Vietnamese date references to help the model.
-            annotated_question = normalize_date_hints(raw_question, as_of)
+            period_block = ""
+            if self.normalizer is not None:
+                nq = self.normalizer(raw_question, as_of)
+                annotated_question = nq.text
+                period_block = format_for_prompt(nq.period)
+                log["normalized"] = {"text": nq.text, "flags": nq.flags, "needs_llm": nq.needs_llm,
+                                     "period": nq.period.to_dict()}
+            else:
+                # Annotate informal Vietnamese date references to help the model.
+                annotated_question = normalize_date_hints(raw_question, as_of)
 
             prompt = (
                 f"BUSINESS README:\n{description}\n\n"
                 f"RULEBOOK:\n{self.rulebook}\n\n"
                 f"DATABASE SCHEMA AND SAMPLE ROWS:\n{db.schema_text()}\n\n"
                 f"AS_OF_DATE: {as_of}\n"
-                f"QUESTION: {annotated_question}"
+                + (f"RESOLVED TIME PERIODS (rulebook section 2; use exactly these dates):\n{period_block}\n"
+                   if period_block else "")
+                + f"QUESTION: {annotated_question}"
             )
             error: str | None = None
             last_failed_sql: str | None = None
