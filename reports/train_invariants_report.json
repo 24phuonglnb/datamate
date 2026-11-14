@@ -1,0 +1,981 @@
+[
+  {
+    "shop": "biz_101",
+    "rows": 56501,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 22428
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 56501
+    },
+    "constant_unit_factor": {
+      "status": "PASS",
+      "constant_ratio": 1.0,
+      "distinct_item_units": 159
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.030335746269977523,
+      "cancelled_lines": 1714,
+      "total_lines": 56501
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-08-24",
+      "actual_max_date": "2026-08-24",
+      "actual_min_date": "2025-06-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_102",
+    "rows": 86029,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 34165
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 86029
+    },
+    "constant_unit_factor": {
+      "status": "PASS",
+      "constant_ratio": 1.0,
+      "distinct_item_units": 137
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.028978600239454137,
+      "cancelled_lines": 2493,
+      "total_lines": 86029
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-06-16",
+      "actual_max_date": "2026-06-16",
+      "actual_min_date": "2025-01-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_103",
+    "rows": 45534,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 18133
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 45534
+    },
+    "constant_unit_factor": {
+      "status": "PASS",
+      "constant_ratio": 1.0,
+      "distinct_item_units": 136
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.027495937101945797,
+      "cancelled_lines": 1252,
+      "total_lines": 45534
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-07-09",
+      "actual_max_date": "2026-07-09",
+      "actual_min_date": "2025-04-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_104",
+    "rows": 62451,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 39006
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 62451
+    },
+    "constant_unit_factor": {
+      "status": "PASS",
+      "constant_ratio": 1.0,
+      "distinct_item_units": 61
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.020496068918031737,
+      "cancelled_lines": 1280,
+      "total_lines": 62451
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-06-02",
+      "actual_max_date": "2026-06-02",
+      "actual_min_date": "2025-04-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_105",
+    "rows": 137983,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 86142
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 137633
+    },
+    "constant_unit_factor": {
+      "status": "PASS",
+      "constant_ratio": 1.0,
+      "distinct_item_units": 52
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.019292231651725212,
+      "cancelled_lines": 2662,
+      "total_lines": 137983
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-06-24",
+      "actual_max_date": "2026-06-24",
+      "actual_min_date": "2025-02-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_106",
+    "rows": 126186,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 78847
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 126186
+    },
+    "constant_unit_factor": {
+      "status": "PASS",
+      "constant_ratio": 1.0,
+      "distinct_item_units": 64
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.018662926156625934,
+      "cancelled_lines": 2355,
+      "total_lines": 126186
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-09-14",
+      "actual_max_date": "2026-09-14",
+      "actual_min_date": "2025-02-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_107",
+    "rows": 43079,
+    "single_date_and_status_per_order": {
+      "status": "N/A",
+      "message": "No order_id in table (line-only ledger)"
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 43079
+    },
+    "constant_unit_factor": {
+      "status": "PASS",
+      "constant_ratio": 1.0,
+      "distinct_item_units": 143
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.02699691264885443,
+      "cancelled_lines": 1163,
+      "total_lines": 43079
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-07-22",
+      "actual_max_date": "2026-07-22",
+      "actual_min_date": "2025-03-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_108",
+    "rows": 78983,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 31501
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 78983
+    },
+    "constant_unit_factor": {
+      "status": "PASS",
+      "constant_ratio": 1.0,
+      "distinct_item_units": 263
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.03184229517744325,
+      "cancelled_lines": 2515,
+      "total_lines": 78983
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-05-29",
+      "actual_max_date": "2026-05-29",
+      "actual_min_date": "2025-01-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_109",
+    "rows": 83284,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 33065
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 83284
+    },
+    "constant_unit_factor": {
+      "status": "PASS",
+      "constant_ratio": 1.0,
+      "distinct_item_units": 306
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.03183084385956486,
+      "cancelled_lines": 2651,
+      "total_lines": 83284
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-08-05",
+      "actual_max_date": "2026-08-05",
+      "actual_min_date": "2025-01-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_110",
+    "rows": 28888,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 28888
+    },
+    "arithmetic_line_amount": {
+      "status": "N/A",
+      "message": "Too few lines with positive qty and price (0 lines)"
+    },
+    "constant_unit_factor": {
+      "status": "N/A",
+      "message": "No unit column present in table"
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.018865965106618664,
+      "cancelled_lines": 545,
+      "total_lines": 28888
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-07-03",
+      "actual_max_date": "2026-07-03",
+      "actual_min_date": "2025-05-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_111",
+    "rows": 106585,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 66469
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 106585
+    },
+    "constant_unit_factor": {
+      "status": "PASS",
+      "constant_ratio": 1.0,
+      "distinct_item_units": 52
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.0204625416334381,
+      "cancelled_lines": 2181,
+      "total_lines": 106585
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-08-19",
+      "actual_max_date": "2026-08-19",
+      "actual_min_date": "2025-01-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_112",
+    "rows": 113325,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 70778
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 113325
+    },
+    "constant_unit_factor": {
+      "status": "PASS",
+      "constant_ratio": 1.0,
+      "distinct_item_units": 64
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.02027796161482462,
+      "cancelled_lines": 2298,
+      "total_lines": 113325
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-07-31",
+      "actual_max_date": "2026-07-31",
+      "actual_min_date": "2025-04-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_113",
+    "rows": 32994,
+    "single_date_and_status_per_order": {
+      "status": "N/A",
+      "message": "No order_id in table (line-only ledger)"
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 32994
+    },
+    "constant_unit_factor": {
+      "status": "PASS",
+      "constant_ratio": 1.0,
+      "distinct_item_units": 88
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.019912711402073104,
+      "cancelled_lines": 657,
+      "total_lines": 32994
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-08-09",
+      "actual_max_date": "2026-08-09",
+      "actual_min_date": "2025-02-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_114",
+    "rows": 26119,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 11875
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 26119
+    },
+    "constant_unit_factor": {
+      "status": "PASS",
+      "constant_ratio": 1.0,
+      "distinct_item_units": 72
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.019449442934262415,
+      "cancelled_lines": 508,
+      "total_lines": 26119
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-06-21",
+      "actual_max_date": "2026-06-21",
+      "actual_min_date": "2025-01-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_115",
+    "rows": 28721,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 13009
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 28721
+    },
+    "constant_unit_factor": {
+      "status": "PASS",
+      "constant_ratio": 1.0,
+      "distinct_item_units": 74
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.019532746074301034,
+      "cancelled_lines": 561,
+      "total_lines": 28721
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-05-16",
+      "actual_max_date": "2026-05-16",
+      "actual_min_date": "2025-02-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_116",
+    "rows": 39889,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 18099
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 39889
+    },
+    "constant_unit_factor": {
+      "status": "PASS",
+      "constant_ratio": 1.0,
+      "distinct_item_units": 89
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.01822557597332598,
+      "cancelled_lines": 727,
+      "total_lines": 39889
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-09-03",
+      "actual_max_date": "2026-09-03",
+      "actual_min_date": "2025-05-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_117",
+    "rows": 33332,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 14992
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 33218
+    },
+    "constant_unit_factor": {
+      "status": "PASS",
+      "constant_ratio": 1.0,
+      "distinct_item_units": 72
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.020190807632305293,
+      "cancelled_lines": 673,
+      "total_lines": 33332
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-05-20",
+      "actual_max_date": "2026-05-20",
+      "actual_min_date": "2025-01-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_118",
+    "rows": 46001,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 20869
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 46001
+    },
+    "constant_unit_factor": {
+      "status": "PASS",
+      "constant_ratio": 1.0,
+      "distinct_item_units": 68
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.02165170322384296,
+      "cancelled_lines": 996,
+      "total_lines": 46001
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-09-10",
+      "actual_max_date": "2026-09-10",
+      "actual_min_date": "2025-02-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_119",
+    "rows": 63823,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 34047
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 63823
+    },
+    "constant_unit_factor": {
+      "status": "N/A",
+      "message": "No unit column present in table"
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.010027732948936904,
+      "cancelled_lines": 640,
+      "total_lines": 63823
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-07-13",
+      "actual_max_date": "2026-07-13",
+      "actual_min_date": "2025-01-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_120",
+    "rows": 90706,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 48389
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 90706
+    },
+    "constant_unit_factor": {
+      "status": "N/A",
+      "message": "No unit column present in table"
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.009525279474345689,
+      "cancelled_lines": 864,
+      "total_lines": 90706
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-06-12",
+      "actual_max_date": "2026-06-12",
+      "actual_min_date": "2025-01-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_121",
+    "rows": 82920,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 44042
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 82920
+    },
+    "constant_unit_factor": {
+      "status": "PASS",
+      "constant_ratio": 1.0,
+      "distinct_item_units": 199
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.0102990834539315,
+      "cancelled_lines": 854,
+      "total_lines": 82920
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-09-20",
+      "actual_max_date": "2026-09-20",
+      "actual_min_date": "2025-03-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_122",
+    "rows": 103663,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 55079
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 103663
+    },
+    "constant_unit_factor": {
+      "status": "PASS",
+      "constant_ratio": 1.0,
+      "distinct_item_units": 211
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.009646643450411429,
+      "cancelled_lines": 1000,
+      "total_lines": 103663
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-07-17",
+      "actual_max_date": "2026-07-17",
+      "actual_min_date": "2025-01-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_123",
+    "rows": 62941,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 33630
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 62941
+    },
+    "constant_unit_factor": {
+      "status": "PASS",
+      "constant_ratio": 1.0,
+      "distinct_item_units": 163
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.01037479544335171,
+      "cancelled_lines": 653,
+      "total_lines": 62941
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-06-28",
+      "actual_max_date": "2026-06-28",
+      "actual_min_date": "2025-01-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_124",
+    "rows": 95845,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 51044
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 95845
+    },
+    "constant_unit_factor": {
+      "status": "PASS",
+      "constant_ratio": 1.0,
+      "distinct_item_units": 309
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.010308310292660024,
+      "cancelled_lines": 988,
+      "total_lines": 95845
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-05-25",
+      "actual_max_date": "2026-05-25",
+      "actual_min_date": "2025-01-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_125",
+    "rows": 79052,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 20977
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 79052
+    },
+    "constant_unit_factor": {
+      "status": "PASS",
+      "constant_ratio": 1.0,
+      "distinct_item_units": 73
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.019442898345392905,
+      "cancelled_lines": 1537,
+      "total_lines": 79052
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-05-11",
+      "actual_max_date": "2026-05-11",
+      "actual_min_date": "2025-01-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_126",
+    "rows": 66429,
+    "single_date_and_status_per_order": {
+      "status": "N/A",
+      "message": "No order_id in table (line-only ledger)"
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 66429
+    },
+    "constant_unit_factor": {
+      "status": "PASS",
+      "constant_ratio": 1.0,
+      "distinct_item_units": 78
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.018350419244607025,
+      "cancelled_lines": 1219,
+      "total_lines": 66429
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-06-06",
+      "actual_max_date": "2026-06-06",
+      "actual_min_date": "2025-01-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_127",
+    "rows": 128293,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 33874
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 128293
+    },
+    "constant_unit_factor": {
+      "status": "PASS",
+      "constant_ratio": 1.0,
+      "distinct_item_units": 69
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.0187929193330891,
+      "cancelled_lines": 2411,
+      "total_lines": 128293
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-07-28",
+      "actual_max_date": "2026-07-28",
+      "actual_min_date": "2025-03-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_128",
+    "rows": 98507,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 26505
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 98507
+    },
+    "constant_unit_factor": {
+      "status": "N/A",
+      "message": "No unit column present in table"
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.020100094409534346,
+      "cancelled_lines": 1980,
+      "total_lines": 98507
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-09-07",
+      "actual_max_date": "2026-09-07",
+      "actual_min_date": "2025-04-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_129",
+    "rows": 145479,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 38499
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 145479
+    },
+    "constant_unit_factor": {
+      "status": "PASS",
+      "constant_ratio": 1.0,
+      "distinct_item_units": 69
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.018827459633349142,
+      "cancelled_lines": 2739,
+      "total_lines": 145479
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-08-14",
+      "actual_max_date": "2026-08-14",
+      "actual_min_date": "2025-01-01",
+      "diff_days": 0
+    }
+  },
+  {
+    "shop": "biz_130",
+    "rows": 171936,
+    "single_date_and_status_per_order": {
+      "status": "PASS",
+      "single_date_ratio": 1.0,
+      "single_status_ratio": 1.0,
+      "total_orders": 45878
+    },
+    "arithmetic_line_amount": {
+      "status": "PASS",
+      "match_ratio": 1.0,
+      "evaluated_lines": 171936
+    },
+    "constant_unit_factor": {
+      "status": "PASS",
+      "constant_ratio": 1.0,
+      "distinct_item_units": 69
+    },
+    "cancellation_rate": {
+      "status": "PASS",
+      "cancellation_rate": 0.01942001675041876,
+      "cancelled_lines": 3339,
+      "total_lines": 171936
+    },
+    "date_range_matches_readme": {
+      "status": "PASS",
+      "readme_max_date": "2026-08-29",
+      "actual_max_date": "2026-08-29",
+      "actual_min_date": "2025-02-01",
+      "diff_days": 0
+    }
+  }
+]
