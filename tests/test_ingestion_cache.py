@@ -10,6 +10,7 @@ from unittest import mock
 import pytest
 
 from scripts.create_demo_data import create_demo
+from src.data_paths import train_dir
 from src.ingestion import (
     BusinessDB,
     TableInfo,
@@ -17,7 +18,7 @@ from src.ingestion import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-TRAIN_DIR = ROOT / "data" / "train"
+TRAIN_DIR = train_dir()
 
 
 def test_business_hash_deterministic(tmp_path: Path) -> None:

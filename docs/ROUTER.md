@@ -34,10 +34,16 @@ Mỗi câu ghi `log["router"] = {route, reason, intent, params, shop_warnings?}`
 | `cust_group_rev` | number | `v_valid_orders.customer_group`, tên nhóm sau chữ "nhóm" |
 | `payment_method_rev`, `channel_rev` | number | đúng một hình thức/kênh được nêu (tiền mặt/chuyển khoản/ví/COD/ghi nợ; tại quầy/Zalo OA/điện thoại); nhiều giá trị hoặc phần trăm → agent |
 | `unit_total_qty` | number | tổng `qty_base` mọi mặt hàng có đơn vị cơ bản = đơn vị hỏi; nêu tên mặt hàng → agent |
+| `ingredient_revenue` | number | doanh thu thuốc có hoạt chất ghi đúng như câu hỏi (`v_items.active_ingredient`); thuốc phối hợp "A + B" là loại riêng, câu hỏi "A" không khớp "A + B" → agent |
+| `rx_nonrx_revenue`, `rx_share` | number, percent | thuốc kê đơn / không kê đơn (`is_prescription`), tỉ lệ kê đơn trên tổng doanh thu |
+| `purchase_total`, `supplier_top`, `purchase_avg_price` | number, string, number | `v_valid_purchase_lines` theo `receipt_date`; NCC cao nhất (hoà → agent); giá nhập bình quân theo số lượng nhập, đúng đơn vị nhập |
+| `stock_qty`, `stock_large_unit`, `stock_value` | number, list `[chẵn, lẻ]`, number | `v_stock` (cuối dữ liệu), `v_stock_card` khi hỏi ngày sớm hơn (không có thẻ kho → agent), `v_item_units`; giá trị tồn chỉ khi mọi hàng còn tồn có giá vốn |
+| `expiry_list`, `expiry_nearest_lot` | number (số lô) hoặc list (sản phẩm), date | `v_lots`: lô còn tồn hết hạn từ hôm nay đến hết ngày E; lô gần hết hạn nhất của một thuốc |
+| shop thiếu view (sổ nhập, tồn kho, lô) hoặc sổ nhập không có tiền | unanswerable | §7; template kiểm tra view trước, không chạy SQL trên view không có |
 | câu chủ quan (hay khen, lễ phép…) | unanswerable | §7 |
 | kỳ nằm hoàn toàn trước dữ liệu của shop | unanswerable | §7 |
 
-Mọi intent khác (ca, tăng giá, nhóm hàng chiếm %, nhập hàng, tồn kho, công nợ, khách…) đi xuống agent:
+Mọi intent khác (ca, tăng giá, nhóm hàng chiếm %, nhập trừ bán, hết hàng cuối ngày, công nợ, giá vốn/lãi, khách…) đi xuống agent:
 danh sách theo số câu, view cần dùng và độ khó nằm ở `docs/ROUTER_BACKLOG.md` (backlog chia cho An và Nghiệp).
 
 Router KHÔNG trả lời (chuyển xuống agent) khi: intent ngoài danh sách (`not_target:<nhãn>`), có bộ lọc phụ (`extra_filter_or_subintent`),

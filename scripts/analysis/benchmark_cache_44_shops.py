@@ -8,11 +8,12 @@ import shutil
 import time
 from pathlib import Path
 
+from src.data_paths import public_test_dir, train_dir
 from src.ingestion import BusinessDB, compute_business_hash
 
 ROOT = Path(__file__).resolve().parents[2]
-TRAIN_DIR = ROOT / "data" / "train"
-TEST_DIR = ROOT / "data" / "public_test"
+TRAIN_DIR = train_dir()
+TEST_DIR = public_test_dir()
 BENCHMARK_CACHE_DIR = Path("/tmp/datamate_bench_cache")
 
 

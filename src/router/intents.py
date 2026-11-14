@@ -18,9 +18,13 @@ TARGET_INTENTS = (
     "revenue", "order_count", "cancel_count", "cancel_rate", "aov",
     "best_day", "topk_items", "best_item", "item_qty", "rev_change_pct",
 )
+# Pharmacy drug attributes (VIEWS.md 3.5), purchases (3.8) and stock / lots (3.9): tagger labels used as intent names.
+SALES_PHARMACY_INTENTS = ("ingredient_revenue", "rx_nonrx_revenue", "rx_share")   # sales views + v_items, order dates
+INVENTORY_INTENTS = ("purchase_total", "supplier_top", "purchase_avg_price",       # own views, own date column
+                     "stock_qty", "stock_large_unit", "stock_value", "expiry_list", "expiry_nearest_lot")
 EXTRA_INTENTS = ("item_revenue", "category_rev", "sell_price_on_day", "unans_subjective",
                  "best_month", "monthly_series", "streak_bool", "cust_group_rev", "payment_method_rev", "channel_rev",
-                 "unit_total_qty")
+                 "unit_total_qty") + SALES_PHARMACY_INTENTS + INVENTORY_INTENTS
 ENABLED_EXTRA = EXTRA_INTENTS  # an intent is listed in EXTRA_INTENTS only after it reached 100% on dev (eval report)
 MONTHLY_INTENTS = ("best_month", "monthly_series", "streak_bool")
 _RULE_RX = dict(T.RULES)
@@ -81,6 +85,19 @@ _SKIP["cust_group_rev"] = r"%|phan tram|chiem|so voi|ti trong|moi nhom|tung nhom
 _SKIP["payment_method_rev"] = r"%|phan tram|chiem|so voi|ti trong|moi (ben|hinh thuc)|lan luot|\bca\b|nhan vien|\bkenh\b|\bkhach\b|\bnhom\b|\bhang\b|\bmon\b|\btop\b|\bnhat\b|\btang\b|\bgiam\b"
 _SKIP["channel_rev"] = r"%|phan tram|chiem|so voi|ti trong|moi (ben|kenh)|lan luot|\bca\b|nhan vien|\bkhach\b|\bnhom\b|\bhang\b|\bmon\b|\btop\b|\bnhat\b|\btang\b|\bgiam\b"
 _SKIP["unit_total_qty"] = r"%|phan tram|so voi|\bkhach\b|\bnhom\b|\bca\b|nhan vien|\bkenh\b|\btop\b|\bnhat\b|\btang\b|\bgiam\b"
+_PH_COMMON = r"%|phan tram|so voi|\bkhach\b|\bca\b|nhan vien|\bkenh\b|\btop\b|\bnhat\b|\btang\b|\bgiam\b|\bnhom\b"
+_SKIP["ingredient_revenue"] = _PH_COMMON + r"|ke don|\bhang\b(?! hoa)"
+_SKIP["rx_nonrx_revenue"] = _PH_COMMON.replace("|%|phan tram", "") + r"|hoat chat|%|phan tram|ti le|ty le|\bloai\b"
+_SKIP["rx_share"] = r"so voi|\bkhach\b|\bca\b|nhan vien|\bkenh\b|\btop\b|\bnhat\b|\btang\b|\bgiam\b|\bnhom\b|hoat chat|khong ke don|\bk ke don|hok ke don|hong ke don"
+_SKIP["purchase_total"] = (_PH_COMMON + r"|nha cung cap|\bncc\b|mat hang|san pham|\bthuoc\b|gia nhap|binh quan|so luong|"
+                           r"\bnhap (?:duoc )?(?:bao nhieu|may|nhieu) |tru ban|\bno\b|cong no|dau ky")
+_SKIP["supplier_top"] = r"%|phan tram|so voi|\bkhach\b|\bca\b|nhan vien|\bkenh\b|\btop\b|\btang\b|\bgiam\b|mat hang|san pham|\bthuoc\b|binh quan|gia nhap|\bnhom\b"
+_SKIP["purchase_avg_price"] = r"%|phan tram|so voi|\bkhach\b|\bca\b|nhan vien|\bkenh\b|\btop\b|nha cung cap|\bncc\b|\btang\b|\bgiam\b|\bnhom\b|\bvon\b|gia ban|ban ra|lai"
+_SKIP["stock_qty"] = r"so voi|\bkhach\b|nhan vien|\bkenh\b|\btop\b|\btang\b|\bgiam\b|\bnhom\b|\bno\b|cong no|chan|\ble\b|nguyen|gia tri|het han|han dung|nhap|\bban\b"
+_SKIP["stock_large_unit"] = r"so voi|\bkhach\b|nhan vien|\bkenh\b|\btop\b|\btang\b|\bgiam\b|\bnhom\b|gia tri|het han|han dung|\bban\b"
+_SKIP["stock_value"] = r"%|phan tram|so voi|\bkhach\b|\bca\b|nhan vien|\bkenh\b|\btop\b|\btang\b|\bgiam\b|\bnhom\b|het han|han dung|ten hang|mat hang nao|tung|moi (?:mat|loai|nhom)|\bnhat\b|\bmon\b|\bsp\b|san pham"
+_SKIP["expiry_list"] = r"%|phan tram|so voi|\bkhach\b|\bca\b|nhan vien|\bkenh\b|\btop\b|\btang\b|\bgiam\b|\bnhom\b|tien von|gia tri|gia von|bao nhieu tien|\bgia\b"
+_SKIP["expiry_nearest_lot"] = r"%|phan tram|so voi|\bkhach\b|\bca\b|nhan vien|\bkenh\b|\btop\b|\btang\b|\bgiam\b|\bnhom\b|tien von|gia tri|gia von|bao nhieu tien"
 # revenue also: item-specific revenue ("ban <mat hang> ... bao nhieu tien")
 _ITEM_REV = re.compile(r"\b(ban|bans)\b")
 _ITEM_REV_OK = re.compile(r"cua\s*\w*\s+hang\s*\w*\s+(?:ban|bans)\s+\S+\s+(tong cong|total|toongr cong|bao nhieu|bnhiu|bn)")
@@ -228,3 +245,93 @@ _THEO_UNIT = re.compile(r"(?:tinh theo|theo)\s+" + T.U + r"\b")
 def unit_for_total(s: str) -> str | None:
     m = _THEO_UNIT.search(s)
     return m.group(1) if m else asked_unit(s)
+
+
+# ---- pharmacy drug attributes (sales side) -------------------------------------------------------------------------
+_NEG_RX = re.compile(r"\b(?:khong|k|ko|hok|hong|chang|chua|phi|ngoai)\s+(?:phai\s+)?ke don|\btru\b[^?]{0,40}\bke don")
+_RX = re.compile(r"\bke don\b")
+
+
+def rx_polarity(s: str) -> str | None:
+    """'rx' (prescription), 'nonrx' (not prescription: "hang khong ke don", "tru thuoc ke don ra") or None when unclear."""
+    if len(_RX.findall(s)) != 1:
+        return None
+    return "nonrx" if _NEG_RX.search(s) else "rx"
+
+
+def _plain(x: str) -> str:
+    """Ingredient text as a token string: lower-case, no accents, only [a-z0-9+] tokens ("A + B" kept as three tokens)."""
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9+]+", " ", fold(x).replace("đ", "d"))).strip()
+
+
+def match_ingredient(values: list[str], s: str) -> tuple[str | None, str]:
+    """Active ingredient named after "hoat chat": the longest catalog value that is the START of the text after the words
+    "hoat chat" and is not continued by "+" (a combination 'A + B' is its own ingredient, rulebook section 6, so a
+    question about 'A' is not answered with 'A' when the question goes on "+ B").  Exact value only; else the LLM."""
+    m = re.search(r"hoat chat\s+(.*)$", s)
+    if not m:
+        return None, "ingredient_not_named"
+    tail = _plain(m.group(1))
+    best: list[str] = []
+    for v in values:
+        k = _plain(v)
+        if len(k) < 3:
+            continue
+        if tail == k or tail.startswith(k + " "):
+            rest = tail[len(k):].strip()
+            if rest.startswith("+"):
+                continue
+            if not best or len(k) > len(_plain(best[0])):
+                best = [v]
+            elif len(k) == len(_plain(best[0])) and v not in best:
+                best.append(v)
+    if not best:
+        return None, "ingredient_not_found"
+    if len({_plain(b) for b in best}) > 1:
+        return None, "ingredient_ambiguous"
+    return best[0], "ok"
+
+
+# ---- purchases / stock / lots ------------------------------------------------------------------------------------
+_SUP_Q = re.compile(r"(?:nha cung cap|\bncc\b) nao")
+_SUP_RANK = re.compile(r"(?:cao|nhieu|lon) nhat")
+
+
+def supplier_top_ok(s: str) -> bool:
+    """'which supplier ... highest' (asks the top supplier by purchase money)."""
+    return bool(_SUP_Q.search(s) and _SUP_RANK.search(s) and re.search(r"\btien\b", s))
+
+
+def purchase_total_ok(s: str) -> bool:
+    return bool((re.search(r"\btien\b", s) and re.search(r"\bnhap\b", s)) or re.search(r"gia tri (?:cac )?phieu nhap", s))
+
+
+_HM_UNIT = re.compile(r"(?:bao nhieu|may)\s+" + T.U + r"(?:\s+(\d+(?:[.,]\d+)?\s?" + T.U + r"?))?\b")
+_SMALL_UNIT = re.compile(r"(?:(?:bao nhieu|may)\s+" + T.U + r"\s+le\b|\ble\s+(?:bao nhieu|may)\s+" + T.U + r"\b)")
+
+
+def large_units(s: str) -> tuple[list[str], str | None]:
+    """(candidate keys of the big unit, small unit) of "con <bao nhieu> <big> chan/nguyen va <bao nhieu> <small> le".
+
+    The big unit is the one right after the first how-many word ("bao nhieu hop ... nguyen"), optionally with its size
+    ("cuon 10m"), so both spellings are returned; the router keeps only a key that is a unit of the item with factor > 1."""
+    if not re.search(r"\b(?:chan|nguyen)\b", s):
+        return [], None
+    m = _HM_UNIT.search(s)
+    big = [m.group(1)] + ([f"{m.group(1)} {m.group(2).strip()}"] if m.group(2) else []) if m else []
+    l = _SMALL_UNIT.search(s)
+    return big, (l.group(1) or l.group(2)) if l else None
+
+
+def strip_dates(s: str) -> str:
+    """Period words removed before item matching: item_match_key glues digits to the next word ("2025, bia" -> "2025bia")."""
+    return re.sub(r"(?:thang\s+\d{1,2}(?:/|\s+nam\s+)\d{4}|\d{1,2}/\d{1,2}/\d{4}|thang\s+\d{1,2})\s*[,;:]?", " x ", s)
+
+
+def expiry_kind(s: str) -> str | None:
+    """'count' (how many lots), 'list' (which products) or None."""
+    if re.search(r"(?:bao nhieu|may|so)\s+lo\b", s):
+        return "count"
+    if re.search(r"(?:san pham|mat hang|hang|thuoc|sp)\s+nao", s):
+        return "list"
+    return None

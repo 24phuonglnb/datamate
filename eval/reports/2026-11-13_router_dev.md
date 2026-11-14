@@ -1,8 +1,8 @@
-# Router evaluation (CPU, no LLM) 2026-11-13
+# Router evaluation (CPU, no LLM) 2026-11-14
 
 | fold | questions | template route | % | correct | accuracy % | template PA | PA lower bound | wrong | intent acc % |
 |---|---|---|---|---|---|---|---|---|---|
-| dev | 2291 | 1107 | 48.32 | 1107 | 100.0 | 1.0 | 0.4832 | 0 | 100.0 |
+| dev | 2291 | 1340 | 58.49 | 1340 | 100.0 | 1.0 | 0.5849 | 0 | 100.0 |
 | holdout | 0 | 0 | 0.0 | 0 | 0.0 | 0.0 | 0.0 | 0 | 100.0 |
 
 ## dev: by intent (template route)
@@ -30,8 +30,19 @@
 | payment_method_rev | 6 | 6 | 100.0 |
 | channel_rev | 4 | 4 | 100.0 |
 | unit_total_qty | 12 | 12 | 100.0 |
+| ingredient_revenue | 41 | 41 | 100.0 |
+| rx_nonrx_revenue | 20 | 20 | 100.0 |
+| rx_share | 18 | 18 | 100.0 |
+| purchase_total | 38 | 38 | 100.0 |
+| supplier_top | 3 | 3 | 100.0 |
+| purchase_avg_price | 46 | 46 | 100.0 |
+| stock_qty | 40 | 40 | 100.0 |
+| stock_large_unit | 17 | 17 | 100.0 |
+| stock_value | 4 | 4 | 100.0 |
+| expiry_list | 4 | 4 | 100.0 |
+| expiry_nearest_lot | 2 | 2 | 100.0 |
 
-LLM/other reasons: {'not_target': 746, 'extra_filter_or_subintent': 183, 'multi_intent': 109, 'normalizer_residual_teencode': 41, 'unit_mismatch': 29, 'category_not_found': 20, 'item_specific_revenue': 14, 'item_not_found': 12, 'several_named': 12, 'group_not_found': 9, 'period_count': 5, 'empty_result': 2, 'item_named': 2}
+LLM/other reasons: {'not_target': 505, 'extra_filter_or_subintent': 186, 'multi_intent': 109, 'normalizer_residual_teencode': 41, 'unit_mismatch': 29, 'category_not_found': 20, 'item_specific_revenue': 14, 'item_not_found': 14, 'several_named': 12, 'group_not_found': 9, 'period_count': 6, 'empty_result': 2, 'purchase_pattern': 2, 'item_named': 2}
 Wrong attribution: {}
 
 ### dev errors (id, intent, gold type, attribution)

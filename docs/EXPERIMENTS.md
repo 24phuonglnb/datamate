@@ -210,3 +210,13 @@ Reports replaced: `eval/reports/2026-11-13_router_dev.md`, `..._router_holdout.m
 |---|---|---|---|---|---|
 | 2026-11-13 | feat/intent-router | none | dev (2291 q) | router-answered 1107/1107 correct; PA lower bound 0.4832 | 48.32% answered |
 | 2026-11-13 | feat/intent-router | none | hold-out (709 q), run once | router-answered 356/356 correct; PA lower bound 0.5021 | 50.21% answered |
+
+### Router pharmacy / purchases / stock templates (branch feat/router-pharmacy, CPU, no LLM)
+
+Branch `feat/router-pharmacy` = `feat/intent-router` + `feat/p3-pharmacy-purchases` (views of the data layer, not edited). 11 new templates, developed on dev shops only (hold-out not run):
+ingredient_revenue, rx_nonrx_revenue, rx_share, purchase_total, supplier_top, purchase_avg_price, stock_qty, stock_large_unit, stock_value, expiry_list, expiry_nearest_lot.
+A shop without the view (purchase book, stock, lots) or with a purchase book without amounts answers `unanswerable` (rulebook section 7). `eval/reports/2026-11-13_router_dev.*` replaced by the new dev run.
+
+| date | branch | model | question set | PA | notes |
+|---|---|---|---|---|---|
+| 2026-11-14 | feat/router-pharmacy | none | dev (2291 q) | router-answered 1340/1340 correct; PA lower bound 0.5849 | 58.49% answered; +233 answered vs 1107 before; 11 new templates, 233/233 of the 243 routable dev questions of the new groups correct |

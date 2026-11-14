@@ -80,7 +80,9 @@ from src.ledger import (
 from src.mapping import Mapping, propose_mapping
 from src.views import build_database, item_match_key
 
-DATA_DIR = Path(os.environ.get("ZAIC_TRAIN_DIR", "")) or ROOT / "data" / "train" / "train"
+from src.data_paths import train_dir  # noqa: E402  (ZAIC_TRAIN_DIR, then data/train/train, then data/train)
+
+DATA_DIR = train_dir()
 REPORT_PATH = ROOT / "reports" / "rule_regression.md"
 
 TARGET_INTENTS = (

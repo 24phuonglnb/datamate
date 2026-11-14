@@ -3,6 +3,7 @@ from pathlib import Path
 import unittest
 import pandas as pd
 
+from src.data_paths import public_test_dir, train_dir
 from src.cleaning import RawTable
 from src.mapping import propose_mapping
 from src.profile import (
@@ -220,7 +221,7 @@ class RealShopProfileTests(unittest.TestCase):
     """End-to-end tests on actual shop directories from the repository."""
 
     def test_biz_101_profile(self):
-        biz_dir = Path("data/train/data/biz_101")
+        biz_dir = (train_dir() / "data" / "biz_101")
         if not biz_dir.exists():
             self.skipTest("biz_101 data directory not found")
 
@@ -233,7 +234,7 @@ class RealShopProfileTests(unittest.TestCase):
         self.assertTrue(profile["has"]["customer_name"])
 
     def test_biz_103_profile_capabilities(self):
-        biz_dir = Path("data/train/data/biz_103")
+        biz_dir = (train_dir() / "data" / "biz_103")
         if not biz_dir.exists():
             self.skipTest("biz_103 data directory not found")
 
@@ -246,7 +247,7 @@ class RealShopProfileTests(unittest.TestCase):
         self.assertFalse(profile["has"]["debt"])
 
     def test_biz_112_profile_capabilities(self):
-        biz_dir = Path("data/train/data/biz_112")
+        biz_dir = (train_dir() / "data" / "biz_112")
         if not biz_dir.exists():
             self.skipTest("biz_112 data directory not found")
 
@@ -258,7 +259,7 @@ class RealShopProfileTests(unittest.TestCase):
         self.assertFalse(profile["has"]["customer_gender"])
 
     def test_dev_012_profile(self):
-        biz_dir = Path("data/public_test/data/dev_012")
+        biz_dir = (public_test_dir() / "data" / "dev_012")
         if not biz_dir.exists():
             self.skipTest("dev_012 data directory not found")
 

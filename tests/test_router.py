@@ -37,7 +37,7 @@ def test_recognise_target_intents(text, expected):
 
 @pytest.mark.parametrize("text", [
     "Tháng 3/2026 tổng công nợ của khách là bao nhiêu",          # debt: not a target family
-    "tháng 3/2026 tồn kho còn bao nhiêu",                         # stock
+    "tháng 3/2026 lãi gộp là bao nhiêu",                          # gross profit (no cost data yet)
     "tháng 3/2026 nhân viên nào bán nhiều nhất",                  # staff
 ])
 def test_non_target_goes_to_llm(text):
@@ -131,7 +131,7 @@ def test_template_answers_and_formats():
     ("doanh thu tháng 3/2026 và tháng 2/2026 là bao nhiêu", "period_count"),  # two periods, no comparison cue
     ("tháng 3/2026 bán được bao nhiêu chai bia hơi", "item_not_found"),
     ("tháng 3/2026 bán được bao nhiêu chai mì hảo hảo", "unit_mismatch"),
-    ("tháng 3/2026 tồn kho còn bao nhiêu", "not_target"),
+    ("tháng 3/2026 tồn kho còn bao nhiêu", "stock_needs_day"),     # stock is asked at the end of a day, not a month
 ])
 def test_unsafe_goes_to_llm(text, reason):
     d = route(text)
@@ -387,7 +387,8 @@ def _guard(running):
 
 ALL_INTENTS = {"revenue", "order_count", "cancel_count", "cancel_rate", "aov", "best_day", "topk_items", "best_item",
                "item_qty", "item_revenue", "category_rev", "sell_price_on_day", "rev_change_pct", "best_month",
-               "monthly_series", "streak_bool", "cust_group_rev", "payment_method_rev", "channel_rev", "unit_total_qty"}
+               "monthly_series", "streak_bool", "cust_group_rev", "payment_method_rev", "channel_rev", "unit_total_qty",
+               "ingredient_revenue", "rx_nonrx_revenue", "rx_share"}
 
 
 def test_rule_guard_canonical_rulebook_disables_nothing():
@@ -624,7 +625,7 @@ def test_hints_reach_an_agent_that_accepts_them():
 
     solve(_q("tháng 3/2026 tồn kho mì hảo hảo còn bao nhiêu"), NewAgent(), Router(), RuleNormalizer(None), _P())
     h = NewAgent.got
-    assert h["fallthrough_reason"].startswith("not_target") and h["normalized_text"]
+    assert h["fallthrough_reason"].startswith("stock_needs_day") and h["normalized_text"]   # stock asked for a month: not routed
     assert h["period"] == [{"start": "2026-03-01", "end": "2026-03-31", "granularity": "month", "source": "thang 3/2026"}]
     assert h["where_sql"][0]["sql"] == "order_date BETWEEN '2026-03-01' AND '2026-03-31'"
     assert h["entities"]["item"]["item_name"] == "Mì Hảo Hảo"
@@ -692,7 +693,7 @@ def test_llm_gate_enables_only_listed_kinds_and_default_is_open():
 
     text = "tháng 3/2026 tồn kho còn bao nhiêu"        # tagger label stock_qty
     ans, log = solve(_q(text), A(), Router(), RuleNormalizer(None), _P())                      # no gate: LLM answers
-    assert ans["type"] == "number" and log["router"]["reason"].startswith("not_target:stock_qty")
+    assert ans["type"] == "number" and log["router"]["reason"].startswith("stock_needs_day")
     off = {"enabled": ["debt_total"]}
     ans, log = solve(_q(text), A(), Router(), RuleNormalizer(None), _P(), off)
     assert ans["type"] == "abstain" and log["router"]["route"] == "abstain" and log["router"]["reason"] == "llm_gate:stock_qty"
@@ -802,3 +803,136 @@ def test_group_payment_channel_and_unit_totals():
     assert d.route == "llm"
     d = route("tháng 1/2026 tổng cộng bán được bao nhiêu chai", c)
     assert d.route == "llm" and d.reason == "unit_not_a_base_unit"
+
+
+# ---- pharmacy drug attributes, purchases, stock and lots (synthetic shop; views as in docs/VIEWS.md 3.5, 3.8, 3.9) ------
+def _pharma_db(*, purchases=True, stock=True, lots=True, amounts=True, card=False):
+    c = _db()
+    c.executescript("""
+    DROP TABLE v_items; DROP TABLE v_valid_lines;
+    CREATE TABLE v_items(item_code, item_name, name_aliases, base_unit, category, active_ingredient, is_prescription);
+    CREATE TABLE v_valid_lines(order_date, item_code, item_name, qty_base, is_service_fee, line_amount);
+    """)
+    c.executemany("INSERT INTO v_items VALUES(?,?,?,?,?,?,?)", [
+        ("T1", "Panadol hộp 10 vỉ x 10 viên", "Panadol hộp 10 vỉ x 10 viên", "viên", "Thuốc", "Paracetamol", "0"),
+        ("T2", "Efferalgan hộp 10 viên", "Efferalgan hộp 10 viên", "viên", "Thuốc", "Paracetamol + Cafein", "0"),
+        ("T3", "Augmentin 625 hộp 14 viên", "Augmentin 625 hộp 14 viên", "viên", "Thuốc", "Amoxicillin", "1")])
+    c.executemany("INSERT INTO v_valid_lines VALUES(?,?,?,?,?,?)", [
+        ("2026-03-02", "T1", "Panadol hộp 10 vỉ x 10 viên", 10, 0, 50000), ("2026-03-03", "T2", "Efferalgan hộp 10 viên", 5, 0, 30000),
+        ("2026-03-04", "T3", "Augmentin 625 hộp 14 viên", 2, 0, 20000)])
+    if purchases:
+        c.execute("CREATE TABLE v_valid_purchase_lines(receipt_id, receipt_date, receipt_month, supplier, item_code, item_name, qty, unit, line_amount)")
+        a = (lambda x: x) if amounts else (lambda x: None)
+        c.executemany("INSERT INTO v_valid_purchase_lines VALUES(?,?,?,?,?,?,?,?,?)", [
+            ("P1", "2026-03-02", "2026-03", "Cty A", "T1", "Panadol hộp 10 vỉ x 10 viên", 2, "hộp", a(200000)),
+            ("P2", "2026-03-10", "2026-03", "Cty B", "T1", "Panadol hộp 10 vỉ x 10 viên", 3, "hộp", a(330000)),
+            ("P3", "2026-03-12", "2026-03", "Cty A", "T3", "Augmentin 625 hộp 14 viên", 1, "hộp", a(100000))])
+    if stock:
+        c.execute("CREATE TABLE v_stock(item_code, item_name, base_unit, stock_date, stock_qty_base, cost_price, stock_value, source)")
+        c.executemany("INSERT INTO v_stock VALUES(?,?,?,?,?,?,?,?)", [
+            ("T1", "Panadol hộp 10 vỉ x 10 viên", "viên", AS_OF, 253, 100, 25300, "report"),
+            ("T2", "Efferalgan hộp 10 viên", "viên", AS_OF, 0, 200, 0, "report"),
+            ("T3", "Augmentin 625 hộp 14 viên", "viên", AS_OF, 30, 500, 15000, "report")])
+        c.execute("CREATE TABLE v_item_units(item_code, item_name, unit, unit_key, factor, base_unit)")
+        c.executemany("INSERT INTO v_item_units VALUES(?,?,?,?,?,?)", [
+            ("T1", "Panadol hộp 10 vỉ x 10 viên", "hộp", "hop", 100, "viên"), ("T1", "Panadol hộp 10 vỉ x 10 viên", "vỉ", "vi", 10, "viên")])
+    if lots:
+        c.execute("CREATE TABLE v_lots(lot, item_code, item_name, expiry_date, qty_remaining)")
+        c.executemany("INSERT INTO v_lots VALUES(?,?,?,?,?)", [
+            ("L1", "T1", "Panadol hộp 10 vỉ x 10 viên", "2026-10-01", 50), ("L2", "T1", "Panadol hộp 10 vỉ x 10 viên", "2026-12-01", 20),
+            ("L3", "T3", "Augmentin 625 hộp 14 viên", "2026-09-20", 30), ("L4", "T3", "Augmentin 625 hộp 14 viên", "2026-09-30", 0),
+            ("L5", "T3", "Augmentin 625 hộp 14 viên", "2026-09-01", 5)])
+    if card:
+        c.execute("CREATE TABLE v_stock_card(item_code, item_name, moved_at, moved_date, qty_change, stock_after)")
+        c.executemany("INSERT INTO v_stock_card VALUES(?,?,?,?,?,?)", [
+            ("T1", "Panadol hộp 10 vỉ x 10 viên", "2026-08-01 09:00:00", "2026-08-01", 300, 300),
+            ("T1", "Panadol hộp 10 vỉ x 10 viên", "2026-08-05 09:00:00", "2026-08-05", -47, 253)])
+    return c
+
+
+@pytest.mark.parametrize("text,answer,atype", [
+    ("tháng 3/2026 nhà thuốc thu được bao nhiêu tiền từ các thuốc có hoạt chất Paracetamol?", 50000, "number"),   # not the A + B combination
+    ("tháng 3/2026 các thuốc có hoạt chất Paracetamol + Cafein bán được bao nhiêu tiền", 30000, "number"),
+    ("doanh thu thuốc kê đơn tháng 3/2026 là bao nhiêu", 20000, "number"),
+    ("doanh thu hàng không kê đơn tháng 3/2026 là bao nhiêu", 80000, "number"),
+    ("trừ thuốc kê đơn ra, tháng 3/2026 các mặt hàng còn lại bán được bao nhiêu tiền", 80000, "number"),
+    ("tháng 3/2026 thuốc kê đơn chiếm bao nhiêu phần trăm doanh thu", 20.0, "percent"),
+])
+def test_pharmacy_sales_templates(text, answer, atype):
+    d = route(text, _pharma_db())
+    assert d.route == "template", d.reason
+    assert (d.answer["answer"], d.answer["type"]) == (answer, atype)
+
+
+def test_ingredient_not_in_catalog_goes_to_llm():
+    d = route("tháng 3/2026 thuốc có hoạt chất Ibuprofen bán được bao nhiêu tiền", _pharma_db())
+    assert d.route == "llm" and d.reason == "ingredient_not_found"
+    c = _pharma_db()
+    c.execute("DELETE FROM v_items WHERE active_ingredient = 'Paracetamol + Cafein'")   # only 'Paracetamol' is left: "A + B" is not 'A'
+    d = route("tháng 3/2026 thuốc có hoạt chất Paracetamol + Cafein bán được bao nhiêu tiền", c)
+    assert d.route == "llm"
+
+
+@pytest.mark.parametrize("text,answer,atype", [
+    ("tổng tiền nhập hàng tháng 3/2026 là bao nhiêu", 630000, "number"),
+    ("tháng 3/2026 tổng giá trị các phiếu nhập hàng là bao nhiêu", 630000, "number"),
+    ("tháng 3/2026 tiền nhập hàng từ nhà cung cấp nào cao nhất", "Cty B", "string"),
+    ("trong tháng 3/2026, Panadol hộp 10 vỉ x 10 viên nhập vào giá bình quân một hộp là bao nhiêu", 106000, "number"),
+])
+def test_purchase_templates(text, answer, atype):
+    d = route(text, _pharma_db())
+    assert d.route == "template", d.reason
+    assert (d.answer["answer"], d.answer["type"]) == (answer, atype)
+
+
+def test_purchase_avg_price_unit_must_be_an_import_unit():
+    d = route("trong tháng 3/2026, Panadol hộp 10 vỉ x 10 viên nhập vào giá bình quân một viên là bao nhiêu", _pharma_db())
+    assert d.route == "llm" and d.reason == "unit_not_an_import_unit"
+
+
+@pytest.mark.parametrize("text,answer,atype", [
+    ("cuối ngày hôm nay Panadol hộp 10 vỉ x 10 viên trong kho còn bao nhiêu viên", 253, "number"),
+    ("cuối ngày hôm nay trong kho còn bao nhiêu hộp Panadol hộp 10 vỉ x 10 viên chẵn và bao nhiêu viên lẻ", [2, 53], "list"),
+    ("tính theo giá vốn, tiền hàng nằm trong kho vào cuối ngày 07/09/2026 là bao nhiêu", 40300, "number"),
+    ("có mấy lô hàng còn tồn sẽ hết hạn từ nay đến hết ngày 31/10/2026", 2, "number"),      # L3 and L1; L4 is empty, L5 expired, L2 later
+    ("những sản phẩm nào đang còn hàng có hạn dùng từ 07/09/2026 đến hết 31/12/2026", ["Augmentin 625 hộp 14 viên", "Panadol hộp 10 vỉ x 10 viên"], "list"),
+    ("lô Panadol hộp 10 vỉ x 10 viên còn ở kho gần hết hạn nhất có hạn dùng ngày nào", "2026-10-01", "date"),
+])
+def test_stock_and_lot_templates(text, answer, atype):
+    d = route(text, _pharma_db())
+    assert d.route == "template", d.reason
+    assert (d.answer["answer"], d.answer["type"]) == (answer, atype)
+
+
+def test_stock_at_an_earlier_day_uses_the_stock_card_only_when_it_exists():
+    q = "hết ngày 03/08/2026 trong kho còn bao nhiêu viên Panadol hộp 10 vỉ x 10 viên"
+    d = route(q, _pharma_db(card=True))
+    assert d.route == "template" and d.answer["answer"] == 300
+    d = route(q, _pharma_db(card=False))
+    assert d.route == "llm" and d.reason == "stock_past_no_card"
+
+
+@pytest.mark.parametrize("kw,text,code", [
+    (dict(purchases=False), "tổng tiền nhập hàng tháng 3/2026 là bao nhiêu", "no_purchase_book"),
+    (dict(purchases=False), "tháng 3/2026 tiền nhập hàng từ nhà cung cấp nào cao nhất", "no_purchase_book"),
+    (dict(purchases=False), "trong tháng 3/2026, Panadol hộp 10 vỉ x 10 viên nhập vào giá bình quân một hộp là bao nhiêu", "no_purchase_book"),
+    (dict(amounts=False), "tổng tiền nhập hàng tháng 3/2026 là bao nhiêu", "no_purchase_amount"),      # quantities only
+    (dict(stock=False), "cuối ngày hôm nay Panadol hộp 10 vỉ x 10 viên trong kho còn bao nhiêu viên", "no_stock_data"),
+    (dict(stock=False), "cuối ngày hôm nay trong kho còn bao nhiêu hộp Panadol hộp 10 vỉ x 10 viên chẵn và bao nhiêu viên lẻ", "no_stock_data"),
+    (dict(stock=False), "tính theo giá vốn, tiền hàng nằm trong kho vào cuối ngày 07/09/2026 là bao nhiêu", "no_stock_data"),
+    (dict(lots=False), "có mấy lô hàng còn tồn sẽ hết hạn từ nay đến hết ngày 31/10/2026", "no_lot_data"),
+    (dict(lots=False), "lô Panadol hộp 10 vỉ x 10 viên còn ở kho gần hết hạn nhất có hạn dùng ngày nào", "no_lot_data"),
+])
+def test_shop_without_the_view_is_unanswerable_not_an_sql_error(kw, text, code):
+    d = route(text, _pharma_db(**kw))
+    assert d.route == "unanswerable" and d.reason == code
+    assert d.answer["type"] == "unanswerable" and d.answer["id"] == "t1" and isinstance(d.answer["reason"], str)
+    assert "answer" not in d.answer
+
+
+def test_inventory_rule_rows_missing_switch_the_intent_off():
+    from src.router.rule_guard import RuleGuard
+    ref = json.loads((ROOT / "src" / "router" / "rule_reference.json").read_text(encoding="utf-8"))["rows"]
+    text = "## 5. Kho\n| Tiền nhập hàng trong kỳ | x |\n"   # every other row missing: the dependent intents are disabled
+    g = RuleGuard(ref, text)
+    assert "stock_large_unit" in g.disabled and "purchase_avg_price" in g.disabled and "ingredient_revenue" in g.disabled

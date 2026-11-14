@@ -54,6 +54,17 @@ DEPENDENCIES: dict[str, list[tuple[str, str]]] = {
     "unit_total_qty": _ORDER + [("3", "ban duoc bao nhieu"), ("10", "don vi co ban")],
     "rev_change_pct": _ORDER + [("1", "ban duoc bao nhieu tien"), ("1", "doanh thu mot don"),
                                 ("1", "phan tram thay doi")],
+    "ingredient_revenue": _ORDER + [("1", "ban duoc bao nhieu tien"), ("6", "doanh thu theo hoat chat")],
+    "rx_nonrx_revenue": _ORDER + [("1", "ban duoc bao nhieu tien"), ("6", "thuoc ke don")],
+    "rx_share": _ORDER + [("1", "ban duoc bao nhieu tien"), ("6", "thuoc ke don")],
+    "purchase_total": [("5", "tien nhap hang trong ky"), ("2", "thang m/y"), ("2", "thang nay")],
+    "supplier_top": [("5", "tien nhap hang trong ky"), ("2", "thang m/y"), ("2", "thang nay")],
+    "purchase_avg_price": [("5", "gia nhap binh quan mot mat hang trong thang"), ("10", "don vi co ban"), ("2", "thang m/y")],
+    "stock_qty": [("2", "den het ngay x"), ("10", "don vi co ban")],
+    "stock_large_unit": [("2", "den het ngay x"), ("5", "ton theo don vi lon"), ("10", "don vi co ban")],
+    "stock_value": [("2", "den het ngay x"), ("5", "gia tri hang ton kho")],
+    "expiry_list": [("6", "hang het han trong n ngay toi")],
+    "expiry_nearest_lot": [("6", "lo gan het han nhat cua mot thuoc")],
 }
 _STOP = {"la", "cua", "va", "cac", "mot", "nhieu", "nhat", "x", "y", "n", "m"}
 
