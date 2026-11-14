@@ -154,8 +154,32 @@ WHERE status NOT IN ('huy', 'tra_hang');
 | `base_unit` | `TEXT` | Đơn vị tính nhỏ nhất (**§10**), chính tả có dấu như trong file. |
 | `sell_price` | `REAL` | Giá bán niêm yết trong bảng danh mục (nếu có). |
 | `cost_price` | `REAL` | Giá vốn / giá nhập chuẩn trong bảng danh mục (nếu có, dùng cho **§2**). |
-| `active_ingredient` | `TEXT` | Hoạt chất (đối với nhà thuốc, nếu có). |
-| `is_prescription` | `TEXT` | Thuốc kê đơn (đối với nhà thuốc, nếu có). |
+| `active_ingredient` | `TEXT` | Hoạt chất (đối với nhà thuốc). Giữ nguyên chuỗi gốc trong file (chỉ chuẩn hoá NFC và gộp khoảng trắng), **không** tách thuốc phối hợp nhiều hoạt chất dạng `'A + B'` theo **§6**. `NULL` với sản phẩm không ghi hoạt chất hoặc tiệm không phải nhà thuốc. |
+| `is_prescription` | `TEXT` | Trạng thái thuốc kê đơn chuẩn hoá về `'1'` (kê đơn) hoặc `'0'` (không kê đơn) đối với nhà thuốc — mọi sản phẩm thuộc nhà thuốc không ghi kê đơn trong bảng thuốc đều mang `'0'` theo **§6**. `ETC` được hiểu là kê đơn, `OTC` là không kê đơn. `NULL` nếu tiệm không có bảng thuốc / không phải nhà thuốc, hoặc ô kê đơn có giá trị lạ không đọc được (không tự gán `'0'`). |
+
+Ví dụ truy vấn nhà thuốc trên `v_items` + `v_valid_lines` (chạy trên `biz_119`):
+
+```sql
+-- Doanh thu theo hoạt chất (giữ nguyên chuỗi hoạt chất gốc, không gộp thuốc phối hợp 'Paracetamol + Cafein' vào 'Paracetamol' theo §6)
+SELECT CAST(ROUND(COALESCE(SUM(l.line_amount), 0)) AS INTEGER) AS ingredient_revenue
+FROM v_valid_lines l
+JOIN v_items i ON COALESCE(l.item_code, l.item_name) = COALESCE(i.item_code, i.item_name)
+WHERE l.is_service_fee = 0
+  AND i.active_ingredient = 'Paracetamol'
+  AND l.order_month = '2026-06';
+
+-- Tỉ lệ doanh thu thuốc kê đơn (%) theo §6
+SELECT ROUND(
+    SUM(CASE WHEN i.is_prescription = '1' THEN l.line_amount ELSE 0 END) * 100.0
+    / NULLIF(SUM(l.line_amount), 0),
+    2
+) AS rx_revenue_pct
+FROM v_valid_lines l
+LEFT JOIN v_items i
+    ON l.is_service_fee = 0
+   AND COALESCE(l.item_code, l.item_name) = COALESCE(i.item_code, i.item_name)
+WHERE l.order_month = '2026-06';
+```
 
 ---
 
@@ -194,6 +218,114 @@ WHERE (c.lunar_year = 2025 AND c.lunar_month = 12 AND c.lunar_day >= 23 AND c.lu
 ```
 
 Cách an toàn hơn khi kỳ phức tạp: tính `[start, end]` dương lịch bằng Python từ `calendar` rồi lọc `order_date BETWEEN start AND end`.
+
+---
+
+### 3.8. Nhập hàng (`v_purchase_lines`, `v_valid_purchase_lines`, `v_purchases`)
+
+Chỉ được tạo khi shop thực sự có dữ liệu nhập hàng rõ ràng (bảng phẳng như `SoNhapHang`/`SoTay_NhapHang`/`ChiTietNhapHang` hoặc cặp đầu phiếu + chi tiết như `DanhSachNhapHang` + `DanhSachChiTietNhapHang`, `phieu_nhap` + `chi_tiet_nhap`, `DonNhapHang` + `DonNhapHang_ChiTiet`). Shop **không có** sổ nhập hàng hoặc cấu trúc nhập không rõ ràng sẽ **không tạo** các view `v_purchase*` (không tạo view rỗng).
+
+- **`v_purchase_lines`** (một dòng mỗi dòng hàng nhập, giữ mọi trạng thái kể cả phiếu huỷ):
+  - `line_id` (INT)
+  - `receipt_id` (TEXT): mã/số phiếu nhập (sinh mã `PN_ROW_<n>` nếu bảng phẳng thiếu cột mã phiếu)
+  - `receipt_date` (TEXT `YYYY-MM-DD`), `receipt_month` (TEXT `YYYY-MM`)
+  - `supplier` (TEXT | NULL): tên nhà cung cấp (nếu có bảng NCC sẽ ánh xạ sang tên gọi; nếu chỉ có mã NCC thì giữ mã)
+  - `supplier_code` (TEXT | NULL): mã NCC nếu có
+  - `status` (TEXT: `'hoan_thanh'` | `'huy'`), `is_cancelled` (INT `0`/`1`), `is_opening_stock` (INT `0`/`1`, bằng `1` khi ghi chú/phiếu có `"nhập đầu kỳ"` / `"đầu kỳ"`)
+  - `item_code` (TEXT | NULL), `item_name` (TEXT canonical khớp `v_items` và `v_lines` qua alias/`Ghi tắt`)
+  - `qty` (REAL), `unit` (TEXT | NULL, đơn vị nhập; `NULL` ở shop chỉ ghi số lượng gốc không ghi cột ĐVT)
+  - `factor` (REAL), `qty_base` (REAL, quy đổi về `base_unit` qua bảng quy đổi nếu có)
+  - `base_unit` (TEXT | NULL)
+  - `unit_cost` (REAL | NULL, đơn giá theo `unit`), `unit_cost_base` (REAL | NULL, đơn giá theo `base_unit`), `line_amount` (REAL | NULL)
+  - `src_table`, `src_file`, `src_sheet`, `src_row`: truy vết nguồn
+- **`v_valid_purchase_lines`**: `SELECT * FROM v_purchase_lines WHERE is_cancelled = 0`.
+- **`v_purchases`** (một dòng mỗi phiếu nhập): `receipt_id`, `receipt_date`, `receipt_month`, `supplier`, `supplier_code`, `status`, `is_cancelled`, `is_opening_stock`, `n_lines`, `total_amount` (`SUM(line_amount)`).
+
+**Luật áp dụng (§2, §5, §9, §10):**
+1. **Tiền nhập trong kỳ & nhập đầu kỳ**: tổng `line_amount` trên `v_valid_purchase_lines` (hoặc `total_amount` trên `v_purchases WHERE is_cancelled = 0`) lọc theo `receipt_date` / `receipt_month`. Phiếu `"nhập đầu kỳ"` (`is_opening_stock = 1`) **vẫn được tính** như mọi phiếu nhập hợp lệ khác.
+2. **Nguồn tổng tiền phiếu**: `v_purchases.total_amount` tính từ `SUM(line_amount)` của các dòng chi tiết (`line_amount = qty * unit_cost` khi thiếu cột thành tiền), nhất quán 100% với cột tổng đầu phiếu ở toàn bộ shop dev/public test và đồng nhất với `v_orders.revenue`.
+3. **Shop thiếu giá/tiền nhập** (ví dụ chỉ ghi số lượng nhập theo mã SKU, không có cột giá nhập và thành tiền): `unit_cost`, `unit_cost_base`, `line_amount`, `v_purchases.total_amount` giữ giá trị `NULL` (không điền `0`), để câu hỏi về tiền nhập / giá nhập trả về `unanswerable` còn câu hỏi số lượng nhập / nhập trừ bán vẫn dùng `qty` / `qty_base`.
+4. **Giá nhập bình quân**: tính bình quân **theo số lượng nhập** (`SUM(line_amount) / SUM(qty)`) theo từng đơn vị nhập (`unit`), không lấy `AVG(unit_cost)`.
+5. **Nhập trừ bán**: phần nhập lấy từ `v_valid_purchase_lines`, phần bán lấy từ `v_valid_lines` (§1), cả hai đã quy chuẩn `item_name` qua `v_items` và `qty_base` về cùng `base_unit`.
+
+**3 câu SQL mẫu cho view nhập hàng:**
+
+```sql
+-- 1) Tổng tiền nhập hàng trong một tháng (tính cả nhập đầu kỳ, bỏ phiếu huỷ)
+SELECT COALESCE(SUM(line_amount), 0) AS total_purchase_amount
+FROM v_valid_purchase_lines
+WHERE receipt_month = '2025-05';
+
+-- 2) Giá nhập bình quân theo số lượng nhập của một mặt hàng trong tháng (theo đơn vị nhập)
+SELECT
+    item_name,
+    unit,
+    SUM(line_amount) * 1.0 / NULLIF(SUM(qty), 0) AS weighted_avg_unit_cost
+FROM v_valid_purchase_lines
+WHERE receipt_month = '2025-05'
+  AND LOWER(item_name) = LOWER('Cà phê đen (M)')
+GROUP BY item_name, unit;
+
+-- 3) Nhà cung cấp nhập nhiều tiền nhất trong kỳ (hoặc toàn kỳ nếu bỏ WHERE)
+SELECT
+    supplier,
+    SUM(line_amount) AS total_spend
+FROM v_valid_purchase_lines
+WHERE receipt_month = '2025-05'
+  AND supplier IS NOT NULL
+GROUP BY supplier
+ORDER BY total_spend DESC, supplier ASC
+LIMIT 1;
+```
+
+---
+
+### 3.9. Tồn kho, lô, đơn vị (`v_stock`, `v_lots`, `v_item_units`)
+
+Code: `src/stock.py`. Chỉ tạo `v_stock` / `v_lots` khi shop có dữ liệu tồn; shop không có thì **không có view** → câu hỏi tồn kho trả `unanswerable` (khớp đáp án train, ví dụ biz_103, biz_118, biz_130).
+
+**Nguồn dữ liệu** (nhận theo từ khoá + nội dung, không theo tên shop):
+1. **Báo cáo tồn** (`Tồn cuối kỳ`, `Tồn cuối`, `Tồn thực`, `Tồn kho`…): tồn **cuối dữ liệu** của từng mặt hàng; nếu báo cáo ghi theo đơn vị lớn thì quy về đơn vị cơ bản.
+2. **Lô** (nhà thuốc): bảng lô (`Lô`, `Hạn sử dụng`, số lượng nhập theo đơn vị cơ bản) + bảng bán theo lô (`Mã hóa đơn`, `Lô`, `Số lượng`, `Số lượng trả`).
+   Còn lại của lô = nhập − bán trên đơn **không huỷ** + số lượng **trả lại**. Công thức này khớp 100% với báo cáo tồn ở mọi shop train có cả hai nguồn.
+   Chỉ tạo `v_lots` khi có cả bảng bán theo lô (thiếu thì `qty_remaining` sẽ sai).
+3. **Thẻ kho** (`the_kho`: mỗi lần nhập/xuất một dòng, kèm `TonCuoi` sau giao dịch): tồn tại **mọi thời điểm**. Ở shop public có cả thẻ kho lẫn lô, hai nguồn khớp 80/80 mặt hàng.
+
+Thứ tự ưu tiên cho `v_stock`: báo cáo tồn → thẻ kho → lô.
+
+- **`v_stock`** (mỗi mặt hàng một dòng): `item_code`, `item_name`, `base_unit`, `stock_date` (ngày cuối dữ liệu = "hôm nay" của mọi câu train/public), `stock_qty_base` (REAL, đơn vị cơ bản), `cost_price` (giá vốn trong danh mục, có thể NULL), `stock_value` (= `stock_qty_base * cost_price`, chỉ hàng còn tồn; NULL nếu không có giá vốn), `source` (`'report'` | `'lots'`).
+- **`v_lots`** (mỗi lô một dòng): `lot`, `item_code`, `item_name`, `base_unit`, `receipt_id`, `receipt_date`, `expiry_date` (`YYYY-MM-DD`), `qty_in`, `qty_sold`, `qty_returned`, `qty_remaining`, `unit_cost_base` (giá nhập của chính lô, theo đơn vị cơ bản — dùng cho "tiền vốn hàng sắp hết hạn" §6).
+- **`v_stock_card`** (khi có thẻ kho): `item_code`, `item_name`, `moved_at`, `moved_date`, `qty_change`, `stock_after`. Tồn hết ngày X = `stock_after` của giao dịch **cuối cùng** có `moved_date <= X`.
+- **`v_item_units`** (mọi shop có sổ bán): `item_code`, `item_name`, `unit`, `unit_key` (không dấu, để so khớp), `factor` (số đơn vị cơ bản trong 1 `unit`), `base_unit`.
+
+**Giới hạn:** `v_stock` là tình trạng **cuối dữ liệu**. Câu hỏi "đến hết ngày X" với X sớm hơn: dùng `v_stock_card` nếu có; shop chỉ có báo cáo tồn thì không có dữ liệu trả hàng theo dòng nên không tính lại chính xác được.
+
+```sql
+-- 1) Tồn cuối ngày hôm nay của một mặt hàng (đơn vị cơ bản)
+SELECT stock_qty_base FROM v_stock WHERE LOWER(item_name) = LOWER('Bia Tiger lon');
+
+-- 2) Tồn theo đơn vị lớn §5: [số đơn vị lớn nguyên, số đơn vị cơ bản lẻ]
+SELECT CAST(s.stock_qty_base / u.factor AS INTEGER) AS so_chan,
+       CAST(s.stock_qty_base - CAST(s.stock_qty_base / u.factor AS INTEGER) * u.factor AS INTEGER) AS so_le
+FROM v_stock s JOIN v_item_units u ON u.item_name = s.item_name
+WHERE LOWER(s.item_name) = LOWER('Amoxicillin 500mg hộp 10 vỉ x 10 viên') AND u.unit_key = 'hop';
+
+-- 2b) Tồn hết ngày X từ thẻ kho
+SELECT stock_after FROM v_stock_card
+WHERE item_code = 'SP0001' AND moved_date <= '2026-03-31'
+ORDER BY moved_at DESC, rowid DESC LIMIT 1;
+
+-- 3) Số mặt hàng hết hàng cuối ngày hôm nay
+SELECT COUNT(*) FROM v_stock WHERE stock_qty_base <= 0;
+
+-- 4) Giá trị hàng tồn kho (giá vốn danh mục, chỉ hàng còn tồn)
+SELECT SUM(stock_value) FROM v_stock WHERE stock_qty_base > 0;
+
+-- 5) Số lô còn tồn hết hạn từ hôm nay D đến hết ngày E; lô gần hết hạn nhất của một thuốc
+SELECT COUNT(*) FROM v_lots WHERE qty_remaining > 0 AND expiry_date BETWEEN '2026-05-25' AND '2026-09-22';
+SELECT MIN(expiry_date) FROM v_lots
+WHERE item_name = 'Siro ăn ngon Ích Nhi Plus chai 100ml' AND qty_remaining > 0 AND expiry_date >= '2026-05-25';
+```
 
 ---
 

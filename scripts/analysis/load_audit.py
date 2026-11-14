@@ -116,8 +116,10 @@ def audit_table(table, shop_id: str) -> dict[str, Any]:
 
 
 def run_audit(target_shops: list[str] | None = None, out_file: Path | None = None) -> list[dict[str, Any]]:
-    splits = [("train", ROOT / "data" / "train" / "data"),
-              ("public_test", ROOT / "data" / "public_test" / "data")]
+    from src.data_paths import public_test_dir, train_dir
+
+    splits = [("train", train_dir() / "data"),
+              ("public_test", public_test_dir() / "data")]
 
     shop_dirs: list[tuple[str, str, Path]] = []
     for split_name, base_dir in splits:

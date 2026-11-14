@@ -8,6 +8,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+import sys as _sys
+if str(ROOT) not in _sys.path:
+    _sys.path.insert(0, str(ROOT))
+from src.data_paths import public_test_dir as _public_test_dir, train_dir as _train_dir  # noqa: E402
 sys.path.insert(0, str(ROOT))
 
 import pandas as pd
@@ -15,7 +19,7 @@ from src.cleaning import load_business
 from src.ledger import build_ledger, verify_invariants
 from src.mapping import propose_mapping
 
-DATA = ROOT / "data" / "train" / "data"
+DATA = _train_dir() / "data"
 
 INVARIANTS = [
     "single_date_and_status_per_order",
