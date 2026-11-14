@@ -73,15 +73,6 @@ credentials.*
 private_data/
 official_data/
 zalo_data/
-# Official downloaded datasets (train.zip / public_test.zip extracted)
-train/
-public_test/
-# Generated prediction files and diagnostics
-predictions/
-eval_results/official_*/
-eval_results/smoke*/
-eval_results/train_*/
-eval_results/public_test*/
 
 # ── Docker build cache ────────────────────────────────────────────────────
 .dockerignore
