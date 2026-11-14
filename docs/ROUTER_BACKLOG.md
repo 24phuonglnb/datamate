@@ -4,6 +4,10 @@
 > `unans_subjective`, `item_revenue`, `category_rev`, `sell_price_on_day`, và (đợt 2) `best_month`, `monthly_series`, `streak_bool`, `cust_group_rev`,
 > `payment_method_rev`/`channel_rev` (một giá trị), `unit_total_qty`. Các số bên dưới là của lần đo trước khi thêm các intent này.
 
+> Cập nhật 2026-11-14 (`feat/router-pharmacy`, cần cả `feat/p3-pharmacy-purchases`): đã thêm `ingredient_revenue`, `rx_nonrx_revenue`, `rx_share`,
+> `purchase_total`, `supplier_top`, `purchase_avg_price`, `stock_qty`, `stock_large_unit`, `stock_value`, `expiry_list`, `expiry_nearest_lot` (233 câu dev, 100% đúng).
+> Còn lại: `purchase_minus_sales` (1), `stockout_count` (1), vài câu bị luật an toàn chặn; công nợ theo ngày và giá vốn/lãi chưa có dữ liệu nên vẫn xuống agent.
+
 Nguồn: `scripts/eval_router.py` (run 2026-11-13). Chỉ dùng dev; không có câu hỏi hay đáp án, chỉ id. Nhóm theo nhãn của tagger hiện có
 (`src/router/_tagger_rules.py`, nhãn gần đúng ±10%, có gắn nhầm). Độ khó = ước lượng công viết template + kiểm chứng, không phải độ khó dữ liệu.
 Tổng dev rơi xuống LLM: 1331 câu; trong đó 984 câu intent ngoài TARGET_INTENTS (bảng 1) và 347 câu thuộc TARGET_INTENTS bị luật an toàn chặn (bảng 2).
