@@ -37,6 +37,7 @@ import calendar
 import collections
 import datetime as dt
 import json
+import os
 import re
 import sqlite3
 import sys
@@ -79,7 +80,7 @@ from src.ledger import (
 from src.mapping import Mapping, propose_mapping
 from src.views import build_database, item_match_key
 
-DATA_DIR = ROOT / "data" / "train"
+DATA_DIR = Path(os.environ.get("ZAIC_TRAIN_DIR", "")) or ROOT / "data" / "train" / "train"
 REPORT_PATH = ROOT / "reports" / "rule_regression.md"
 
 TARGET_INTENTS = (
