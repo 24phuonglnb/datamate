@@ -82,3 +82,8 @@ zalo_data/
 # Per-question raw rows and error examples derive from private data
 eval/reports/*.per_question.jsonl
 eval/reports/*_errors.md
+
+# ── Official data downloaded by scripts/download_data.sh ──────────────────
+# Anchored so tracked benchmark/data and example_data/data are unaffected.
+/data/
+*.zip

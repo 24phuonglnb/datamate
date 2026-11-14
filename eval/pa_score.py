@@ -28,11 +28,10 @@ from typing import Any
 VALID_TYPES = {"number", "percent", "string", "date", "boolean", "list", "table", "unanswerable"}
 _DATE_RE = re.compile(r"^\d{4}-\d{2}(-\d{2})?$")
 
-# Percent comparison mode.  Section 9: "phần trăm đúng 2 chữ số thập phân";
-# "khớp tuyệt đối ... chỉ bỏ qua sai số dấu phẩy động".  "strict" = compare the
-# submitted value itself (float tolerance only).  "round2" = round submitted value
-# to 2 decimals first.  The text is ambiguous; strict is the literal reading.
-PERCENT_MODE = "strict"
+# Percent comparison mode.  Section 9: "làm tròn 2 chữ số thập phân" specifies
+# agents must submit the value already rounded to 2 decimals; scorer rounds the
+# submitted value to 2dp before comparing.  "round2" is the rulebook-correct mode.
+PERCENT_MODE = "round2"
 
 
 # --------------------------------------------------------------------------
@@ -90,7 +89,10 @@ def _match_percent(pred: Any, gold: Any) -> bool:
 
 
 def _match_date(pred: Any, gold: Any) -> bool:
-    return isinstance(pred, str) and bool(_DATE_RE.match(pred)) and pred == gold
+    if not isinstance(pred, str):
+        return False
+    pred = pred.strip()
+    return bool(_DATE_RE.match(pred)) and pred == gold
 
 
 def _match_boolean(pred: Any, gold: Any) -> bool:
