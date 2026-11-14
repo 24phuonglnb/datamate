@@ -15,7 +15,7 @@ Tóm tắt: ai làm gì, branch nào chứa gì, chạy lệnh nào, số đo m�
 
 | branch | nội dung | phụ thuộc |
 |---|---|---|
-| `docs/data-setup` | README "Dữ liệu chính thức", `scripts/download_data.sh`, `.gitignore` chặn `data/`, `*.zip`, `.env` | không |
+| ~~`docs/data-setup`~~ (đã merge vào main) | README "Dữ liệu chính thức", `scripts/download_data.sh`, `.gitignore` chặn `data/`, `*.zip`, `.env` | không |
 | `feat/p3-data-cleaning` (Nghiệp) | làm sạch, ledger, view `v_*`, cache SQLite, `docs/VIEWS.md`, `scripts/analysis/rule_regression.py` | không |
 | `feat/real-data-eval` | `eval/`: `run_baseline.py`, `pa_score.py` (chấm theo §9), `folds.json` (6 shop hold-out), mẫu 600 câu, `compare_runs.py`, `eval/README.md` | không (xung đột `.gitignore` nhỏ với `feat/p3-data-cleaning`) |
 | `feat/question-normalization` | `src/nlu/normalize.py`, `src/timeutil.py` (§2 → `Period`), `Agent(normalizer=…)` tuỳ chọn, test | test cần `eval/folds.json` (đặt `ZAIC_FOLDS`); `scripts/validate_timeutil_templates.py` cần `feat/p3-data-cleaning` |
@@ -23,7 +23,7 @@ Tóm tắt: ai làm gì, branch nào chứa gì, chạy lệnh nào, số đo m�
 | `exp/legacy-vs-views` | kết quả 8B với nạp dữ liệu kiểu cũ trên shop hold-out; chỉ để tham khảo | không merge |
 
 Thứ tự merge đề xuất (đã kiểm tra bằng `git merge-tree`, chỉ `.gitignore` xung đột, gộp tay được):
-1. `docs/data-setup`
+1. ~~`docs/data-setup`~~ (đã merge vào main)
 2. `feat/p3-data-cleaning`
 3. `feat/real-data-eval` (giải `.gitignore`: giữ cả hai nhóm dòng)
 4. `feat/question-normalization`
@@ -76,5 +76,5 @@ Router không cần ai duyệt khi rulebook đổi (Docker nộp 16/11 chạy pr
 | prompt LLM cho phần router không xử lý | An | `docs/ROUTER_BACKLOG.md` (nhóm intent, view cần dùng, độ khó, luật chỉ có ở rulebook public); agent hiện nhận câu gốc, không nhận `Period`/câu chuẩn hoá (đề xuất interface trong `docs/ROUTER.md`) |
 | duyệt mã router copy từ code của Nghiệp | Nghiệp | `src/router/templates.py`, `_tagger_rules.py`, regex trong `intents.py` |
 | view còn thiếu: nhập hàng, tồn kho, lô/hạn dùng, công nợ theo ngày, giá vốn/chi phí | Nghiệp | bảng số câu ở `docs/ROUTER_BACKLOG.md` |
-| 2 test `tests/test_rule_regression.py` fail (đòi cấu trúc `data/train/data/…`); test rò rỉ kết nối phụ thuộc thứ tự | Nghiệp | xem `docs/ROUTER_BACKLOG.md` |
+| 2 test `tests/test_rule_regression.py` đòi dữ liệu riêng (`biz_102`, `biz_117`) — đã thêm `skipif` guard; đường dẫn sửa thành `data/train/train/data/…` | Nghiệp | xem `docs/ROUTER_BACKLOG.md` |
 | lớp LLM chuẩn hoá câu (teencode/không dấu) chưa làm; ablation chuẩn hoá chưa đo | Nhi | |
