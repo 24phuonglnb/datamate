@@ -42,7 +42,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 if [[ "${SPLIT}" == "train" ]]; then
-    DATASET_ROOT="${TRAIN_DIR:-${PROJECT_ROOT}/train}"
+    DATASET_ROOT="${TRAIN_DIR:-${PROJECT_ROOT}/data/train/train}"
 else
     DATASET_ROOT="${PUBLIC_TEST_DIR:-${PROJECT_ROOT}/public_test}"
 fi

@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Qwen3-14B + router evaluation on CECS (2 × RTX A5000, a5000 partition, student QoS)
 #
-# MUST be run from the feat/intent-router branch on CECS:
-#   git checkout feat/intent-router   # or whichever branch has src/router/
+# MUST be run from a branch that has src/router/ (feat/intent-router or the
+# integrated branch after merging PRs #1–#5).  On server1 (10.140.24.16):
+#   cd ~/datamate
+#   git fetch origin && git checkout feat/intent-router
 #
 # Usage:
 #   # Smoke test (15 questions from holdout shops, mock backend — no GPU needed):
@@ -16,7 +18,7 @@
 #
 # Required env before submission:
 #   export MODEL_PATH=$HOME/models/Qwen3-14B   # already on CECS
-#   export VENV=$HOME/datamate_work/venv        # virtualenv with torch+transformers
+#   export VENV=$HOME/datamate-venv            # working virtualenv on server1
 #
 # Outputs land in eval/reports/ (aggregates committed) and
 #   eval/reports/<tag>.per_question.jsonl (git-ignored).
@@ -37,7 +39,7 @@ set -euo pipefail
 
 # ── Configurable via env vars ──────────────────────────────────────────────
 MODEL_PATH="${MODEL_PATH:?Set MODEL_PATH=$HOME/models/Qwen3-14B}"
-VENV="${VENV:-$HOME/datamate_work/venv}"
+VENV="${VENV:-$HOME/datamate-venv}"
 SMOKE="${SMOKE:-}"              # non-empty = 15-question smoke test (mock backend)
 ROUTER_ONLY="${ROUTER_ONLY:-}"  # non-empty = no model, router answers only
 BACKEND="${BACKEND:-transformers}"
@@ -48,7 +50,7 @@ DATE="$(date +%Y-%m-%d)"
 # ── Project root ───────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-TRAIN_DIR="${TRAIN_DIR:-${PROJECT_ROOT}/train}"
+TRAIN_DIR="${TRAIN_DIR:-${PROJECT_ROOT}/data/train/train}"
 
 cd "${PROJECT_ROOT}"
 mkdir -p logs
