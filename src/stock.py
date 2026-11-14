@@ -419,7 +419,7 @@ def create_stock_views(conn: sqlite3.Connection, tables: list[RawTable], readme:
     card = _stock_card(tables, idx, skip_tables | set(lot_tables))
     if card is not None:
         card.to_sql("stock_card", conn, index=False, if_exists="replace")
-        conn.executescript("DROP VIEW IF EXISTS v_stock_card; CREATE VIEW v_stock_card AS SELECT * FROM stock_card;")
+        conn.executescript("DROP VIEW IF EXISTS v_stock_card; CREATE VIEW v_stock_card AS SELECT rowid, * FROM stock_card;")
         meta.update(has_card=True, card_table=card.attrs.get("table"))
 
     report, report_table = _stock_report(tables, idx, units, skip_tables | set(lot_tables))
