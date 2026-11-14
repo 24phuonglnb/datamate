@@ -1,0 +1,18 @@
+{
+  "_doc": "Rulebook rows whose change a human reviewed against the router templates. 'approved' rows are not treated as changes; 'pending' rows are listed for review and stay switched off. Row keys are '<section>|<row name, accent-stripped>'.",
+  "approved": [
+    {
+      "key": "2|den het ngay x, tinh den hom nay",
+      "reason": "The public rulebook only adds 'chua giao' to the examples of remaining-count questions (owed, in stock, still to deliver). The router answers period aggregates (revenue, order counts, rankings), not remaining-state questions, so the row's meaning for them is unchanged.",
+      "approved_by": "Nhi",
+      "date": "2026-11-13"
+    },
+    {
+      "key": "1|don thuoc ky nao",
+      "reason": "Dữ liệu không có ngày trả; view loại cả đơn có dòng trả bất kể kỳ (dev: 6041 đơn trả, 0 trong v_valid_orders/v_valid_lines), khớp luật mới.",
+      "approved_by": "Nhi",
+      "date": "2026-11-13"
+    }
+  ],
+  "pending": []
+}

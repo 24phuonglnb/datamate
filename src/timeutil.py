@@ -98,11 +98,14 @@ class LunarCalendar:
 
     def __init__(self, path: str | Path):
         self._solar: dict[tuple[int, int, int, bool], date] = {}
-        with open(path, encoding="utf-8", newline="") as f:
-            for r in csv.DictReader(f):
-                key = (int(r["lunar_year"]), int(r["lunar_month"]), int(r["lunar_day"]),
-                       str(r["lunar_leap"]).strip().lower() == "true")
-                self._solar.setdefault(key, date.fromisoformat(r["date"]))
+        try:
+            with open(path, encoding="utf-8", newline="") as f:
+                for r in csv.DictReader(f):
+                    key = (int(r["lunar_year"]), int(r["lunar_month"]), int(r["lunar_day"]),
+                           str(r["lunar_leap"]).strip().lower() == "true")
+                    self._solar.setdefault(key, date.fromisoformat(r["date"]))
+        except (KeyError, ValueError, OSError):
+            self._solar = {}  # calendar without lunar columns (e.g. the demo data): lunar expressions stay unresolved
 
     def solar(self, lunar_year: int, month: int, day: int, leap: bool = False) -> date | None:
         return self._solar.get((lunar_year, month, day, leap))
@@ -246,15 +249,16 @@ def _light_teencode(t: str) -> str:
 
 
 def resolve(text: str, as_of: str | date, calendar: LunarCalendar | None = None,
-            short_slash: str | None = None) -> ResolveResult:
+            short_slash: str | None = None, tet_bare: bool = True) -> ResolveResult:
     """Resolve all time expressions in *text* relative to *as_of* (the question's 'today').
 
-    short_slash: convention for ambiguous 'a/b' tokens whose second part cannot be a month
-    ("6/25"): 'month_year' (tháng 6 năm 2025) or 'month_day' (ngày 25 tháng 6). Default None
-    = report as ambiguous, produce nothing.
+    short_slash: kept for compatibility, no longer used (the convention of _s_short_slash is fixed).
+    tet_bare: a "Tết" without a year resolves to the latest Tết whose start (23 tháng Chạp) is <= as_of, when the
+    running rulebook defines Tết (see RuleNormalizer) and calendar.csv covers it; otherwise it is ambiguous.
     """
     as_of_d = as_of if isinstance(as_of, date) else date.fromisoformat(str(as_of)[:10])
     ctx = _Ctx(_light_teencode(fold(text)), as_of_d, calendar, short_slash)
+    ctx.tet_bare = tet_bare
     for step in (_s_month_range, _s_n_days_from, _s_range, _s_stock_asof, _s_cumulative, _s_tet, _s_quarter, _s_day_full, _s_month, _s_relative_day,
                  _s_week, _s_rolling, _s_year, _s_short_slash, _s_day_short, _s_part_of_day):
         step(ctx)
@@ -367,7 +371,18 @@ def _s_tet(ctx: _Ctx) -> None:
             continue
         ctx.add(Period(rng[0], rng[1], "tet", (R_TET,), _src(m)), m)
     if bare and not any(p.granularity == "tet" for _, p in ctx.items):
-        ctx.amb(bare[0], "Tết without a year: rulebook gives no default year")
+        rng = None
+        if getattr(ctx, "tet_bare", True) and ctx.cal is not None:
+            # the latest Tết that has started (23 tháng Chạp) on or before today
+            for y in range(ctx.as_of.year + 1, ctx.as_of.year - 4, -1):
+                cand = ctx.cal.tet(y)
+                if cand and cand[0] <= ctx.as_of:
+                    rng = cand
+                    break
+        if rng is None:
+            ctx.amb(bare[0], "Tết without a year: no Tết has started yet in the calendar, or the rulebook does not define Tết")
+        else:
+            ctx.add(Period(rng[0], rng[1], "tet", (R_TET,), _src(bare[0])), bare[0])
     tet = next((p for _, p in ctx.items if p.granularity == "tet"), None)
     if n_before and tet:
         ctx.res.comparison = Period(tet.start - timedelta(days=n_before), tet.start - timedelta(days=1), "range",
@@ -461,22 +476,29 @@ def _s_year(ctx: _Ctx) -> None:
 
 
 def _s_short_slash(ctx: _Ctx) -> None:
-    """Tokens like '6/25': second part >12 so it is not day/month, and the data has no 4-digit year.
-    'month_year' (June 2025) vs 'month_day' (25 June) cannot be derived from rulebook or gold."""
+    """Two-part dates "a/bb" without a 4-digit year.  Convention (decided by the team):
+      keyword "ngay" before it          -> ngày a tháng b (year by the rule for a month without year)
+      keyword "thang" before it         -> tháng a năm 20b, only for 20 <= b <= 39
+      no keyword, b <= 12               -> ngày a tháng b (handled by _s_day_short)
+      no keyword, 20 <= b <= 39         -> tháng a năm 20b
+      anything else (13..19, >= 40, bad day/month) -> ambiguous (the question goes to the LLM)"""
     for m in list(re.finditer(r"(?<![\d/])(\d{1,2})\s*/\s*(\d{2})(?![\d/])", ctx.t)):
         a, b = int(m.group(1)), int(m.group(2))
-        if b <= 12 and 1 <= a <= 31:
-            continue  # day/month, handled by _s_day_short
-        if ctx.short_slash == "month_year" and 1 <= a <= 12:
-            y = 2000 + b
-            ctx.add(Period(*month_range(y, a), "month", (R_MONTH,), _src(m)), m)
-        elif ctx.short_slash == "month_day" and 1 <= a <= 12:
-            d = _day_from(str(b), str(a), None, ctx)
+        prefix = ctx.t[max(0, m.start() - 8): m.start()]
+        kw = "day" if re.search(r"(?:\bngay|\bhom)\s*$", prefix) else \
+            "month" if re.search(r"(?:\bthang|\bth|\bt)\s*$", prefix) else None
+        if kw is None and b <= 12 and 1 <= a <= 31:
+            continue  # day/month without keyword: _s_day_short
+        if kw == "day" and 1 <= b <= 12:
+            d = _day_from(str(a), str(b), None, ctx)
             if d:
                 ctx.add(Period(d, d, "day", (R_DAY, R_NOYEAR), _src(m)), m)
-        else:
-            ctx.amb(m, "short slash date: month/year (6/25 = June 2025) or month/day (June 25) is not fixed "
-                       "by the rulebook or train gold", ["month_year", "month_day"])
+                continue
+        elif kw in ("month", None) and 1 <= a <= 12 and 20 <= b <= 39:
+            ctx.add(Period(*month_range(2000 + b, a), "month", (R_MONTH,), _src(m)), m)
+            continue
+        ctx.amb(m, "short slash date a/b: not covered by the convention (ngay a/b = day/month; thang a/bb or no keyword "
+                   "with bb in 20..39 = month/year; no keyword with b <= 12 = day/month)", ["day_month", "month_year"])
 
 
 def _s_day_short(ctx: _Ctx) -> None:

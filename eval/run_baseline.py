@@ -153,6 +153,8 @@ def main() -> None:
     ap.add_argument("--full", action="store_true", help="alias of --subset full")
     ap.add_argument("--limit", type=int)
     ap.add_argument("--resume", action="store_true")
+    ap.add_argument("--router", action="store_true",
+                    help="put the intent router in front of the agent (docs/ROUTER.md); report name gets a _router suffix")
     ap.add_argument("--device", default=None, help="e.g. cuda:0 (default: device_map auto)")
     ap.add_argument("--date", default=datetime.date.today().isoformat())
     a = ap.parse_args()
@@ -175,7 +177,7 @@ def main() -> None:
     if a.limit:
         questions = questions[: a.limit]
 
-    tag = f"{a.date}_{a.model_name}" + ("" if a.subset == "sample" else f"_{a.subset}") + ("_mock" if a.backend == "mock" else "")
+    tag = f"{a.date}_{a.model_name}" + ("" if a.subset == "sample" else f"_{a.subset}") + ("_router" if a.router else "") + ("_mock" if a.backend == "mock" else "")
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     pq_path = out / f"{tag}.per_question.jsonl"
@@ -193,13 +195,23 @@ def main() -> None:
     print(f"model loaded in {load_s:.1f}s; {len(questions)} questions, {len(done)} already done", flush=True)
 
     agent = Agent(model, train)
+    router = normalizer = provider = None
+    if a.router:
+        from src.nlu.normalize import RuleNormalizer
+        from src.router import Router
+        from src.router.db import ConnectionProvider
+        from src.router.pipeline import solve as solve_routed
+        router, normalizer, provider = Router(), RuleNormalizer(train / "calendar.csv"), ConnectionProvider(train)
     t_run = time.monotonic()
     try:
         with pq_path.open("a", encoding="utf-8", buffering=1) as f:
             for i, q in enumerate(questions, 1):
                 if q["id"] in done:
                     continue
-                answer, log = agent.solve(q)
+                if a.router:
+                    answer, log = solve_routed(q, agent, router, normalizer, provider)
+                else:
+                    answer, log = agent.solve(q)
                 g = gold[q["id"]]
                 score, status = pa_score.score_one(answer, g)
                 row = {
@@ -211,6 +223,13 @@ def main() -> None:
                     "sql": log.get("code"), "output": log.get("output"),
                     "elapsed_s": round(log.get("elapsed_ms", 0) / 1000, 3), "error": log.get("error"),
                 }
+                if "router" in log:
+                    from src.router.gate import gate_key
+                    from types import SimpleNamespace
+                    row["route"] = log["router"]["route"]
+                    row["router_intent"] = log["router"].get("intent")
+                    row["router_reason"] = log["router"].get("reason")
+                    row["gate_key"] = gate_key(SimpleNamespace(reason=row["router_reason"], intent=row["router_intent"]))
                 if status in ("abstain", "missing", "unreadable"):
                     row["abstain_cause"] = abstain_cause(log)
                 row["group"] = error_group(row)
@@ -221,6 +240,8 @@ def main() -> None:
                     print(f"{i}/{len(questions)} PA so far {pa_now:.3f}", flush=True)
     finally:
         agent.close()
+        if provider is not None:
+            provider.close()
     run_s = time.monotonic() - t_run
 
     rows = [done[q["id"]] for q in questions if q["id"] in done]

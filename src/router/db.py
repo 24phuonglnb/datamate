@@ -1,0 +1,63 @@
+"""Read-only shop connections for the router, taken from the ingestion layer (src.ingestion.BusinessDB).
+
+BusinessDB builds the rulebook views once per shop and caches them on disk (DATAMATE_CACHE_DIR), so the agent,
+which opens the same shop through its own BusinessDB, gets a cache hit instead of a second ingestion.
+Keeps at most `max_open` shops open, like the agent."""
+from __future__ import annotations
+
+import sqlite3
+from pathlib import Path
+
+from ..ingestion import BusinessDB
+
+
+class ConnectionProvider:
+    def __init__(self, root: Path | str, max_open: int = 2):
+        self.root = Path(root)
+        self.max_open = max_open
+        self._open: dict[str, BusinessDB] = {}
+        self._flags: dict[str, list[str]] = {}
+        self._warnings: dict[str, list[str]] = {}
+        self._spans: dict[str, list[list[str]]] = {}
+        cal = self.root / "calendar.csv"
+        self._calendar = cal if cal.is_file() else None
+
+    def connection(self, shop: str) -> sqlite3.Connection:
+        base = (self.root / "data").resolve()
+        target = (base / str(shop)).resolve()
+        if target.parent != base:  # same guard as the agent: only directories directly under <root>/data
+            raise ValueError(f"Invalid shop id: {shop!r}")
+        if shop not in self._open:
+            if len(self._open) >= self.max_open:
+                self._open.pop(next(iter(self._open))).close()
+            self._open[shop] = BusinessDB(target, self._calendar)
+        return self._open[shop].connection
+
+    def flags(self, shop: str) -> list[str]:
+        """Low-confidence reasons of the shop's data layer (empty = ok), computed once per shop (invariants.py)."""
+        if shop not in self._flags:
+            from . import invariants
+            conn = self.connection(shop)
+            try:
+                m = invariants.compute(self.root / "data" / shop, conn)
+                thr = invariants.load_thresholds()
+                self._flags[shop] = invariants.flags(m, thr)
+                self._warnings[shop] = invariants.warnings(m, thr)
+                self._spans[shop] = m.get("unparsed_spans") or []
+            except Exception as exc:  # cannot even check the shop: do not trust it
+                self._flags[shop] = [f"invariants_error:{type(exc).__name__}"]
+        return self._flags[shop]
+
+    def spans(self, shop: str) -> list[list[str]]:
+        """Date spans that unparsed cells can belong to; questions whose period meets one abstain."""
+        self.flags(shop)
+        return self._spans.get(shop, [])
+
+    def warnings(self, shop: str) -> list[str]:
+        self.flags(shop)
+        return self._warnings.get(shop, [])
+
+    def close(self) -> None:
+        for db in self._open.values():
+            db.close()
+        self._open.clear()

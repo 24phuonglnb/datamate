@@ -146,3 +146,77 @@ PA = point average (+1 correct / -1 wrong / 0 abstain, rulebook section 9), scor
 | date | branch | model | question set | PA | notes |
 |---|---|---|---|---|---|
 | 2026-11-11 | feat/real-data-eval | Qwen3-8B | sample 600 (dev 480 / hold-out 120) | -0.4067 (dev -0.406, hold-out -0.408) | baseline agent, unchanged; correct 3.2%, abstain 53%, wrong 43.8%; 20.6 s/question; report `eval/reports/2026-11-11_Qwen3-8B.md` |
+
+### Intent router (branch feat/intent-router, CPU only, no LLM)
+
+Router = rules on the normalized question -> SQL templates over the rulebook views (templates copied from
+`scripts/analysis/rule_regression.py`, need the data-layer author's approval); a period entirely before the shop's
+data is answered `unanswerable` (rulebook section 7); everything uncertain goes to the LLM.
+Report: `eval/reports/2026-11-13_router.md` (ids only). Scored with `eval/pa_score.py`. Backlog of the rest: `docs/ROUTER_BACKLOG.md`.
+
+| date | branch | model | question set | PA | notes |
+|---|---|---|---|---|---|
+| 2026-11-13 | feat/intent-router | none (rules + SQL) | dev (24 shops, 2291 q) | router-answered 968/968 correct (960 template + 8 unanswerable); PA lower bound 0.4225 | 42.25% answered by the router, rest -> LLM |
+| 2026-11-13 | feat/intent-router | none (rules + SQL) | hold-out (6 shops, 709 q) | router-answered 299/299 correct (298 template + 1 unanswerable); PA lower bound 0.4217 | first run 296/298 (threshold orders), fixed on dev evidence only |
+| 2026-11-13 | feat/intent-router | none (rules + SQL), router-only submission | public_test (14 shops, 1000 q), no gold | not scored (leaderboard) | 221 answered, 779 abstain (dev_012: views not built, 0 answered); intent mix differs from train |
+
+### Data-layer invariants per shop (branch feat/intent-router, CPU, no gold)
+
+`src/router/invariants.py`, thresholds = worst value over the 30 train shops (`src/router/invariant_thresholds.json`,
+derived by `scripts/data_invariants.py derive`; never tuned on public). Flagged shops abstain entirely (reason in the log).
+
+| date | set | result |
+|---|---|---|
+| 2026-11-13 | public_test, 14 shops | dev_012 only: views not built, router not applicable. (An earlier version flagged dev_004 for "unparsed dates"; that was a counting artefact: blank date cells filled down by the ledger, see ROUTER_BACKLOG.) amount_ratio is a logged warning only (dev_007 0.3321, dev_008 0.3323 vs train min 0.3333). |
+
+### Leaderboard submissions (router-only, public_test, 1000 questions)
+
+| date | file (not committed) | answered | score | notes |
+|---|---|---|---|---|
+| 2026-11-13 | router_only v1 | 221 | 0.165 | = 193 correct, 28 wrong (87%) |
+| 2026-11-13 | v1 minus the 28 answers of dev_004 | 193 | 0.151 | dev_004 contributed +14 net: about 21 correct / 7 wrong (75%); the other 193 answers: about 172 correct / 21 wrong (89%) |
+
+### Router expansion, rule/sanity guards (branch feat/intent-router, CPU, no LLM)
+
+Added intents (dev-only development; 100% on dev before the hold-out was run): orders with revenue threshold (order_count_threshold),
+item_revenue, category_rev, sell_price_on_day, unans_subjective. Guards: per-question blocking by unparsed-date spans, rulebook-row
+guard (`rule_guard.py`), answer sanity checks (`sanity.py`). Reports: `eval/reports/2026-11-13_router_dev.md`, `..._router_holdout.md` (ids only).
+
+| date | branch | model | question set | PA | notes |
+|---|---|---|---|---|---|
+| 2026-11-13 | feat/intent-router | none | dev (24 shops, 2291 q) | router-answered 1048/1048 correct; PA lower bound 0.4574 | 45.74% answered; new intents: item_revenue 32, category_rev 11, sell_price_on_day 21, unans_subjective 4 (all 100%) |
+| 2026-11-13 | feat/intent-router | none | hold-out (709 q), run exactly once after the dev work | router-answered 339/339 correct; PA lower bound 0.4781 | 47.81% answered |
+
+### Milestones (all PA on the official train/public sets; each row's detail is in the sections above)
+
+| date | what | set | PA | where |
+|---|---|---|---|---|
+| 2026-11-11 | baseline agent, Qwen3-8B | sample 600 (dev 480 / hold-out 120) | -0.4067 | `eval/reports/2026-11-11_Qwen3-8B.md` |
+| 2026-11-12 | baseline agent, Qwen3-8B, legacy ingestion | all 709 hold-out questions | -0.4090 | branch `exp/legacy-vs-views`, `eval/reports/2026-11-12_Qwen3-8B-legacy_holdout.md` (views arm never run: no free GPU) |
+| 2026-11-13 | router only (lower bound, rest abstains) | hold-out 709 | 0.4203 (first report) | `eval/reports/2026-11-13_router_*.md` of the first router commit, then replaced |
+| 2026-11-13 | router + new intents (lower bound) | hold-out 709, run once | 0.4781 | `eval/reports/2026-11-13_router_holdout.md` |
+| 2026-11-13 | leaderboard v1, router only | public 1000 | 0.165 | 221 answered; 193 correct / 28 wrong |
+| 2026-11-13 | leaderboard, v1 without the 28 dev_004 answers | public 1000 | 0.151 | dev_004: about 21 correct / 7 wrong. Correction: dev_004 has no date-parsing error; the earlier "unparsed dates" alarm counted blank date cells that the ledger fills down |
+| 2026-11-13 | leaderboard v2, router only (guard rulebook theo ý chính) | public 1000 | 0.195 | 265 answered: 220 identical to v1, 0 changed, 45 new, 1 dropped (new-rule cue). Gain +0.030 = +30 net points over v1: the 45 new answers are about 37-38 correct / 7-8 wrong (the dropped one counts +/-1). File not committed |
+
+### Router v3 template expansion (branch feat/intent-router, CPU, no LLM)
+
+Added, developed on dev only (each 100% on dev before the hold-out was run): best_month, monthly_series, streak_bool, cust_group_rev,
+payment_method_rev, channel_rev (single value), unit_total_qty. Not done: ingredient_revenue and rx_nonrx_revenue, because `v_items`
+has no `active_ingredient` / `is_prescription` values for the pharmacy shops (the data sits in the raw table of medicines).
+Reports replaced: `eval/reports/2026-11-13_router_dev.md`, `..._router_holdout.md`.
+
+| date | branch | model | question set | PA | notes |
+|---|---|---|---|---|---|
+| 2026-11-13 | feat/intent-router | none | dev (2291 q) | router-answered 1107/1107 correct; PA lower bound 0.4832 | 48.32% answered |
+| 2026-11-13 | feat/intent-router | none | hold-out (709 q), run once | router-answered 356/356 correct; PA lower bound 0.5021 | 50.21% answered |
+
+### Router pharmacy / purchases / stock templates (branch feat/router-pharmacy, CPU, no LLM)
+
+Branch `feat/router-pharmacy` = `feat/intent-router` + `feat/p3-pharmacy-purchases` (views of the data layer, not edited). 11 new templates, developed on dev shops only (hold-out not run):
+ingredient_revenue, rx_nonrx_revenue, rx_share, purchase_total, supplier_top, purchase_avg_price, stock_qty, stock_large_unit, stock_value, expiry_list, expiry_nearest_lot.
+A shop without the view (purchase book, stock, lots) or with a purchase book without amounts answers `unanswerable` (rulebook section 7). `eval/reports/2026-11-13_router_dev.*` replaced by the new dev run.
+
+| date | branch | model | question set | PA | notes |
+|---|---|---|---|---|---|
+| 2026-11-14 | feat/router-pharmacy | none | dev (2291 q) | router-answered 1340/1340 correct; PA lower bound 0.5849 | 58.49% answered; +233 answered vs 1107 before; 11 new templates, 233/233 of the 243 routable dev questions of the new groups correct |
