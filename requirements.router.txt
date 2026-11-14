@@ -1,0 +1,6 @@
+# CPU-only router fallback dependencies (used by Dockerfile.router).
+# torch and vllm are NOT included: no GPU inference path is built.
+# openpyxl: XLSX business data ingestion (BusinessDB)
+# pandas: rulebook-compliant view layer (src/views.py, src/ledger.py)
+openpyxl==3.1.5
+pandas>=2.0

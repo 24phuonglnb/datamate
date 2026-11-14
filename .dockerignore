@@ -1,0 +1,51 @@
+# .dockerignore for Dockerfile.router (CPU-only router fallback image)
+# Only src/, predict.sh, and requirements.router.txt are needed.
+# Everything else is excluded to keep the build context small and leak-free.
+
+# ── Official datasets — MUST NOT enter the image ──────────────────────────
+train/
+public_test/
+data/
+
+# ── Evaluation artefacts — not part of the runtime ────────────────────────
+eval/
+eval_results/
+reports/
+
+# ── Development and analysis scripts ─────────────────────────────────────
+scripts/
+benchmark/
+docs/
+tests/
+
+# ── Example / demo data ───────────────────────────────────────────────────
+example_data/
+example_result/
+
+# ── Model weights — no weights in router image ────────────────────────────
+models/
+offline_wheels/
+
+# ── Training evidence (not needed at inference) ───────────────────────────
+training_code/
+
+# ── GPU Dockerfile — this build uses Dockerfile.router ───────────────────
+Dockerfile
+
+# ── Documentation / repo metadata ────────────────────────────────────────
+README.md
+*.md
+.gitignore
+
+# ── Python cache ─────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+.eggs/
+
+# ── Local dev artefacts ───────────────────────────────────────────────────
+.env
+*.env
+get-pip.py

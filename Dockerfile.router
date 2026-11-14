@@ -1,0 +1,70 @@
+# CPU-only router fallback for Zalo AI Challenge 2026 DataMate.
+#
+# Uses the same judging interface as the full GPU image:
+#   - Entrypoint: bash /code/predict.sh  (required by organiser)
+#   - Input:  /data/questions.jsonl, /data/rulebook.md, /data/calendar.csv, /data/data/<shop>/
+#   - Output: /result/submission.jsonl, /result/logs/questions.jsonl
+#
+# DATAMATE_ROUTER_ONLY=1 (baked in) causes src/predict.py to skip model loading:
+#   router answers ~50 % of questions deterministically; the rest become abstain.
+#
+# ── HARD PREREQUISITE ────────────────────────────────────────────────────────
+# This file MUST be built from the feat/intent-router branch, which carries
+# 21 extra source files that do not exist on main:
+#   src/router/   src/nlu/   src/views.py   src/cleaning.py
+#   src/ledger.py src/mapping.py src/timeutil.py src/profile.py
+#
+# On CECS or any Linux host:
+#   git fetch origin
+#   git checkout feat/intent-router
+#   docker buildx build --platform linux/amd64 \
+#       -t zaic2026_datamate_team:router \
+#       -f Dockerfile.router .
+#
+# ── JUDGING-COMPATIBLE RUN COMMAND ──────────────────────────────────────────
+#   docker run --rm --network none \
+#       -v /absolute/path/to/public_test:/data:ro \
+#       -v /absolute/path/to/result:/result \
+#       zaic2026_datamate_team:router
+#
+# ── SMOKE TEST (verify correct question count and schema) ────────────────────
+#   docker run --rm --network none \
+#       -v $(pwd)/public_test:/data:ro \
+#       -v /tmp/router-smoke:/result \
+#       zaic2026_datamate_team:router
+#   wc -l /tmp/router-smoke/submission.jsonl        # must equal question count
+#   python3 scripts/validate_submission.py \
+#       /tmp/router-smoke/submission.jsonl public_test/questions.jsonl
+#
+# Expected output: ~50 % answered, ~50 % {"type":"abstain"} — no wrong answers.
+# No GPU required. No model weights included.
+
+FROM python:3.10-slim
+
+# Match the judging environment's offline and reproducibility flags.
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONHASHSEED=42 \
+    HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1 \
+    PYTHONPATH=/code \
+    OMP_NUM_THREADS=4 \
+    DATAMATE_ROUTER_ONLY=1 \
+    DATAMATE_CACHE_DIR=/tmp/datamate_cache
+
+WORKDIR /code
+
+# CPU-only runtime: openpyxl for xlsx ingestion, pandas for rulebook views.
+# torch and vllm are NOT installed (no GPU path).
+COPY requirements.router.txt /code/requirements.txt
+RUN pip install --no-cache-dir -r /code/requirements.txt
+
+# Source: requires feat/intent-router checkout (see prerequisite above).
+# Copies all of src/ including src/router/, src/nlu/, src/views.py, etc.
+COPY src/ /code/src/
+
+# predict.sh is the judging entrypoint — identical to the GPU image.
+# DATAMATE_ROUTER_ONLY=1 (above) suppresses model loading inside src/predict.py.
+COPY predict.sh /code/predict.sh
+RUN chmod +x /code/predict.sh
+
+CMD ["bash", "/code/predict.sh"]
