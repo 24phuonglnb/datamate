@@ -151,17 +151,19 @@ def test_synthetic_shop_views_and_rulebook_rules(tmp_path: Path) -> None:
         ("SP02", "Mì Hảo Hảo tôm chua cay", 10.0),
     ]
 
-    # 6. Verify v_items excludes 'Phí phục vụ' and includes aliases
+    # 6. Verify v_items excludes 'Phí phục vụ', includes aliases, and keeps pharmacy columns NULL on non-pharmacy shops
     items_rows = conn.execute(
-        "SELECT item_code, item_name, name_aliases, category, base_unit FROM v_items ORDER BY item_code"
+        "SELECT item_code, item_name, name_aliases, category, base_unit, active_ingredient, is_prescription FROM v_items ORDER BY item_code"
     ).fetchall()
     assert len(items_rows) == 2
     assert items_rows[0][0] == "SP01"
     assert items_rows[0][1] == "Sữa tươi 180ml"
     assert "Sua tuoi 180ml" in items_rows[0][2]
     assert "Sữa tươi hộp" in items_rows[0][2]
+    assert items_rows[0][5] is None and items_rows[0][6] is None
     assert items_rows[1][0] == "SP02"
     assert "Mì HH" in items_rows[1][2]
+    assert items_rows[1][5] is None and items_rows[1][6] is None
 
     # 7. Verify schema_text order and contents
     stext = schema_text(conn, max_chars=13000)
@@ -386,3 +388,415 @@ def test_safe_identifier_and_item_match_key() -> None:
     assert safe_identifier("123_abc") == "col_123_abc"
     assert safe_identifier("select") == "select_col"
     assert item_match_key("Paracetamol 500 mg") == item_match_key("Paracetamol 500mg")
+
+
+def test_pharmacy_nameless_drug_table_and_normalization(tmp_path: Path) -> None:
+    """Supplementary drug tables without a name column populate active_ingredient & is_prescription on v_items."""
+    biz_dir = tmp_path / "biz_pharmacy_syn"
+    biz_dir.mkdir()
+
+    _write_csv(
+        biz_dir / "danh_muc.csv",
+        [
+            ["Mã hàng", "Tên hàng", "ĐVT", "Giá bán"],
+            ["SP01", "Panadol Extra", "vỉ", "18000"],
+            ["SP02", "Amoxicillin 500mg", "vỉ", "15000"],
+            ["SP03", "Hapacol 250", "gói", "3000"],
+            ["SP04", "Khẩu trang y tế", "hộp", "35000"],
+        ],
+    )
+    # Drug attribute table WITHOUT a name column, with CamelCase headers, an unrelated ID column,
+    # mixed case/whitespace codes, varied raw Rx flags, and a duplicate row with blank attributes.
+    _write_csv(
+        biz_dir / "thong_tin_thuoc.csv",
+        [
+            ["IDCuaHang", "MaHangHoa", "ThanhPhanChinh", "BanTheoDon"],
+            ["CH01", "sp 01", "Paracetamol  +   Cafein", "Không"],
+            ["CH01", "SP02", "Amoxicillin", "x"],
+            ["CH01", "SP02", "", ""],
+            ["CH01", "SP03", "Paracetamol", "FALSE"],
+        ],
+    )
+    _write_csv(
+        biz_dir / "ban_hang.csv",
+        [
+            ["Mã HĐ", "Ngày bán", "Trạng thái", "Mã SP", "Tên hàng", "ĐVT", "SL", "Đơn giá", "Thanh tiền"],
+            ["HD01", "2026-06-01", "Hoàn thành", "SP01", "Panadol Extra", "vỉ", "2", "18000", "36000"],
+            ["HD01", "2026-06-01", "Hoàn thành", "SP02", "Amoxicillin 500mg", "vỉ", "1", "15000", "15000"],
+            ["HD02", "2026-06-02", "Hoàn thành", "SP03", "Hapacol 250", "gói", "5", "3000", "15000"],
+            ["HD02", "2026-06-02", "Hoàn thành", "SP04", "Khẩu trang y tế", "hộp", "1", "35000", "35000"],
+        ],
+    )
+
+    conn = build_database(biz_dir)
+    rows = conn.execute(
+        "SELECT item_code, active_ingredient, is_prescription FROM v_items ORDER BY item_code"
+    ).fetchall()
+    assert rows == [
+        ("SP01", "Paracetamol + Cafein", "0"),
+        ("SP02", "Amoxicillin", "1"),
+        ("SP03", "Paracetamol", "0"),
+        ("SP04", None, "0"),
+    ]
+
+    # Rulebook §6: 'Paracetamol' revenue excludes combination 'Paracetamol + Cafein'
+    para_rev = conn.execute(
+        """
+        SELECT CAST(ROUND(COALESCE(SUM(l.line_amount), 0)) AS INTEGER)
+        FROM v_valid_lines l
+        JOIN v_items i ON COALESCE(l.item_code, l.item_name) = COALESCE(i.item_code, i.item_name)
+        WHERE l.is_service_fee = 0 AND i.active_ingredient = 'Paracetamol'
+        """
+    ).fetchone()[0]
+    assert para_rev == 15000
+
+    # Rulebook §6: Rx revenue percentage = 15000 / 101000 * 100 = 14.85
+    rx_pct = conn.execute(
+        """
+        SELECT ROUND(
+            SUM(CASE WHEN i.is_prescription = '1' THEN l.line_amount ELSE 0 END) * 100.0
+            / NULLIF(SUM(l.line_amount), 0),
+            2
+        )
+        FROM v_valid_lines l
+        LEFT JOIN v_items i
+            ON l.is_service_fee = 0
+           AND COALESCE(l.item_code, l.item_name) = COALESCE(i.item_code, i.item_name)
+        """
+    ).fetchone()[0]
+    assert rx_pct == 14.85
+    conn.close()
+
+
+def test_conversion_price_column_not_confused_with_prescription(tmp_path: Path) -> None:
+    """Ensure 'Giá bán theo đơn vị quy đổi' is not matched as an is_prescription column."""
+    biz_dir = tmp_path / "biz_non_pharmacy_conv"
+    biz_dir.mkdir()
+    _write_csv(
+        biz_dir / "san_pham.csv",
+        [
+            ["Mã SP", "Tên SP", "ĐVT"],
+            ["SP01", "Nước suối", "chai"],
+        ],
+    )
+    _write_csv(
+        biz_dir / "don_vi_quy_doi.csv",
+        [
+            ["Mã SP", "Đơn vị", "Bằng", "Giá bán theo đơn vị quy đổi"],
+            ["SP01", "thùng", "24", "120000"],
+        ],
+    )
+    _write_csv(
+        biz_dir / "ban_hang.csv",
+        [
+            ["Mã HĐ", "Ngày bán", "Mã SP", "Tên SP", "ĐVT", "SL", "Đơn giá", "Thanh tiền"],
+            ["HD01", "2026-06-01", "SP01", "Nước suối", "chai", "2", "5000", "10000"],
+        ],
+    )
+    conn = build_database(biz_dir)
+    assert conn.execute("SELECT COUNT(*), COUNT(active_ingredient), COUNT(is_prescription) FROM v_items").fetchone() == (1, 0, 0)
+    conn.close()
+
+
+def test_purchase_views_synthetic_header_detail_opening_cancelled_and_units(tmp_path: Path) -> None:
+    """Cover §5 purchase views: header+detail, supplier lookup, cancelled exclusion, opening stock inclusion, 2 units, and item aliases."""
+    biz_dir = tmp_path / "biz_purchase_full"
+    biz_dir.mkdir()
+    (biz_dir / "README.md").write_text(
+        "# Quy đổi\n- Bò húc: 1 thùng = 24 lon\nGhi tắt: BH = Bò húc\n",
+        encoding="utf-8",
+    )
+    _write_csv(
+        biz_dir / "san_pham.csv",
+        [
+            ["Mã hàng", "Tên hàng", "ĐVT", "Ghi tắt"],
+            ["SP01", "Bò húc", "lon", "BH"],
+            ["SP02", "Trà xanh 0 độ", "chai", ""],
+        ],
+    )
+    _write_csv(
+        biz_dir / "ban_hang.csv",
+        [
+            ["Mã HĐ", "Ngày bán", "Trạng thái", "Mã hàng", "Tên hàng", "ĐVT", "SL", "Đơn giá", "Thành tiền"],
+            ["HD01", "2026-05-05", "Hoàn thành", "SP01", "BH", "lon", "14", "10000", "140000"],
+            ["HD02", "2026-05-06", "Hủy", "SP01", "Bò húc", "lon", "100", "10000", "1000000"],
+        ],
+    )
+    _write_csv(
+        biz_dir / "nha_cung_cap.csv",
+        [
+            ["MaNhaCungCap", "TenGoi"],
+            ["NCC01", "Công ty Minh Phát"],
+            ["NCC02", "Đại lý Hòa Bình"],
+        ],
+    )
+    _write_csv(
+        biz_dir / "phieu_nhap.csv",
+        [
+            ["MaPhieuNhap", "NgayNhapKho", "MaNhaCungCap", "TrangThai", "DienGiai"],
+            ["PN01", "2026-05-01", "NCC01", "Đã nhập", "Nhập đầu kỳ"],
+            ["PN02", "2026-05-03", "NCC02", "Đã nhập", ""],
+            ["PN03", "2026-05-04", "NCC01", "Đã hủy", "Nhập nhầm"],
+        ],
+    )
+    _write_csv(
+        biz_dir / "chi_tiet_nhap.csv",
+        [
+            ["MaPhieuNhap", "MaHangHoa", "TenHang", "DonViTinh", "SL", "DonGiaNhap"],
+            ["PN01", "SP01", "Bò húc", "thùng", "1", "192000"],
+            ["PN02", "SP01", "BH", "thùng", "2", "216000"],
+            ["PN02", "SP01", "Bò húc", "lon", "12", "8500"],
+            ["PN03", "SP02", "Trà xanh 0 độ", "chai", "10", "6000"],
+        ],
+    )
+
+    conn = build_database(biz_dir)
+
+    # All lines vs valid lines (cancelled PN03 excluded, opening stock PN01 included)
+    assert conn.execute("SELECT COUNT(*) FROM v_purchase_lines").fetchone()[0] == 4
+    assert conn.execute("SELECT COUNT(*) FROM v_valid_purchase_lines").fetchone()[0] == 3
+    assert conn.execute("SELECT COUNT(*) FROM v_purchases").fetchone()[0] == 3
+    assert conn.execute("SELECT is_opening_stock, supplier, supplier_code FROM v_valid_purchase_lines WHERE receipt_id = 'PN01'").fetchone() == (
+        1, "Công ty Minh Phát", "NCC01"
+    )
+    assert conn.execute("SELECT is_cancelled FROM v_purchases WHERE receipt_id = 'PN03'").fetchone()[0] == 1
+
+    # Total valid purchase spend in 2026-05: 192000 + 2*216000 + 12*8500 = 726000
+    assert conn.execute("SELECT SUM(line_amount) FROM v_valid_purchase_lines WHERE receipt_month = '2026-05'").fetchone()[0] == 726000.0
+
+    # Weighted average unit cost per purchase unit (NOT simple arithmetic average (192000+216000)/2 = 204000)
+    avg_thung = conn.execute(
+        "SELECT SUM(line_amount) * 1.0 / SUM(qty) FROM v_valid_purchase_lines WHERE item_name = 'Bò húc' AND unit = 'thùng'"
+    ).fetchone()[0]
+    assert avg_thung == 208000.0
+    avg_lon = conn.execute(
+        "SELECT SUM(line_amount) * 1.0 / SUM(qty) FROM v_valid_purchase_lines WHERE item_name = 'Bò húc' AND unit = 'lon'"
+    ).fetchone()[0]
+    assert avg_lon == 8500.0
+
+    # Top valid supplier by spend: NCC02 (534000) beats NCC01 (192000 because PN03 is cancelled)
+    top_sup = conn.execute(
+        "SELECT supplier, SUM(line_amount) AS amt FROM v_valid_purchase_lines GROUP BY supplier ORDER BY amt DESC LIMIT 1"
+    ).fetchone()
+    assert top_sup == ("Đại lý Hòa Bình", 534000.0)
+
+    # Canonical item matching + conversion + purchase minus sales in base unit (`lon`)
+    # Purchases: 1*24 + 2*24 + 12 = 84 lon; Sales valid: 14 lon -> Net = 70 lon
+    p_base = conn.execute("SELECT SUM(qty_base) FROM v_valid_purchase_lines WHERE item_name = 'Bò húc'").fetchone()[0]
+    s_base = conn.execute("SELECT SUM(qty_base) FROM v_valid_lines WHERE item_name = 'Bò húc'").fetchone()[0]
+    assert p_base == 84.0
+    assert s_base == 14.0
+    assert p_base - s_base == 70.0
+
+    st = schema_text(conn)
+    assert "v_valid_purchase_lines" in st
+    assert "v_purchase_lines" in st
+    assert "v_purchases" in st
+    conn.close()
+
+
+def test_no_purchase_views_when_absent_and_null_cost_when_unrecorded(tmp_path: Path) -> None:
+    """Verify shops without purchases have no v_purchase* views, and shops without purchase prices keep cost/amount NULL."""
+    # 1. Shop without purchase tables -> no v_purchase* views
+    sales_only = tmp_path / "biz_sales_only"
+    sales_only.mkdir()
+    _write_csv(
+        sales_only / "ban_hang.csv",
+        [
+            ["Mã HĐ", "Ngày", "Tên hàng", "ĐVT", "SL", "Thành tiền"],
+            ["HD01", "2026-05-01", "Nước suối", "chai", "2", "10000"],
+        ],
+    )
+    conn1 = build_database(sales_only)
+    views1 = {r[0] for r in conn1.execute("SELECT name FROM sqlite_master WHERE type IN ('view', 'table')").fetchall()}
+    assert "v_purchase_lines" not in views1
+    assert "v_valid_purchase_lines" not in views1
+    assert "v_purchases" not in views1
+    conn1.close()
+
+    # 2. Shop with header+detail purchases that record qty only (no cost, no amount, no unit)
+    qty_only = tmp_path / "biz_purchase_qty_only"
+    qty_only.mkdir()
+    _write_csv(
+        qty_only / "danh_muc.csv",
+        [
+            ["Mã SKU", "Tên sản phẩm", "Đơn vị"],
+            ["SKU01", "Sữa tươi", "hộp"],
+        ],
+    )
+    _write_csv(
+        qty_only / "ban_hang.csv",
+        [
+            ["Mã HĐ", "Ngày", "Mã SKU", "SL", "Thành tiền"],
+            ["HD01", "2026-05-02", "SKU01", "3", "30000"],
+        ],
+    )
+    _write_csv(
+        qty_only / "DonNhapHang.csv",
+        [
+            ["Mã đơn nhập", "Ngày nhập", "Mã nhà cung cấp"],
+            ["DN01", "2026-05-01", "NCC01"],
+        ],
+    )
+    _write_csv(
+        qty_only / "DonNhapHang_ChiTiet.csv",
+        [
+            ["Mã đơn nhập", "Mã SKU", "Số lượng nhập"],
+            ["DN01", "SKU01", "20"],
+        ],
+    )
+    conn2 = build_database(qty_only)
+    row = conn2.execute(
+        "SELECT item_name, qty, qty_base, base_unit, unit, unit_cost, line_amount FROM v_valid_purchase_lines"
+    ).fetchone()
+    assert row == ("Sữa tươi", 20.0, 20.0, "hộp", None, None, None)
+    assert conn2.execute("SELECT total_amount FROM v_purchases WHERE receipt_id = 'DN01'").fetchone()[0] is None
+    assert "does NOT record purchase prices/amounts" in schema_text(conn2)
+    conn2.close()
+
+
+def test_camelcase_unit_conversion_table_and_purchase_qty_base(tmp_path: Path) -> None:
+    """CamelCase conversion tables such as DanhSachDonViTinh (without explicit base column) must convert purchase qty_base."""
+    biz_dir = tmp_path / "biz_camelcase_conv"
+    biz_dir.mkdir()
+    _write_csv(
+        biz_dir / "DanhSachSanPham.csv",
+        [
+            ["Mã hàng", "Tên hàng", "ĐVT"],
+            ["SP0049", "Bánh croissant", "cái"],
+        ],
+    )
+    _write_csv(
+        biz_dir / "DanhSachDonViTinh.csv",
+        [
+            ["Mã hàng", "ĐVT", "Quy đổi", "Giá bán"],
+            ["SP0049", "hộp", "6", "222000"],
+        ],
+    )
+    _write_csv(
+        biz_dir / "DanhSachHoaDon.csv",
+        [
+            ["Mã hóa đơn", "Thời gian", "Trạng thái"],
+            ["ORD01", "2025-10-05", "xong"],
+        ],
+    )
+    _write_csv(
+        biz_dir / "DanhSachHoaDonChiTiet.csv",
+        [
+            ["Mã hóa đơn", "Mã hàng", "Tên hàng", "Đơn vị tính", "Số lượng", "Đơn giá", "Thành tiền"],
+            ["ORD01", "SP0049", "Bánh croissant", "cái", "163", "37000", "6031000"],
+        ],
+    )
+    _write_csv(
+        biz_dir / "DanhSachNhapHang.csv",
+        [
+            ["Mã nhập hàng", "Thời gian", "Mã NCC", "Trạng thái"],
+            ["PN01", "2025-10-02", "NCC01", "Đã nhập hàng"],
+        ],
+    )
+    _write_csv(
+        biz_dir / "DanhSachChiTietNhapHang.csv",
+        [
+            ["Mã nhập hàng", "Mã hàng", "ĐVT", "Số lượng", "Đơn giá"],
+            ["PN01", "SP0049", "hộp", "28", "90000"],
+        ],
+    )
+    conn = build_database(biz_dir)
+    factor, qty_base, bu = conn.execute(
+        "SELECT factor, qty_base, base_unit FROM v_valid_purchase_lines WHERE item_code = 'SP0049'"
+    ).fetchone()
+    assert factor == 6.0
+    assert qty_base == 168.0
+    assert bu == "cái"
+    sold_base = conn.execute(
+        "SELECT SUM(qty_base) FROM v_valid_lines WHERE item_code = 'SP0049'"
+    ).fetchone()[0]
+    assert qty_base - sold_base == 5.0
+    conn.close()
+
+
+def test_pharmacy_etc_flag_and_unrecognized_rx_value_stays_null(tmp_path: Path) -> None:
+    """`ETC` means prescription; a filled Rx cell we cannot read stays NULL instead of defaulting to '0'."""
+    biz_dir = tmp_path / "biz_pharmacy_etc"
+    biz_dir.mkdir()
+    _write_csv(
+        biz_dir / "danh_muc.csv",
+        [
+            ["Mã hàng", "Tên hàng", "ĐVT", "Giá bán"],
+            ["SP01", "Augmentin 625", "vỉ", "90000"],
+            ["SP02", "Vitamin C 500", "vỉ", "10000"],
+            ["SP03", "Thuốc lạ", "vỉ", "20000"],
+            ["SP04", "Bông y tế", "gói", "5000"],
+        ],
+    )
+    _write_csv(
+        biz_dir / "danh_sach_thuoc.csv",
+        [
+            ["Mã hàng", "Hoạt chất", "Phân loại kê đơn"],
+            ["SP01", "Amoxicillin + Acid clavulanic", "ETC"],
+            ["SP02", "Acid ascorbic", "OTC"],
+            ["SP03", "Chất X", "???"],
+        ],
+    )
+    _write_csv(
+        biz_dir / "ban_hang.csv",
+        [
+            ["Mã HĐ", "Ngày bán", "Trạng thái", "Mã SP", "Tên hàng", "ĐVT", "SL", "Đơn giá", "Thanh tiền"],
+            ["HD01", "2026-06-01", "Hoàn thành", "SP01", "Augmentin 625", "vỉ", "1", "90000", "90000"],
+            ["HD01", "2026-06-01", "Hoàn thành", "SP02", "Vitamin C 500", "vỉ", "1", "10000", "10000"],
+            ["HD02", "2026-06-02", "Hoàn thành", "SP03", "Thuốc lạ", "vỉ", "1", "20000", "20000"],
+            ["HD02", "2026-06-02", "Hoàn thành", "SP04", "Bông y tế", "gói", "1", "5000", "5000"],
+        ],
+    )
+    conn = build_database(biz_dir)
+    rows = conn.execute("SELECT item_code, is_prescription FROM v_items ORDER BY item_code").fetchall()
+    conn.close()
+    assert rows == [("SP01", "1"), ("SP02", "0"), ("SP03", None), ("SP04", "0")]
+
+
+@pytest.mark.parametrize(
+    "note, expected",
+    [
+        ("Anh Huy giao hàng", False),
+        ("NCC Huy Hoàng", False),
+        ("anh huy giao", False),
+        ("Đã huỷ", True),
+        ("Hủy do sai giá", True),
+        ("phieu huy", True),
+        ("da huy phieu", True),
+        ("không hủy", False),
+        ("Cancelled", True),
+        ("nhập đầu kỳ", False),
+    ],
+)
+def test_purchase_note_cancel_detection_ignores_person_named_huy(note: str, expected: bool) -> None:
+    from src.views import _note_says_cancelled
+
+    assert _note_says_cancelled(note) is expected
+
+
+def test_purchase_note_with_person_named_huy_is_not_cancelled(tmp_path: Path) -> None:
+    """A receipt whose note mentions a person named Huy still counts towards purchase spend (§5)."""
+    biz_dir = tmp_path / "biz_purchase_huy"
+    biz_dir.mkdir()
+    _write_csv(
+        biz_dir / "ban_hang.csv",
+        [
+            ["Mã HĐ", "Ngày bán", "Trạng thái", "Tên hàng", "ĐVT", "SL", "Đơn giá", "Thanh tiền"],
+            ["HD01", "2026-06-01", "Hoàn thành", "Cà phê sữa", "ly", "2", "25000", "50000"],
+        ],
+    )
+    _write_csv(
+        biz_dir / "so_nhap_hang.csv",
+        [
+            ["Số phiếu", "Ngày nhập", "Nhà cung cấp", "Tên mặt hàng", "ĐVT", "SL nhập", "Giá nhập", "Thành tiền", "Ghi chú"],
+            ["PN01", "2026-06-01", "NCC A", "Cà phê sữa", "ly", "10", "10000", "100000", "Anh Huy giao"],
+            ["PN02", "2026-06-02", "NCC A", "Cà phê sữa", "ly", "5", "10000", "50000", "Đã huỷ"],
+        ],
+    )
+    conn = build_database(biz_dir)
+    rows = conn.execute("SELECT receipt_id, is_cancelled FROM v_purchases ORDER BY receipt_id").fetchall()
+    spend = conn.execute("SELECT SUM(line_amount) FROM v_valid_purchase_lines").fetchone()[0]
+    conn.close()
+    assert rows == [("PN01", 0), ("PN02", 1)]
+    assert spend == 100000

@@ -45,6 +45,7 @@ from src.cleaning import (
     META_COLS,
     RawTable,
     drop_export_duplicates,
+    fill_order_level,
     infer_kinds,
     is_blank,
     load_business,
@@ -299,6 +300,123 @@ def _clean_dataframe_for_sql(
     return pd.DataFrame(cleaned_cols), col_map, kind_map
 
 
+_ING_COL_RE = re.compile(
+    r"\b(hoat\s*chat|thanh\s*phan(?:\s*chinh|\s*hoat\s*chat)?|(?:active\s*)?ingredients?)\b"
+)
+_RX_COL_RE = re.compile(
+    r"\b(?:thuoc\s*ke\s*don|thuockedon|ke\s*don|kedon|ban\s*theo\s*don(?!\s*(?:vi|hang|gia)\b)|bantheodon(?!vi|hang|gia)|thuoc\s*theo\s*don(?!\s*(?:vi|hang|gia)\b)|(?:is\s*)?prescription|is\s*rx|rx)\b"
+)
+_RX_TRUE_KEYS = {
+    "1", "1 0", "true", "t", "yes", "y", "co", "x",
+    "ke don", "thuoc ke don", "ban theo don", "theo don", "rx", "kd",
+    "etc", "thuoc etc",  # ETC (ethical) = prescription drug in Vietnamese pharmacy catalogs
+}
+_RX_FALSE_KEYS = {
+    "0", "0 0", "false", "f", "no", "n", "khong", "k", "ko",
+    "khong ke don", "khong ban theo don", "khong theo don", "otc", "non rx",
+    "khong phai thuoc ke don",
+}
+
+
+def _col_key(col_name: Any) -> str:
+    """Normalize a column header, splitting CamelCase before stripping accents/punctuation."""
+    s = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", nfc(str(col_name)))
+    return norm_key(s)
+
+
+def _code_match_key(val: Any) -> str:
+    """Normalize an item code for matching (case-insensitive, whitespace-free)."""
+    if is_blank(val):
+        return ""
+    return re.sub(r"\s+", "", nfc(val)).upper()
+
+
+def _find_ingredient_col(cols: list[str]) -> str | None:
+    """Find an active-ingredient column (`Hoạt chất`, `ThanhPhanChinh`, ...)."""
+    return next((c for c in cols if _ING_COL_RE.search(_col_key(c))), None)
+
+
+def _find_prescription_col(cols: list[str]) -> str | None:
+    """Find a prescription-flag column (`Thuốc kê đơn`, `Kê đơn`, `BanTheoDon`, `Rx`, ...)."""
+    return next((c for c in cols if _RX_COL_RE.search(_col_key(c))), None)
+
+
+def _normalize_prescription(val: Any) -> str | None:
+    """Normalize raw prescription indicator values to `'1'` (Rx) or `'0'` (non-Rx), or `None` if blank."""
+    if is_blank(val):
+        return None
+    if isinstance(val, bool):
+        return "1" if val else "0"
+    if isinstance(val, (int, float, np.integer, np.floating)):
+        if float(val) == 1.0:
+            return "1"
+        if float(val) == 0.0:
+            return "0"
+    s = re.sub(r"\s+", " ", nfc(val).strip()).lower()
+    if s in ("-", "—", "–"):
+        return "0"
+    k = norm_key(val)
+    if k in _RX_TRUE_KEYS:
+        return "1"
+    if k in _RX_FALSE_KEYS:
+        return "0"
+    if any(w in k for w in ("khong", "otc", "non rx")):
+        return "0"
+    if any(w in k for w in ("ke don", "theo don")) or re.search(r"\b(rx|etc)\b", k):
+        return "1"
+    return None
+
+
+def _rx_unrecognized(val: Any) -> bool:
+    """True when a prescription cell is filled but its value is not understood (keep `NULL`, never default to `'0'`)."""
+    return not is_blank(val) and _normalize_prescription(val) is None
+
+
+def _pick_attr_code_column(
+    t_df: pd.DataFrame,
+    cols: list[str],
+    exclude_cols: set[str],
+    known_codes: list[Any],
+) -> str | None:
+    """Pick the item-code column of a supplementary attribute table by content overlap with `known_codes`."""
+    cand_cols = [c for c in cols if c not in exclude_cols]
+    if not cand_cols or t_df.empty:
+        return None
+    want = {_code_match_key(x) for x in known_codes if not is_blank(x)}
+    want.discard("")
+    if want:
+        code_c, _ = pick_catalog_columns(t_df[cand_cols], known_codes)
+        best_score: tuple[float, float, int, int] | None = None
+        best_col: str | None = None
+        for c in cand_cols:
+            ck = _col_key(c)
+            if any(k in ck for k in ("barcode", "ma vach", "ean", "lien quan", "ghi chu", "mo ta")):
+                continue
+            have = {_code_match_key(v) for v in t_df[c].dropna()}
+            have.discard("")
+            if not have:
+                continue
+            overlap = len(want & have)
+            if overlap == 0:
+                continue
+            recall = overlap / len(want)
+            precision = overlap / len(have)
+            if recall >= 0.5 or precision >= 0.5:
+                is_code_hdr = int(
+                    (bool(re.search(r"\b(ma|sku|code)\b", ck)) or ck.startswith("ma"))
+                    and not re.search(r"\b(stt|no|so thu tu|thu tu)\b", ck)
+                )
+                score = (round(recall, 6), round(precision, 6), overlap, is_code_hdr)
+                if best_score is None or score > best_score:
+                    best_score = score
+                    best_col = c
+        if best_col is not None:
+            return best_col
+        return code_c
+    code_c, _ = pick_catalog_columns(t_df[cand_cols], None)
+    return code_c
+
+
 def _build_item_catalog_and_canonicalize_lines(
     tables: list[RawTable],
     ledger_df: pd.DataFrame,
@@ -339,6 +457,9 @@ def _build_item_catalog_and_canonicalize_lines(
 
     # 2. Discover catalog table (if any) and extract item metadata
     catalog_records: list[dict[str, Any]] = []
+    has_prescription_col = False
+    drug_meta_by_code: dict[str, dict[str, str | None]] = {}
+    rx_unknown_codes: set[str] = set()  # item codes whose Rx cell holds a value we cannot interpret
     sales_item_codes = [x for x in df["item_code"].dropna().unique()] if "item_code" in df.columns else []
     for t in tables:
         tk = norm_key(t.name)
@@ -362,8 +483,10 @@ def _build_item_catalog_and_canonicalize_lines(
         alias_c = next((c for c in cols if c not in (name_c, code_c, cat_c, unit_c) and any(w in norm_key(c) for w in ["goi khac", "ten tat", "ghi tat", "biet duoc", "alias"])), None)
         sell_c = next((c for c in cols if any(w in norm_key(c) for w in ["gia ban", "don gia ban", "gia niem yet", "gia le", "don gia"])), None)
         cost_c = next((c for c in cols if any(w in norm_key(c) for w in ["gia von", "gia nhap", "gia goc"])), None)
-        ing_c = next((c for c in cols if any(w in norm_key(c) for w in ["hoat chat", "thanh phan"])), None)
-        rx_c = next((c for c in cols if any(w in norm_key(c) for w in ["ke don", "thuoc ke don", "rx"])), None)
+        ing_c = _find_ingredient_col(cols)
+        rx_c = _find_prescription_col(cols)
+        if rx_c:
+            has_prescription_col = True
 
         for _, r in t_df.iterrows():
             raw_nm = r[name_c]
@@ -378,7 +501,17 @@ def _build_item_catalog_and_canonicalize_lines(
             sell_val = parse_number(r[sell_c]) if sell_c else None
             cost_val = parse_number(r[cost_c]) if cost_c else None
             ing_str = re.sub(r"\s+", " ", nfc(r[ing_c]).strip()) if (ing_c and not is_blank(r[ing_c])) else None
-            rx_str = re.sub(r"\s+", " ", nfc(r[rx_c]).strip()) if (rx_c and not is_blank(r[rx_c])) else None
+            rx_str = _normalize_prescription(r[rx_c]) if rx_c else None
+            if rx_c and code_str and _rx_unrecognized(r[rx_c]):
+                rx_unknown_codes.add(_code_match_key(code_str))
+
+            if code_str and (ing_str is not None or rx_str is not None):
+                ck = _code_match_key(code_str)
+                dm = drug_meta_by_code.setdefault(ck, {})
+                if ing_str is not None and dm.get("active_ingredient") is None:
+                    dm["active_ingredient"] = ing_str
+                if rx_str is not None and dm.get("is_prescription") is None:
+                    dm["is_prescription"] = rx_str
 
             mk = item_match_key(nm_str)
             aliases = {nm_str}
@@ -401,6 +534,49 @@ def _build_item_catalog_and_canonicalize_lines(
                 "active_ingredient": ing_str,
                 "is_prescription": rx_str,
             })
+
+    # 2b. Merge pharmacy / item attributes from any table (even without a name column) by item_code
+    known_codes = list(sales_item_codes) + [rec["item_code"] for rec in catalog_records if rec.get("item_code")]
+    catalog_by_code: dict[str, list[dict[str, Any]]] = {}
+    for rec in catalog_records:
+        ck = _code_match_key(rec.get("item_code"))
+        if ck:
+            catalog_by_code.setdefault(ck, []).append(rec)
+
+    for t in tables:
+        t_df, _ = split_summary_rows(t.df)
+        if t_df.empty:
+            continue
+        cols = [c for c in t_df.columns if c not in META_COLS]
+        ing_c = _find_ingredient_col(cols)
+        rx_c = _find_prescription_col(cols)
+        if not ing_c and not rx_c:
+            continue
+        if rx_c:
+            has_prescription_col = True
+        code_c = _pick_attr_code_column(t_df, cols, {c for c in (ing_c, rx_c) if c}, known_codes)
+        if not code_c:
+            continue
+        for _, r in t_df.iterrows():
+            ck = _code_match_key(r[code_c])
+            if not ck:
+                continue
+            ing_val = re.sub(r"\s+", " ", nfc(r[ing_c]).strip()) if (ing_c and not is_blank(r[ing_c])) else None
+            rx_val = _normalize_prescription(r[rx_c]) if rx_c else None
+            if rx_c and _rx_unrecognized(r[rx_c]):
+                rx_unknown_codes.add(ck)
+            if ing_val is None and rx_val is None:
+                continue
+            dm = drug_meta_by_code.setdefault(ck, {})
+            if ing_val is not None and dm.get("active_ingredient") is None:
+                dm["active_ingredient"] = ing_val
+            if rx_val is not None and dm.get("is_prescription") is None:
+                dm["is_prescription"] = rx_val
+            for rec in catalog_by_code.get(ck, []):
+                if ing_val is not None and rec.get("active_ingredient") is None:
+                    rec["active_ingredient"] = ing_val
+                if rx_val is not None and rec.get("is_prescription") is None:
+                    rec["is_prescription"] = rx_val
 
     # Build lookup maps from catalog
     code_to_cat_rec: dict[str, dict[str, Any]] = {}
@@ -613,6 +789,19 @@ def _build_item_catalog_and_canonicalize_lines(
             key=lambda x: (0 if x == c_name else 1, x),
         )
         meta = item_extra_meta.get(ckey, {})
+        ing_val = meta.get("active_ingredient")
+        rx_val = meta.get("is_prescription")
+        if c_code:
+            dm = drug_meta_by_code.get(_code_match_key(c_code))
+            if dm:
+                if ing_val is None:
+                    ing_val = dm.get("active_ingredient")
+                if rx_val is None:
+                    rx_val = dm.get("is_prescription")
+        # §6: a pharmacy product not marked as prescription is non-prescription ('0'), but a filled
+        # cell we could not interpret stays NULL rather than being silently counted as non-Rx.
+        if has_prescription_col and rx_val is None and not (c_code and _code_match_key(c_code) in rx_unknown_codes):
+            rx_val = "0"
         items_rows.append({
             "item_code": c_code,
             "item_name": c_name,
@@ -621,8 +810,8 @@ def _build_item_catalog_and_canonicalize_lines(
             "base_unit": item_base_unit_map.get(ckey) or "cơ bản",
             "sell_price": meta.get("sell_price"),
             "cost_price": meta.get("cost_price"),
-            "active_ingredient": meta.get("active_ingredient"),
-            "is_prescription": meta.get("is_prescription"),
+            "active_ingredient": ing_val,
+            "is_prescription": rx_val,
         })
 
     items_df = pd.DataFrame(
@@ -1151,6 +1340,698 @@ def calendar_frame(cal_file: Path) -> pd.DataFrame:
     return df
 
 
+# ---------------------------------------------------------------------- Purchase Ledger Views
+
+_PURCHASE_EXCLUDED_TABLE_WORDS = (
+    "lo hang",
+    "the kho",
+    "ton kho",
+    "kiem kho",
+    "cong no",
+    "doanh thu",
+    "thu nhap",
+    "ban hang",
+    "khach hang",
+    "quy doi",
+    "bao cao",
+)
+# Status column (short controlled values): bare unaccented `huy` is safe here.
+_PURCHASE_CANCEL_RE = re.compile(
+    r"\b(huy|huy phieu|da huy|phieu huy|huy don|cancel|cancelled|canceled|void)\b"
+)
+# Free-text notes: "Huy" is a common Vietnamese given name ("Anh Huy giao"), so bare `huy`
+# only counts when written with its accent (huỷ / hủy); unaccented notes need a cancel phrase.
+_NOTE_CANCEL_ACCENTED_RE = re.compile(r"(?<!\w)(huỷ|hủy|cancel|cancelled|canceled|void)(?!\w)", re.IGNORECASE)
+_NOTE_CANCEL_PLAIN_RE = re.compile(r"\b(huy phieu|phieu huy|huy don|don huy|da huy|bi huy|cancel|cancelled|canceled|void)\b")
+_NOTE_CANCEL_NEGATION_RE = re.compile(r"\b(khong|chua|ko) huy\b")
+
+
+def _note_says_cancelled(note: str) -> bool:
+    """True when a free-text purchase note marks the receipt as cancelled (not merely mentions a person named Huy)."""
+    k = norm_key(note)
+    if not k or _NOTE_CANCEL_NEGATION_RE.search(k):
+        return False
+    text = nfc(note).lower()
+    if _has_vietnamese_diacritics(text):
+        return bool(_NOTE_CANCEL_ACCENTED_RE.search(text))
+    return bool(_NOTE_CANCEL_PLAIN_RE.search(k))
+_PURCHASE_OPENING_RE = re.compile(
+    r"\b(dau ky|nhap dau ky|ton dau ky|ton dau|opening stock|opening balance|initial stock)\b"
+)
+_PURCHASE_CODE_RE = re.compile(r"^[A-Za-z]{1,6}[-_]?\d{2,}$")
+
+
+def _norm_supplier_key(val: Any) -> str:
+    return re.sub(r"[^a-z0-9]", "", norm_key(val))
+
+
+def _extract_supplier_map(tables: list[RawTable]) -> dict[str, tuple[str, str]]:
+    """Build normalized supplier_code -> (raw_code, canonical_supplier_name) from any supplier table."""
+    out: dict[str, tuple[str, str]] = {}
+    for t in tables:
+        tk = _col_key(t.name)
+        if not name_has(tk, ["nha cung cap", "supplier", "ncc", "vendor"]):
+            continue
+        t_df, _ = split_summary_rows(t.df)
+        cols = [c for c in t_df.columns if c not in META_COLS]
+        if not cols or t_df.empty:
+            continue
+        code_col = next(
+            (
+                c for c in cols
+                if any(w in _col_key(c) for w in ("ma nha cung cap", "ma ncc", "supplier id", "supplier code", "vendor id"))
+                or _col_key(c) in ("ma", "code", "id")
+            ),
+            None,
+        )
+        name_col = next(
+            (
+                c for c in cols
+                if any(w in _col_key(c) for w in ("ten goi", "ten nha cung cap", "ten ncc", "nha cung cap", "supplier name", "supplier", "vendor", "ten"))
+                and c != code_col
+            ),
+            None,
+        )
+        if not (code_col and name_col):
+            continue
+        for _, r in t_df.iterrows():
+            cd = re.sub(r"\s+", " ", nfc(r[code_col]).strip()) if not is_blank(r[code_col]) else None
+            nm = re.sub(r"\s+", " ", nfc(r[name_col]).strip()) if not is_blank(r[name_col]) else None
+            if cd and nm:
+                out[_norm_supplier_key(cd)] = (cd, nm)
+    return out
+
+
+def _pick_first_col(
+    cols: list[str],
+    tiers: list[tuple[str, ...]],
+    used: set[str],
+    exclude: tuple[str, ...] = (),
+) -> str | None:
+    """Pick the first unused column matching keyword tiers via `_col_key`."""
+    for words in tiers:
+        for c in cols:
+            if c in used:
+                continue
+            ck = _col_key(c)
+            if exclude and any(ex in ck for ex in exclude):
+                continue
+            if any(w in ck for w in words):
+                return c
+    return None
+
+
+def _detect_purchase_columns(
+    df: pd.DataFrame,
+    known_item_codes: set[str] | None = None,
+) -> dict[str, Any]:
+    """Identify purchase semantic columns in a table using column keywords and cell content."""
+    cols = [c for c in df.columns if c not in META_COLS]
+    used: set[str] = set()
+
+    # 1. Receipt ID (exclude item/lot/supplier codes)
+    receipt_id_col = _pick_first_col(
+        cols,
+        [
+            ("ma nhap hang", "ma phieu nhap", "ma don nhap", "so phieu nhap", "receipt id", "purchase id"),
+            ("so phieu", "ma phieu", "ma don", "chung tu", "so hoa don", "so hd", "ma nhap"),
+        ],
+        used,
+        exclude=("ma hang", "ma sp", "ma sku", "ma thuoc", "ma mat hang", "ma vach", "ma lo", "ma ncc", "ma nha cung cap"),
+    )
+    if receipt_id_col:
+        used.add(receipt_id_col)
+
+    # 2. Receipt Date (explicitly exclude expiry/HSD/batch dates)
+    date_excl = ("han su dung", "han dung", "hsd", "het han", "expiry", "ngay sinh", "ngay cap")
+    receipt_date_col = _pick_first_col(
+        cols,
+        [
+            ("ngay nhap", "thoi gian nhap", "ngay chung tu", "ngay ct", "ngay lap", "receipt date", "purchase date"),
+            ("thoi gian", "ngay ghi", "ngay hoa don", "ngay"),
+        ],
+        used,
+        exclude=date_excl,
+    )
+    if receipt_date_col is None:
+        for c in cols:
+            if c in used or any(ex in _col_key(c) for ex in date_excl):
+                continue
+            sample = df[c].dropna().head(20)
+            if not sample.empty and sum(parse_datetime(v, 2000) is not None for v in sample) / len(sample) >= 0.6:
+                receipt_date_col = c
+                break
+    if receipt_date_col:
+        used.add(receipt_date_col)
+
+    # 3. Supplier
+    supplier_col = _pick_first_col(
+        cols,
+        [
+            ("ten nha cung cap", "nha cung cap", "ten ncc", "ma nha cung cap", "ma ncc", "supplier", "vendor", "ncc", "doi tac"),
+        ],
+        used,
+        exclude=("dia chi", "dien thoai", "sdt", "email", "cong no", "phai tra", "can tra"),
+    )
+    if supplier_col:
+        used.add(supplier_col)
+
+    # 4. Status and Note columns
+    status_col = _pick_first_col(
+        cols,
+        [("trang thai", "tinh trang", "status", "state")],
+        used,
+    )
+    if status_col:
+        used.add(status_col)
+
+    note_cols: list[str] = []
+    for c in cols:
+        if c in used:
+            continue
+        ck = _col_key(c)
+        if any(w in ck for w in ("ghi chu", "noi dung", "mo ta", "dien giai", "luu y", "note", "remark")):
+            note_cols.append(c)
+            used.add(c)
+
+    # 5. Item code: content overlap with known catalog item_codes takes precedence (handles e.g. code stored in `Mã vạch`)
+    item_code_col: str | None = None
+    if known_item_codes and not df.empty:
+        best_score = 0.0
+        for c in cols:
+            if c in used:
+                continue
+            ck = _col_key(c)
+            if any(ex in ck for ex in ("so luong", "sl", "don gia", "gia", "thanh tien", "tien", "don vi", "dvt", "ma lo")):
+                continue
+            vals = [_code_match_key(v) for v in df[c].dropna().head(200) if not is_blank(v)]
+            if len(vals) >= 1:
+                overlap = sum(1 for v in vals if v in known_item_codes) / len(vals)
+                if overlap >= 0.4 and overlap > best_score:
+                    best_score = overlap
+                    item_code_col = c
+    if item_code_col is None:
+        item_code_col = _pick_first_col(
+            cols,
+            [
+                ("ma hang hoa", "ma hang", "ma mat hang", "ma san pham", "ma sp", "ma sku", "sku", "ma thuoc", "item code"),
+            ],
+            used,
+            exclude=("ma vach", "barcode", "ma lo", "ma phieu", "ma don", "ma nhap", "ma ncc"),
+        )
+    if item_code_col:
+        used.add(item_code_col)
+
+    # 6. Item name (exclude notes like `Nội dung` / `Mô tả` and supplier/category)
+    item_name_col = _pick_first_col(
+        cols,
+        [
+            ("ten mat hang", "ten hang hoa", "ten hang", "ten san pham", "ten sp", "ten thuoc", "ten mon", "item name", "product"),
+            ("mat hang", "hang hoa", "san pham", "hang", "mon", "thuoc"),
+        ],
+        used,
+        exclude=("ma ", "don vi", "dvt", "gia", "tien", "so luong", "nha cung cap", "ncc", "nhom", "danh muc", "noi dung", "mo ta", "ghi chu"),
+    )
+    if item_name_col:
+        used.add(item_name_col)
+
+    # 7. Quantity (exclude lot/stock/converted counts)
+    qty_col = _pick_first_col(
+        cols,
+        [
+            ("sl nhap", "so luong nhap", "so luong", "quantity", "qty"),
+        ],
+        used,
+        exclude=("quy doi", "ton", "con lai", "du ", "truoc", "sau"),
+    )
+    if qty_col is None:
+        for c in cols:
+            if c in used:
+                continue
+            if _col_key(c) in ("sl", "q"):
+                qty_col = c
+                break
+    if qty_col:
+        used.add(qty_col)
+
+    # 8. Purchase unit
+    unit_col = _pick_first_col(
+        cols,
+        [
+            ("dvt nhap", "don vi nhap", "don vi tinh", "don vi", "dvt", "unit"),
+        ],
+        used,
+        exclude=("don vi goc", "co ban", "co so"),
+    )
+    if unit_col:
+        used.add(unit_col)
+
+    # 9. Unit cost & Line amount
+    unit_cost_col = _pick_first_col(
+        cols,
+        [
+            ("don gia nhap", "gia nhap", "don gia", "gia von nhap", "unit cost", "cost price"),
+        ],
+        used,
+        exclude=("thanh tien", "tong", "can tra", "ban", "xuat"),
+    )
+    if unit_cost_col is None:
+        for c in cols:
+            if c in used:
+                continue
+            if _col_key(c) in ("gia", "cost", "price"):
+                unit_cost_col = c
+                break
+    if unit_cost_col:
+        used.add(unit_cost_col)
+
+    line_amount_col = _pick_first_col(
+        cols,
+        [
+            ("thanh tien", "tien hang nhap", "tien nhap", "line amount"),
+            ("tien hang", "so tien", "amount"),
+        ],
+        used,
+        exclude=("tong tien phieu", "tong gia tri", "can tra", "da tra", "con no", "giam gia", "thue", "vat"),
+    )
+    if line_amount_col:
+        used.add(line_amount_col)
+
+    header_total_col = _pick_first_col(
+        cols,
+        [("can tra ncc", "tong gia tri nhap", "tong tien phieu", "tong tien nhap", "tong tien", "tong cong", "total amount")],
+        used,
+    )
+
+    return {
+        "receipt_id": receipt_id_col,
+        "receipt_date": receipt_date_col,
+        "supplier": supplier_col,
+        "status": status_col,
+        "notes": note_cols,
+        "item_code": item_code_col,
+        "item_name": item_name_col,
+        "qty": qty_col,
+        "unit": unit_col,
+        "unit_cost": unit_cost_col,
+        "line_amount": line_amount_col,
+        "header_total": header_total_col,
+    }
+
+
+def _build_purchase_lines_df(
+    tables: list[RawTable],
+    mapping: Mapping,
+    readme: str,
+    items_df: pd.DataFrame | None,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Detect purchase tables cleanly by content + keywords and build rulebook-compliant purchase lines.
+
+    Returns `(purchase_df, purchase_meta)`. When the shop has no clear purchase ledger or has
+    an ambiguous structure, returns `(empty_df, {"has_purchases": False, ...})` so no empty or
+    misleading `v_purchase*` views are created.
+    """
+    skip_names = {mapping.sales_table, mapping.orders_table} - {None}
+
+    known_codes: set[str] = set()
+    code_lookup: dict[str, tuple[str | None, str, str | None]] = {}
+    alias_lookup: dict[str, tuple[str | None, str, str | None]] = {}
+    if items_df is not None and not items_df.empty:
+        for _, ir in items_df.iterrows():
+            ic = ir.get("item_code")
+            inm = ir.get("item_name")
+            bu = ir.get("base_unit")
+            ic_s = str(ic).strip() if not is_blank(ic) else None
+            inm_s = str(inm).strip() if not is_blank(inm) else ""
+            bu_s = str(bu).strip() if not is_blank(bu) else None
+            if bu_s == "cơ bản":
+                bu_s = None
+            entry = (ic_s, inm_s, bu_s)
+            if ic_s:
+                ck = _code_match_key(ic_s)
+                known_codes.add(ck)
+                code_lookup[ck] = entry
+            if inm_s:
+                alias_lookup[item_match_key(inm_s)] = entry
+            aliases_str = ir.get("name_aliases")
+            if not is_blank(aliases_str):
+                for part in str(aliases_str).split(" | "):
+                    mk = item_match_key(part)
+                    if mk and mk not in alias_lookup:
+                        alias_lookup[mk] = entry
+
+    # Gather candidate purchase tables cleanly without hardcoding shop or table names
+    candidates: list[tuple[RawTable, pd.DataFrame, dict[str, Any]]] = []
+    for t in tables:
+        if t.name in skip_names:
+            continue
+        tk = _col_key(t.name)
+        if any(ex in tk for ex in _PURCHASE_EXCLUDED_TABLE_WORDS):
+            continue
+        if not ("nhap" in tk or "purchase" in tk or "receiving" in tk or "inbound" in tk):
+            continue
+        df_clean, _ = split_summary_rows(t.df)
+        if df_clean.empty:
+            continue
+        cols_meta = _detect_purchase_columns(df_clean, known_codes)
+        candidates.append((t, df_clean, cols_meta))
+
+    if not candidates:
+        return pd.DataFrame(), {"has_purchases": False, "reason": "no_purchase_tables"}
+
+    detail_cands = [
+        c for c in candidates
+        if c[2]["qty"] is not None and (c[2]["item_name"] is not None or c[2]["item_code"] is not None)
+    ]
+    header_cands = [
+        c for c in candidates
+        if not (c[2]["qty"] is not None and (c[2]["item_name"] is not None or c[2]["item_code"] is not None))
+        and c[2]["receipt_id"] is not None
+        and c[2]["receipt_date"] is not None
+    ]
+
+    if len(detail_cands) != 1 or len(header_cands) > 1:
+        return pd.DataFrame(), {
+            "has_purchases": False,
+            "reason": f"ambiguous_purchase_tables (detail={len(detail_cands)}, header={len(header_cands)})",
+        }
+
+    det_table, det_df, det_cols = detail_cands[0]
+    det_df = det_df.copy().reset_index(drop=True)
+    source_table_names = [det_table.name]
+
+    hdr_map: dict[str, dict[str, Any]] = {}
+    if header_cands:
+        hdr_table, hdr_df, hdr_cols = header_cands[0]
+        hdr_df = hdr_df.copy().reset_index(drop=True)
+        h_id_col = hdr_cols["receipt_id"]
+        d_id_col = det_cols["receipt_id"]
+        if not d_id_col:
+            return pd.DataFrame(), {"has_purchases": False, "reason": "detail_missing_receipt_id_for_header_join"}
+
+        h_ids = {re.sub(r"\s+", " ", nfc(v).strip()).upper() for v in hdr_df[h_id_col].dropna() if not is_blank(v)}
+        d_ids = {re.sub(r"\s+", " ", nfc(v).strip()).upper() for v in det_df[d_id_col].dropna() if not is_blank(v)}
+        overlap = len(h_ids & d_ids) / len(d_ids) if d_ids else 0.0
+        if overlap < 0.5:
+            return pd.DataFrame(), {
+                "has_purchases": False,
+                "reason": f"low_header_detail_receipt_overlap ({overlap:.2f})",
+            }
+
+        source_table_names.append(hdr_table.name)
+        for _, hr in hdr_df.iterrows():
+            rid_raw = hr[h_id_col]
+            if is_blank(rid_raw):
+                continue
+            rid_k = re.sub(r"\s+", " ", nfc(rid_raw).strip()).upper()
+            note_parts = [
+                re.sub(r"\s+", " ", nfc(hr[nc]).strip())
+                for nc in hdr_cols["notes"]
+                if not is_blank(hr[nc])
+            ]
+            rec = hdr_map.setdefault(rid_k, {})
+            if "receipt_date" not in rec and hdr_cols["receipt_date"] and not is_blank(hr[hdr_cols["receipt_date"]]):
+                rec["receipt_date_raw"] = hr[hdr_cols["receipt_date"]]
+                rec["__year"] = hr.get("__year")
+            if "supplier_raw" not in rec and hdr_cols["supplier"] and not is_blank(hr[hdr_cols["supplier"]]):
+                rec["supplier_raw"] = hr[hdr_cols["supplier"]]
+            if "status_raw" not in rec and hdr_cols["status"] and not is_blank(hr[hdr_cols["status"]]):
+                rec["status_raw"] = hr[hdr_cols["status"]]
+            if "notes" not in rec and note_parts:
+                rec["notes"] = note_parts
+    elif det_cols["receipt_date"] is None:
+        return pd.DataFrame(), {"has_purchases": False, "reason": "flat_purchase_missing_receipt_date"}
+
+    # Fill down receipt-level fields & drop identical export duplicates when real receipt_id exists
+    id_col = det_cols["receipt_id"]
+    if id_col and det_df[id_col].notna().any():
+        det_df = fill_order_level(det_df, id_col)
+        det_df = drop_export_duplicates(det_df, id_col)
+
+    supplier_map = _extract_supplier_map(tables)
+    conversions = load_unit_conversions(tables, readme)
+
+    # Extra README / `Ghi tắt` aliases if an item was purchased without ever appearing in sales
+    alias_to_canon_name: dict[str, str] = {}
+    for t in tables:
+        if any(w in norm_key(t.name) for w in ("ghi tat", "viet tat", "ky hieu", "ten goi khac")):
+            cols_t = [c for c in t.df.columns if c not in META_COLS]
+            if len(cols_t) >= 2:
+                for _, r in t.df.iterrows():
+                    if not is_blank(r[cols_t[0]]) and not is_blank(r[cols_t[1]]):
+                        alias_to_canon_name[item_match_key(str(r[cols_t[0]]))] = re.sub(r"\s+", " ", nfc(r[cols_t[1]]).strip())
+
+    rows: list[dict[str, Any]] = []
+    has_any_cost = False
+    has_real_receipt_id = bool(id_col and det_df[id_col].notna().any())
+
+    for idx, r in det_df.iterrows():
+        qty_raw = r[det_cols["qty"]]
+        qty_val, embedded_unit = parse_qty(qty_raw)
+        if qty_val is None:
+            qty_num = parse_number(qty_raw)
+            qty_val = float(qty_num) if qty_num is not None else None
+        if qty_val is None:
+            continue
+
+        # Receipt ID
+        if id_col and not is_blank(r[id_col]):
+            rid = re.sub(r"\s+", " ", nfc(r[id_col]).strip())
+        else:
+            rid = f"PN_ROW_{idx + 1}"
+        rid_k = rid.upper()
+        h_rec = hdr_map.get(rid_k, {})
+
+        # Receipt date (`detail` or joined `header`)
+        y_hint = r.get("__year")
+        d_raw = r[det_cols["receipt_date"]] if (det_cols["receipt_date"] and not is_blank(r[det_cols["receipt_date"]])) else h_rec.get("receipt_date_raw")
+        if det_cols["receipt_date"] is None or is_blank(r[det_cols["receipt_date"]]):
+            if h_rec.get("__year") is not None:
+                y_hint = h_rec.get("__year")
+        y_int = int(y_hint) if y_hint is not None and not pd.isna(y_hint) else None
+        iso_dt = parse_datetime(d_raw, year=y_int)
+        if iso_dt is not None:
+            r_date = iso_dt.date().isoformat()
+        else:
+            d_only = parse_date(d_raw, year=y_int)
+            r_date = d_only.isoformat() if d_only is not None else None
+        if r_date is None:
+            continue
+        r_month = r_date[:7]
+
+        # Supplier (`detail` or `header`, enriched via supplier lookup table if present)
+        sup_raw = (
+            r[det_cols["supplier"]]
+            if (det_cols["supplier"] and not is_blank(r[det_cols["supplier"]]))
+            else h_rec.get("supplier_raw")
+        )
+        sup_str = re.sub(r"\s+", " ", nfc(sup_raw).strip()) if not is_blank(sup_raw) else None
+        sup_code: str | None = None
+        sup_name: str | None = sup_str
+        if sup_str:
+            sk = _norm_supplier_key(sup_str)
+            if sk in supplier_map:
+                sup_code, sup_name = supplier_map[sk]
+            elif _PURCHASE_CODE_RE.match(sup_str):
+                sup_code = sup_str
+
+        # Status & Opening stock flag
+        st_raw = (
+            r[det_cols["status"]]
+            if (det_cols["status"] and not is_blank(r[det_cols["status"]]))
+            else h_rec.get("status_raw")
+        )
+        st_str = re.sub(r"\s+", " ", nfc(st_raw).strip()) if not is_blank(st_raw) else ""
+        note_list = [
+            re.sub(r"\s+", " ", nfc(r[nc]).strip())
+            for nc in det_cols["notes"]
+            if not is_blank(r[nc])
+        ]
+        if not note_list and h_rec.get("notes"):
+            note_list = list(h_rec["notes"])
+
+        st_key = norm_key(st_str)
+        status_cancelled = bool(
+            st_key and _PURCHASE_CANCEL_RE.search(st_key) and not _NOTE_CANCEL_NEGATION_RE.search(st_key)
+        )
+        is_cancelled = 1 if (status_cancelled or any(_note_says_cancelled(n) for n in note_list)) else 0
+        opening_texts = [norm_key(st_str), norm_key(rid)] + [norm_key(n) for n in note_list]
+        is_opening = 1 if any(_PURCHASE_OPENING_RE.search(t) for t in opening_texts if t) else 0
+        status_norm = STATUS_CANCELLED if is_cancelled else STATUS_COMPLETED
+
+        # Item canonicalization matching `v_items`
+        raw_ic = re.sub(r"\s+", " ", nfc(r[det_cols["item_code"]]).strip()) if (det_cols["item_code"] and not is_blank(r[det_cols["item_code"]])) else None
+        raw_in = re.sub(r"\s+", " ", nfc(r[det_cols["item_name"]]).strip()) if (det_cols["item_name"] and not is_blank(r[det_cols["item_name"]])) else None
+        if raw_ic is None and raw_in is None:
+            continue
+
+        matched = None
+        if raw_ic and _code_match_key(raw_ic) in code_lookup:
+            matched = code_lookup[_code_match_key(raw_ic)]
+        elif raw_in and item_match_key(raw_in) in alias_lookup:
+            matched = alias_lookup[item_match_key(raw_in)]
+        elif raw_in and item_match_key(raw_in) in alias_to_canon_name:
+            mapped_nm = alias_to_canon_name[item_match_key(raw_in)]
+            matched = alias_lookup.get(item_match_key(mapped_nm))
+
+        if matched is not None:
+            canon_ic, canon_in, canon_bu = matched
+            if canon_ic is None and raw_ic:
+                canon_ic = raw_ic
+        else:
+            canon_ic = raw_ic
+            canon_in = raw_in or raw_ic or ""
+            canon_bu = None
+
+        # Unit & conversion to base unit
+        raw_u = r[det_cols["unit"]] if (det_cols["unit"] and not is_blank(r[det_cols["unit"]])) else embedded_unit
+        u_clean = re.sub(r"\s+", " ", nfc(raw_u).strip()) if not is_blank(raw_u) else None
+        factor = 1.0
+        base_unit = canon_bu
+        if u_clean:
+            k_u = norm_key(u_clean)
+            if canon_bu and norm_key(canon_bu) == k_u:
+                factor = 1.0
+                base_unit = canon_bu
+            else:
+                conv = None
+                for key_cand in (canon_in, raw_in, canon_ic, raw_ic):
+                    if key_cand:
+                        conv = conversions.get((norm_key(key_cand), k_u))
+                        if conv is not None:
+                            break
+                if conv is None:
+                    conv = conversions.get((None, k_u))
+                if conv is not None:
+                    factor = float(conv[0])
+                    conv_bu = conv[1] if conv[1] != "base" else None
+                    base_unit = canon_bu or conv_bu
+                elif base_unit is None:
+                    base_unit = u_clean
+        qty_f = float(qty_val)
+        qty_base = qty_f * factor
+
+        # Cost & line amount (remain NULL if shop records no purchase prices)
+        uc_val = parse_number(r[det_cols["unit_cost"]]) if (det_cols["unit_cost"] and not is_blank(r[det_cols["unit_cost"]])) else None
+        la_val = parse_number(r[det_cols["line_amount"]]) if (det_cols["line_amount"] and not is_blank(r[det_cols["line_amount"]])) else None
+        if uc_val is not None and la_val is None:
+            la_val = qty_f * float(uc_val)
+        elif la_val is not None and uc_val is None and qty_f > 0:
+            uc_val = float(la_val) / qty_f
+
+        uc_f = float(uc_val) if uc_val is not None else None
+        la_f = float(la_val) if la_val is not None else None
+        uc_base_f = (uc_f / factor) if (uc_f is not None and factor > 0) else None
+        if uc_f is not None or la_f is not None:
+            has_any_cost = True
+
+        src_row_raw = r.get("__row")
+        src_row_int = int(src_row_raw) if src_row_raw is not None and not pd.isna(src_row_raw) else None
+
+        rows.append({
+            "receipt_id": rid,
+            "receipt_date": r_date,
+            "receipt_month": r_month,
+            "supplier": sup_name,
+            "supplier_code": sup_code,
+            "status": status_norm,
+            "is_cancelled": is_cancelled,
+            "is_opening_stock": is_opening,
+            "item_code": canon_ic,
+            "item_name": canon_in,
+            "qty": qty_f,
+            "unit": u_clean,
+            "factor": factor,
+            "qty_base": qty_base,
+            "base_unit": base_unit,
+            "unit_cost": uc_f,
+            "unit_cost_base": uc_base_f,
+            "line_amount": la_f,
+            "src_table": det_table.name,
+            "src_file": str(r.get("__file")) if not is_blank(r.get("__file")) else None,
+            "src_sheet": str(r.get("__sheet")) if not is_blank(r.get("__sheet")) else None,
+            "src_row": src_row_int,
+        })
+
+    if not rows:
+        return pd.DataFrame(), {"has_purchases": False, "reason": "zero_valid_purchase_rows"}
+
+    purchase_df = pd.DataFrame(rows)
+    valid_d = [d for d in purchase_df["receipt_date"] if d]
+    meta_info: dict[str, Any] = {
+        "has_purchases": True,
+        "source_tables": source_table_names,
+        "has_real_receipt_id": has_real_receipt_id,
+        "has_cost": has_any_cost,
+        "has_unit": bool(purchase_df["unit"].notna().any()),
+        "n_lines": len(purchase_df),
+        "min_date": min(valid_d) if valid_d else None,
+        "max_date": max(valid_d) if valid_d else None,
+    }
+    return purchase_df, meta_info
+
+
+def _create_purchase_views(conn: sqlite3.Connection, purchase_df: pd.DataFrame) -> None:
+    """Create `purchase_lines` table and `v_purchase_lines`, `v_valid_purchase_lines`, `v_purchases` views."""
+    purchase_df.to_sql("purchase_lines", conn, index=False, if_exists="replace")
+    conn.executescript(
+        """
+        CREATE INDEX IF NOT EXISTS idx_purchase_lines_receipt_id ON purchase_lines(receipt_id);
+        CREATE INDEX IF NOT EXISTS idx_purchase_lines_receipt_date ON purchase_lines(receipt_date);
+        CREATE INDEX IF NOT EXISTS idx_purchase_lines_item_name ON purchase_lines(item_name);
+        CREATE INDEX IF NOT EXISTS idx_purchase_lines_item_code ON purchase_lines(item_code);
+        CREATE INDEX IF NOT EXISTS idx_purchase_lines_supplier ON purchase_lines(supplier);
+
+        CREATE VIEW v_purchase_lines AS
+        SELECT
+            rowid AS line_id,
+            receipt_id,
+            receipt_date,
+            receipt_month,
+            supplier,
+            supplier_code,
+            status,
+            is_cancelled,
+            is_opening_stock,
+            item_code,
+            item_name,
+            qty,
+            unit,
+            factor,
+            qty_base,
+            base_unit,
+            unit_cost,
+            unit_cost_base,
+            line_amount,
+            src_table,
+            src_file,
+            src_sheet,
+            src_row
+        FROM purchase_lines;
+
+        CREATE VIEW v_valid_purchase_lines AS
+        SELECT *
+        FROM v_purchase_lines
+        WHERE is_cancelled = 0;
+
+        CREATE VIEW v_purchases AS
+        SELECT
+            receipt_id,
+            MIN(receipt_date) AS receipt_date,
+            MIN(receipt_month) AS receipt_month,
+            MIN(supplier) AS supplier,
+            MIN(supplier_code) AS supplier_code,
+            MIN(status) AS status,
+            MAX(is_cancelled) AS is_cancelled,
+            MAX(is_opening_stock) AS is_opening_stock,
+            COUNT(*) AS n_lines,
+            SUM(line_amount) AS total_amount
+        FROM v_purchase_lines
+        GROUP BY receipt_id;
+        """
+    )
+
+
 def build_database(
     business_dir: str | Path,
     calendar_path: str | Path | None = None,
@@ -1197,6 +2078,10 @@ def build_database(
         "order_events",
         "v_payments",
         "v_deliveries",
+        "purchase_lines",
+        "v_purchase_lines",
+        "v_valid_purchase_lines",
+        "v_purchases",
     }
     cleaned_frames: list[tuple[str, str, pd.DataFrame, dict[str, str], dict[str, str]]] = []
 
@@ -1254,6 +2139,7 @@ def build_database(
 
     # 2. If the shop has a valid sales ledger, build `lines`, `items`, and the 5 standard views
     ledger_meta: dict[str, Any] = {"has_ledger": has_ledger}
+    items_df: pd.DataFrame | None = None
     if has_ledger:
         ledger_df, issues = build_ledger(tables, mapping, readme)
         ledger_df, items_df = _build_item_catalog_and_canonicalize_lines(tables, ledger_df, readme)
@@ -1344,6 +2230,15 @@ def build_database(
             "order_events": events_meta,
         })
 
+    # 2b. Build purchase views (`v_purchase_lines`, `v_valid_purchase_lines`, `v_purchases`) if present
+    purchase_df, purchase_meta = _build_purchase_lines_df(tables, mapping, readme, items_df)
+    if purchase_meta.get("has_purchases") and not purchase_df.empty:
+        _create_purchase_views(conn, purchase_df)
+        p_sources = set(purchase_meta.get("source_tables", []))
+        for t_info in meta_tables:
+            if t_info["orig_name"] in p_sources:
+                t_info["is_primary_purchase"] = True
+
     # 3. Load `calendar.csv` if available
     cal_file = _find_calendar_path(business_dir, calendar_path)
     has_calendar = False
@@ -1361,6 +2256,7 @@ def build_database(
         "has_ledger": has_ledger,
         "has_calendar": has_calendar,
         "ledger_meta": ledger_meta,
+        "purchase_meta": purchase_meta,
         "tables": meta_tables,
     }
     conn.execute("CREATE TABLE IF NOT EXISTS _schema_meta (key TEXT PRIMARY KEY, value TEXT);")
@@ -1404,6 +2300,51 @@ def _format_sample_rows(conn: sqlite3.Connection, relation: str, cols: list[str]
     return out
 
 
+def _purchase_schema_lines(conn: sqlite3.Connection, purchase_meta: dict[str, Any]) -> list[str]:
+    """Build compact prompt schema section + sample rows for purchase views when present."""
+    n_p_lines = _count_rows(conn, "v_purchase_lines")
+    if n_p_lines <= 0:
+        return []
+    n_p_valid = _count_rows(conn, "v_valid_purchase_lines")
+    n_p_receipts = _count_rows(conn, "v_purchases")
+    p_min = purchase_meta.get("min_date")
+    p_max = purchase_meta.get("max_date")
+    has_cost = bool(purchase_meta.get("has_cost", True))
+    has_unit = bool(purchase_meta.get("has_unit", True))
+
+    cost_note = (
+        "All `unit_cost`, `unit_cost_base`, `line_amount`, `total_amount` are NULL because this shop does NOT record purchase prices/amounts (§7 unanswerable for spend/cost questions)."
+        if not has_cost
+        else "Spend = `SUM(line_amount)`; weighted average purchase price by purchase `unit` = `SUM(line_amount) / SUM(qty)` (do NOT average unit_cost directly); top supplier = supplier with highest `SUM(line_amount)`."
+    )
+    unit_note = "" if has_unit else " `unit` is NULL (quantities are already in base units)."
+
+    out: list[str] = [
+        f"=== 1b. RULEBOOK PURCHASE VIEWS (USE THESE FOR NHẬP HÀNG / NHÀ CUNG CẤP / GIÁ NHẬP / NHẬP TRỪ BÁN) ===",
+        f"Purchase date range: [{p_min} .. {p_max}] | {cost_note}{unit_note}",
+        f"- VIEW `v_valid_purchase_lines` (rows={n_p_valid}, valid purchase lines excluding cancelled `is_cancelled = 1`; INCLUDES `is_opening_stock = 1` 'nhập đầu kỳ'):",
+        "  Columns: line_id (INT), receipt_id (TEXT), receipt_date (TEXT 'YYYY-MM-DD'), receipt_month (TEXT 'YYYY-MM'), "
+        "supplier (TEXT|NULL), supplier_code (TEXT|NULL), status (TEXT 'hoan_thanh'), is_cancelled (INT 0), is_opening_stock (INT 0/1), "
+        "item_code (TEXT|NULL), item_name (TEXT canonical matching `v_items`), qty (REAL), unit (TEXT|NULL purchase unit), "
+        "factor (REAL), qty_base (REAL converted to `base_unit`), base_unit (TEXT|NULL), unit_cost (REAL|NULL), unit_cost_base (REAL|NULL), line_amount (REAL|NULL).",
+    ]
+    sample_cols = (
+        ["receipt_id", "receipt_date", "supplier", "item_name", "qty", "unit", "unit_cost", "line_amount"]
+        if has_cost
+        else ["receipt_id", "receipt_date", "supplier", "item_name", "qty", "qty_base", "is_opening_stock"]
+    )
+    out.extend(_format_sample_rows(conn, "v_valid_purchase_lines", sample_cols, limit=2))
+    out.append(
+        f"- VIEW `v_purchase_lines` (rows={n_p_lines}, ALL purchase lines including `is_cancelled = 1`; same columns as `v_valid_purchase_lines`)."
+    )
+    out.append(
+        f"- VIEW `v_purchases` (rows={n_p_receipts}, 1 row per receipt): "
+        "Columns: receipt_id, receipt_date, receipt_month, supplier, supplier_code, status, is_cancelled (0/1), is_opening_stock (0/1), n_lines, total_amount (REAL|NULL)."
+    )
+    out.extend(_format_sample_rows(conn, "v_purchases", ["receipt_id", "receipt_date", "supplier", "is_cancelled", "n_lines", "total_amount"], limit=2))
+    return out
+
+
 def schema_text(conn: sqlite3.Connection, max_chars: int = 13000) -> str:
     """Produce a prompt-ready description of views and tables in `conn` (capped at `max_chars`).
 
@@ -1428,6 +2369,7 @@ def schema_text(conn: sqlite3.Connection, max_chars: int = 13000) -> str:
     has_ledger = bool(meta.get("has_ledger", False))
     has_calendar = bool(meta.get("has_calendar", False))
     ledger_meta = meta.get("ledger_meta", {})
+    purchase_meta = meta.get("purchase_meta", {})
     tables_meta: list[dict[str, Any]] = meta.get("tables", [])
     readme = meta.get("readme", "")
 
@@ -1537,13 +2479,15 @@ def schema_text(conn: sqlite3.Connection, max_chars: int = 13000) -> str:
         )
         lines.append(
             "  Columns: item_code (TEXT), item_name (TEXT canonical), name_aliases (TEXT pipe-separated ' | ' list of all spellings/abbreviations), "
-            "category (TEXT), base_unit (TEXT), sell_price (REAL), cost_price (REAL), active_ingredient (TEXT), is_prescription (TEXT)"
+            "category (TEXT), base_unit (TEXT), sell_price (REAL), cost_price (REAL), "
+            "active_ingredient (TEXT, keep combination strings intact per §6), "
+            "is_prescription (TEXT: '1'=prescription, '0'=non-prescription, NULL=non-pharmacy)"
         )
         lines.extend(
             _format_sample_rows(
                 conn,
                 "v_items",
-                ["item_code", "item_name", "name_aliases", "category", "base_unit", "sell_price", "cost_price"],
+                ["item_code", "item_name", "category", "base_unit", "active_ingredient", "is_prescription", "name_aliases", "sell_price", "cost_price"],
                 limit=3,
             )
         )
@@ -1569,6 +2513,10 @@ def schema_text(conn: sqlite3.Connection, max_chars: int = 13000) -> str:
                 "Count rounds in a month with `COUNT(*) FROM v_deliveries WHERE delivery_month = 'YYYY-MM'`."
             )
             lines.extend(_format_sample_rows(conn, "v_deliveries", ["order_id", "delivery_round", "delivery_date", "n_rows"], limit=2))
+        purchase_lines_text = _purchase_schema_lines(conn, purchase_meta)
+        if purchase_lines_text:
+            lines.append("")
+            lines.extend(purchase_lines_text)
         lines.append("")
         lines.append("=== 2. CLEANED AUXILIARY & SOURCE TABLES ===")
     else:
@@ -1578,17 +2526,25 @@ def schema_text(conn: sqlite3.Connection, max_chars: int = 13000) -> str:
             "Views `v_lines`, `v_valid_lines`, `v_orders`, `v_valid_orders`, `v_items` are NOT created. "
             "Query the cleaned tables below directly."
         )
+        purchase_lines_text = _purchase_schema_lines(conn, purchase_meta)
+        if purchase_lines_text:
+            lines.append("")
+            lines.extend(purchase_lines_text)
         lines.append("")
         lines.append("=== 1. CLEANED TABLES ===")
 
-    # Format cleaned tables: auxiliary tables first (full detail), then primary sales source tables (compact)
-    sorted_tables = sorted(tables_meta, key=lambda x: (1 if x.get("is_primary_sales") else 0))
+    # Format cleaned tables: auxiliary tables first (full detail), then primary sales/purchase source tables (compact)
+    sorted_tables = sorted(
+        tables_meta,
+        key=lambda x: (1 if (x.get("is_primary_sales") or x.get("is_primary_purchase")) else 0),
+    )
     for t_info in sorted_tables:
         c_name = t_info["clean_name"]
         r_name = t_info["raw_name"]
         orig_name = t_info["orig_name"]
         n_rows = t_info["n_rows"]
         is_primary = t_info.get("is_primary_sales", False)
+        is_primary_purchase = t_info.get("is_primary_purchase", False)
         cols_info = t_info.get("columns", [])
 
         # Find date range if any date/datetime column exists
@@ -1606,7 +2562,12 @@ def schema_text(conn: sqlite3.Connection, max_chars: int = 13000) -> str:
                 except sqlite3.Error:
                     pass
 
-        role_tag = " (source of sales views; prefer v_* views unless querying extra columns)" if is_primary else ""
+        if is_primary:
+            role_tag = " (source of sales views; prefer v_* views unless querying extra columns)"
+        elif is_primary_purchase:
+            role_tag = " (source of purchase views; prefer v_purchase* views unless querying extra columns)"
+        else:
+            role_tag = ""
         lines.append(
             f"TABLE `{c_name}` (raw fallback: `{r_name}`, orig: {orig_name!r}, rows={n_rows}{date_range_str}){role_tag}:"
         )
@@ -1619,7 +2580,7 @@ def schema_text(conn: sqlite3.Connection, max_chars: int = 13000) -> str:
             lines.append(f"  - `{sc}` ({kd}, orig: {oc!r}){desc_part}")
 
         sample_cols = [c_meta["safe_name"] for c_meta in cols_info[:8]]
-        lines.extend(_format_sample_rows(conn, c_name, sample_cols, limit=1 if is_primary else 2))
+        lines.extend(_format_sample_rows(conn, c_name, sample_cols, limit=1 if (is_primary or is_primary_purchase) else 2))
         lines.append("")
 
     if has_calendar:
