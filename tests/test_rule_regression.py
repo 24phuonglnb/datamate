@@ -1,7 +1,7 @@
 """Unit tests for Task T5 (`scripts/analysis/rule_regression.py`).
 
-Uses real literals from `data/train/questions.jsonl`, `data/train/answers.jsonl`,
-and `data/train/data/biz_102`, `biz_111`, `biz_117`, `biz_123`.
+Uses real literals from `data/train/train/questions.jsonl`, `data/train/train/answers.jsonl`,
+and `data/train/train/data/biz_102`, `biz_111`, `biz_117`, `biz_123`.
 """
 from __future__ import annotations
 
@@ -9,7 +9,11 @@ import sqlite3
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
+_BIZ_102 = ROOT / "data" / "train" / "train" / "data" / "biz_102"
+_BIZ_117 = ROOT / "data" / "train" / "train" / "data" / "biz_117"
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts" / "analysis"))
 
@@ -100,9 +104,10 @@ def test_should_skip_question_filters():
     )
 
 
+@pytest.mark.skipif(not _BIZ_102.exists(), reason="private data not present (data/train/train/data/biz_102)")
 def test_execute_templates_on_biz_102():
-    # Source: data/train/data/biz_102 and official answers in data/train/answers.jsonl
-    biz_dir = ROOT / "data" / "train" / "data" / "biz_102"
+    # Source: data/train/train/data/biz_102 and official answers in data/train/train/answers.jsonl
+    biz_dir = _BIZ_102
     conn = build_database(biz_dir)
     try:
         cat_items = conn.execute(
@@ -177,10 +182,11 @@ def test_execute_templates_on_biz_102():
         conn.close()
 
 
+@pytest.mark.skipif(not _BIZ_117.exists(), reason="private data not present (data/train/train/data/biz_117)")
 def test_diagnose_failure_variants():
     # biz_117 (q_788ab61d79d1) used to fail because its unit-conversion table was not recognised
-    # Source: data/train/data/biz_117/DanhMuc.xlsx (`Hàng`, `ĐV lớn`, `ĐV nhỏ`, `Hệ số QĐ`)
-    biz_dir = ROOT / "data" / "train" / "data" / "biz_117"
+    # Source: data/train/train/data/biz_117/DanhMuc.xlsx (`Hàng`, `ĐV lớn`, `ĐV nhỏ`, `Hệ số QĐ`)
+    biz_dir = _BIZ_117
     readme = (biz_dir / "README.md").read_text(encoding="utf-8")
     tables = load_business(biz_dir)
     mapping = propose_mapping(tables, readme)

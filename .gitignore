@@ -76,13 +76,17 @@ zalo_data/
 
 # ── Docker build cache ────────────────────────────────────────────────────
 .dockerignore
-
 /eval_results/
-/reports/mappings
-/reports/profiles/
-/reports/*.json
-
 
 # Per-question raw rows and error examples derive from private data
 eval/reports/*.per_question.jsonl
 eval/reports/*_errors.md
+
+/reports/mappings
+/reports/profiles/
+/reports/*.json
+
+# ── Official data downloaded by scripts/download_data.sh ──────────────────
+# Anchored so tracked benchmark/data and example_data/data are unaffected.
+/data/
+*.zip
