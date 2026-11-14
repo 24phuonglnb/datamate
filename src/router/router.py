@@ -7,6 +7,7 @@ No logic on shop or question identifiers; valid-order definition, statuses and u
 from __future__ import annotations
 
 import datetime as dt
+import re
 import sqlite3
 from dataclasses import dataclass, field
 from typing import Any
@@ -14,7 +15,7 @@ from typing import Any
 from . import intents as I
 from . import sanity
 from .invariants import blocked_by_spans
-from .templates import ANSWER_TYPE, monthly_revenue, run_template
+from .templates import ANSWER_TYPE, SQL_TEMPLATES, monthly_revenue, run_template
 
 
 @dataclass
@@ -66,6 +67,8 @@ class Router:
             return RouteDecision("llm", "no_as_of", intent)
         if intent in I.MONTHLY_INTENTS:
             return self._monthly(qid, intent, s, res, as_of_d, conn, blocked_spans)
+        if intent in I.INVENTORY_INTENTS:
+            return self._inventory(qid, intent, s, res, as_of_d, conn)
         prev = None
         if intent == "rev_change_pct":
             if len(res.periods) == 1 and res.comparison is not None:
@@ -162,6 +165,24 @@ class Router:
                 return RouteDecision("llm", why, intent, params=params)
             kw["item"] = (None, c)
             params["category"] = c
+        elif intent == "ingredient_revenue":
+            vals = [r[0] for r in conn.execute("SELECT DISTINCT active_ingredient FROM v_items WHERE active_ingredient IS NOT NULL")]
+            if not vals:   # the shop's drug table has no ingredient column: not recorded -> unanswerable (rulebook section 7)
+                return self._unanswerable(qid, "Cửa hàng không ghi hoạt chất của mặt hàng (rulebook mục 7).", "no_active_ingredient", intent, params)
+            g, why = I.match_ingredient(vals, s)
+            if g is None:
+                return RouteDecision("llm", why, intent, params=params)
+            kw["item"] = (None, g)
+            params["ingredient"] = g
+        elif intent in ("rx_nonrx_revenue", "rx_share"):
+            if not conn.execute("SELECT 1 FROM v_items WHERE is_prescription IS NOT NULL LIMIT 1").fetchone():
+                return self._unanswerable(qid, "Cửa hàng không ghi thuốc kê đơn (rulebook mục 7).", "no_prescription_info", intent, params)
+            if intent == "rx_nonrx_revenue":
+                pol = I.rx_polarity(s)
+                if pol is None:
+                    return RouteDecision("llm", "rx_polarity_unclear", intent, params=params)
+                kw["values"] = [pol]
+                params["rx"] = pol
         elif intent == "order_count":
             th, why = I.order_threshold(s)
             if why not in ("ok", "no_threshold"):
@@ -181,6 +202,199 @@ class Router:
             return RouteDecision("abstain", f"sanity:{bad_answer}", intent, params=params)
         ans = {"id": qid, "type": ANSWER_TYPE[intent], "answer": value}
         return RouteDecision("template", "ok", intent, ans, params)
+
+    @staticmethod
+    def _unanswerable(qid, reason, code, intent, params):
+        return RouteDecision("unanswerable", code, intent, {"id": qid, "type": "unanswerable", "reason": reason}, params)
+
+    @staticmethod
+    def _has_view(conn, name):
+        return conn.execute("SELECT 1 FROM sqlite_master WHERE name = ?", (name,)).fetchone() is not None
+
+    def _inventory(self, qid, intent, s, res, as_of_d, conn):
+        """Purchases (v_valid_purchase_lines), stock (v_stock, v_stock_card, v_item_units) and lots (v_lots).
+
+        The views exist only for shops that record that information (docs/VIEWS.md 3.8, 3.9): a missing view, or a
+        purchase book without amounts, is "not recorded" -> unanswerable (rulebook section 7, same as the train answers);
+        SQL is never run against a view that is not there."""
+        params: dict[str, Any] = {}
+        if res.comparison is not None or len(res.periods) > (2 if intent == "expiry_list" else 1):
+            return RouteDecision("llm", "period_count", intent)
+        cur = res.periods[-1] if res.periods else None
+        if len(res.periods) == 2 and not (res.periods[0].granularity == "day" and res.periods[0].end == as_of_d):
+            return RouteDecision("llm", "period_count", intent)   # only "<as-of day>, ... from now to the end of E" is read as one range
+        if intent in ("purchase_total", "supplier_top", "purchase_avg_price"):
+            return self._purchases(qid, intent, s, cur, as_of_d, conn, params)
+        if intent == "expiry_nearest_lot":
+            return self._expiry_nearest(qid, intent, s, as_of_d, conn, params)
+        if intent == "expiry_list":
+            return self._expiry(qid, intent, s, cur, as_of_d, conn, params)
+        return self._stock(qid, intent, s, cur, as_of_d, conn, params)
+
+    def _purchases(self, qid, intent, s, cur, as_of_d, conn, params):
+        if cur is None or cur.start is None:
+            return RouteDecision("llm", "period_missing" if cur is None else "period_open", intent)
+        ok = {"purchase_total": I.purchase_total_ok, "supplier_top": I.supplier_top_ok}.get(intent, lambda _: True)
+        if not ok(s):
+            return RouteDecision("llm", "purchase_pattern", intent)
+        start, end = cur.start.isoformat(), min(cur.end, as_of_d).isoformat()
+        params.update({"start": start, "end": end})
+        if not self._has_view(conn, "v_valid_purchase_lines"):
+            return self._unanswerable(qid, "Cửa hàng không có sổ nhập hàng (rulebook mục 7).", "no_purchase_book", intent, params)
+        n_amount, lo, hi = conn.execute("SELECT COUNT(line_amount), MIN(receipt_date), MAX(receipt_date) FROM v_valid_purchase_lines").fetchone()
+        if not n_amount:   # quantities only: no purchase money recorded (VIEWS.md 3.8 rule 3)
+            return self._unanswerable(qid, "Sổ nhập hàng không ghi giá/tiền nhập (rulebook mục 7).", "no_purchase_amount", intent, params)
+        if lo and end < lo:
+            return self._unanswerable(qid, "Kỳ được hỏi nằm trước phiếu nhập đầu tiên của cửa hàng (rulebook mục 7).", "before_purchase_start", intent, params)
+        if hi and start > hi:
+            return RouteDecision("llm", "after_last_receipt", intent, params=params)
+        if intent == "purchase_total":
+            total, n = conn.execute(SQL_TEMPLATES["purchase_total"], (start, end)).fetchone()
+            if not n:
+                return RouteDecision("llm", "no_receipt_in_period", intent, params=params)
+            value: Any = int(total + 0.5) if total >= 0 else None
+            bad = None if value is not None else "negative_purchase_total"
+        elif intent == "supplier_top":
+            rows = conn.execute(SQL_TEMPLATES["supplier_top"], (start, end)).fetchall()
+            if not rows:
+                return RouteDecision("llm", "no_receipt_in_period", intent, params=params)
+            if len(rows) > 1 and rows[0][1] == rows[1][1]:
+                return RouteDecision("llm", "supplier_tie", intent, params=params)
+            value, bad = rows[0][0], None
+        else:
+            cat = conn.execute("SELECT item_code, item_name, name_aliases, base_unit FROM v_items").fetchall()
+            m, why = I.match_item(cat, I.strip_dates(s))
+            if m is None:
+                return RouteDecision("llm", why, intent, params=params)
+            asked = I.asked_unit_after_mot(s)
+            units = [r[0] for r in conn.execute(
+                "SELECT DISTINCT unit FROM v_valid_purchase_lines WHERE COALESCE(item_code, item_name) = COALESCE(?, ?) AND unit IS NOT NULL",
+                (m[0], m[1]))]
+            use = [u for u in units if asked and I.item_match_key(u) == I.item_match_key(asked)]
+            if len(use) != 1:
+                return RouteDecision("llm", "unit_not_an_import_unit", intent, params=params)
+            key = "purchase_avg_price_by_code" if m[0] else "purchase_avg_price_by_name"
+            avg, n_amt, n_all = conn.execute(SQL_TEMPLATES[key], (start, end, m[0] or m[1], use[0])).fetchone()
+            params.update({"item": m[1], "unit": use[0]})
+            if not n_all:
+                return RouteDecision("llm", "no_receipt_in_period", intent, params=params)
+            if not n_amt or avg is None:
+                return RouteDecision("llm", "purchase_price_missing", intent, params=params)
+            value, bad = int(avg + 0.5), None
+        if bad:
+            return RouteDecision("abstain", f"sanity:{bad}", intent, params=params)
+        return RouteDecision("template", "ok", intent, {"id": qid, "type": ANSWER_TYPE[intent], "answer": value}, params)
+
+    def _stock_item(self, conn, s, intent, params):
+        """Item named in the question, found in v_items; -> (match, None) or (None, decision)."""
+        cat = conn.execute("SELECT item_code, item_name, name_aliases, base_unit FROM v_items").fetchall()
+        m, why = I.match_item(cat, I.strip_dates(s))
+        if m is None:
+            return None, RouteDecision("llm", why, intent, params=params)
+        params["item"] = m[1]
+        return m, None
+
+    def _stock_qty_at(self, conn, m, day, as_of_d):
+        """Base-unit stock of item *m* at the end of *day*: v_stock for the end of the data, v_stock_card for earlier days
+        (VIEWS.md 3.9).  -> (value, reason): value None when the views cannot give it exactly."""
+        stock_date = conn.execute("SELECT MAX(stock_date) FROM v_stock").fetchone()[0]
+        if day >= (stock_date or as_of_d.isoformat()):
+            row = conn.execute(SQL_TEMPLATES["stock_qty"], (m[0], m[1])).fetchall()
+            return (float(row[0][0]), "ok") if len(row) == 1 and row[0][0] is not None else (None, "item_not_in_stock")
+        if not self._has_view(conn, "v_stock_card"):
+            return None, "stock_past_no_card"
+        rows = conn.execute(SQL_TEMPLATES["stock_card_at"], (m[0], m[1], day)).fetchall()
+        if not rows:
+            return None, "no_movement_before_day"
+        if len(rows) > 1 and rows[0][1] == rows[1][1]:   # two movements with the same timestamp: the last one is not decidable here
+            return None, "stock_card_tie"
+        return float(rows[0][0]), "ok"
+
+    def _stock(self, qid, intent, s, cur, as_of_d, conn, params):
+        if cur is None or cur.granularity not in ("day", "cumulative"):
+            return RouteDecision("llm", "stock_needs_day", intent)
+        day = cur.end.isoformat()
+        params["day"] = day
+        if cur.end > as_of_d:
+            return RouteDecision("llm", "stock_future_day", intent, params=params)
+        if not self._has_view(conn, "v_stock"):
+            return self._unanswerable(qid, "Cửa hàng không có dữ liệu tồn kho (rulebook mục 7).", "no_stock_data", intent, params)
+        stock_date = conn.execute("SELECT MAX(stock_date) FROM v_stock").fetchone()[0] or as_of_d.isoformat()
+        if intent == "stock_value":
+            if day < stock_date:
+                return RouteDecision("llm", "stock_value_past_day", intent, params=params)
+            total, n, n_null = conn.execute(SQL_TEMPLATES["stock_value"]).fetchone()
+            if not n:
+                return RouteDecision("llm", "empty_stock", intent, params=params)
+            if n_null == n:
+                return self._unanswerable(qid, "Danh mục không ghi giá vốn (rulebook mục 7).", "no_cost_price", intent, params)
+            if n_null:
+                return RouteDecision("llm", "cost_price_partial", intent, params=params)
+            value: Any = int(total + 0.5)
+        else:
+            m, bad = self._stock_item(conn, s, intent, params)
+            if bad:
+                return bad
+            qty, why = self._stock_qty_at(conn, m, day, as_of_d)
+            if qty is None:
+                return RouteDecision("llm", why, intent, params=params)
+            if intent == "stock_qty":
+                unit = I.asked_unit(s)
+                if unit is None or I.item_match_key(unit) != I.item_match_key(m[2] or ""):
+                    return RouteDecision("llm", "unit_mismatch", intent, params=params)
+                value = int(round(qty)) if abs(qty - round(qty)) < 1e-6 else round(qty, 2)
+            else:   # stock_large_unit: [whole big units, base units left over] (rulebook section 5)
+                bigs, small = I.large_units(s)
+                if not bigs or not small or I.item_match_key(small) != I.item_match_key(m[2] or ""):
+                    return RouteDecision("llm", "large_unit_pattern", intent, params=params)
+                keys = {I.item_match_key(b) for b in bigs}
+                rows = [(k, f) for _, k, f in conn.execute(SQL_TEMPLATES["item_unit_factors"], (m[0], m[1])) if k in keys]
+                fac = {f for _, f in rows}
+                big = bigs[-1] if any(k == I.item_match_key(bigs[-1]) for k, _ in rows) else bigs[0]
+                if len(fac) != 1 or next(iter(fac)) <= 1 or qty < 0 or abs(qty - round(qty)) > 1e-6:
+                    return RouteDecision("llm", "large_unit_factor", intent, params=params)
+                f = next(iter(fac))
+                if abs(f - round(f)) > 1e-9:
+                    return RouteDecision("llm", "large_unit_factor", intent, params=params)
+                n_big = int(round(qty) // int(round(f)))
+                value = [n_big, int(round(qty)) - n_big * int(round(f))]
+                params["unit"] = big
+        bad_answer = sanity.check_inventory(intent, value)
+        if bad_answer:
+            return RouteDecision("abstain", f"sanity:{bad_answer}", intent, params=params)
+        return RouteDecision("template", "ok", intent, {"id": qid, "type": ANSWER_TYPE[intent], "answer": value}, params)
+
+    def _expiry(self, qid, intent, s, cur, as_of_d, conn, params):
+        """Lots still in stock that expire from today D to the end of E (rulebook section 6): a count of lots or the products."""
+        kind = I.expiry_kind(s)
+        if kind is None or cur is None or cur.start not in (as_of_d, None) or (cur.start is None and not re.search(r"\btu nay\b", s)):
+            return RouteDecision("llm", "expiry_pattern", intent)
+        start, end = as_of_d.isoformat(), cur.end.isoformat()
+        params.update({"start": start, "end": end, "kind": kind})
+        if not self._has_view(conn, "v_lots"):
+            return self._unanswerable(qid, "Cửa hàng không có dữ liệu lô/hạn dùng (rulebook mục 7).", "no_lot_data", intent, params)
+        if kind == "count":
+            value: Any = int(conn.execute(SQL_TEMPLATES["expiry_count"], (start, end)).fetchone()[0])
+            atype = "number"
+        else:
+            value = [r[0] for r in conn.execute(SQL_TEMPLATES["expiry_items"], (start, end))]
+            atype = "list"
+        bad_answer = sanity.check_inventory(intent, value)
+        if bad_answer:
+            return RouteDecision("abstain", f"sanity:{bad_answer}", intent, params=params)
+        return RouteDecision("template", "ok", intent, {"id": qid, "type": atype, "answer": value}, params)
+
+    def _expiry_nearest(self, qid, intent, s, as_of_d, conn, params):
+        if not self._has_view(conn, "v_lots"):
+            return self._unanswerable(qid, "Cửa hàng không có dữ liệu lô/hạn dùng (rulebook mục 7).", "no_lot_data", intent, params)
+        m, bad = self._stock_item(conn, s, intent, params)
+        if bad:
+            return bad
+        key = "expiry_nearest_by_code" if m[0] else "expiry_nearest_by_name"
+        value = conn.execute(SQL_TEMPLATES[key], (m[0] or m[1], as_of_d.isoformat())).fetchone()[0]
+        if value is None:
+            return RouteDecision("llm", "no_lot_in_stock", intent, params=params)
+        return RouteDecision("template", "ok", intent, {"id": qid, "type": "date", "answer": value}, params)
 
     def _monthly(self, qid, intent, s, res, as_of_d, conn, blocked_spans):
         """best_month / monthly_series / streak_bool: months named by the question, revenue of each month (valid orders)."""
