@@ -80,15 +80,9 @@ from src.ledger import (
 from src.mapping import Mapping, propose_mapping
 from src.views import build_database, item_match_key
 
-# `Path("")` is truthy (it is "."), so test the env string, not the Path. Official layout first,
-# then the flat `data/train/{data,questions.jsonl}` layout some machines use.
-_ENV_TRAIN_DIR = os.environ.get("ZAIC_TRAIN_DIR", "").strip()
-if _ENV_TRAIN_DIR:
-    DATA_DIR = Path(_ENV_TRAIN_DIR)
-elif (ROOT / "data" / "train" / "train" / "questions.jsonl").is_file():
-    DATA_DIR = ROOT / "data" / "train" / "train"
-else:
-    DATA_DIR = ROOT / "data" / "train"
+from src.data_paths import train_dir  # noqa: E402  (ZAIC_TRAIN_DIR, then data/train/train, then data/train)
+
+DATA_DIR = train_dir()
 REPORT_PATH = ROOT / "reports" / "rule_regression.md"
 
 TARGET_INTENTS = (

@@ -18,6 +18,10 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
+import sys as _sys
+if str(ROOT) not in _sys.path:
+    _sys.path.insert(0, str(ROOT))
+from src.data_paths import public_test_dir as _public_test_dir, train_dir as _train_dir  # noqa: E402
 sys.path.insert(0, str(ROOT))
 
 from src.cleaning import norm_key
@@ -201,8 +205,8 @@ def main() -> None:
     profiles_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. Discover all 44 shops
-    train_shops = sorted([p for p in (ROOT / "data" / "train" / "data").iterdir() if p.is_dir()])
-    test_shops = sorted([p for p in (ROOT / "data" / "public_test" / "data").iterdir() if p.is_dir()])
+    train_shops = sorted([p for p in (_train_dir() / "data").iterdir() if p.is_dir()])
+    test_shops = sorted([p for p in (_public_test_dir() / "data").iterdir() if p.is_dir()])
     all_shops = train_shops + test_shops
 
     print(f"Discovered {len(all_shops)} shops ({len(train_shops)} train + {len(test_shops)} test).")
@@ -240,8 +244,8 @@ def main() -> None:
     print(f"All 44 profiles ready at reports/profiles/ and reports/all_shop_profiles.json ({time.time() - t_start:.2f}s).")
 
     # 2. Audit against data/train
-    questions_file = ROOT / "data" / "train" / "questions.jsonl"
-    answers_file = ROOT / "data" / "train" / "answers.jsonl"
+    questions_file = _train_dir() / "questions.jsonl"
+    answers_file = _train_dir() / "answers.jsonl"
 
     with open(questions_file, encoding="utf-8") as f:
         questions = {json.loads(line)["id"]: json.loads(line) for line in f}

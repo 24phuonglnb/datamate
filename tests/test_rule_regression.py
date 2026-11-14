@@ -12,8 +12,11 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-_BIZ_102 = ROOT / "data" / "train" / "train" / "data" / "biz_102"
-_BIZ_117 = ROOT / "data" / "train" / "train" / "data" / "biz_117"
+sys.path.insert(0, str(ROOT))
+from src.data_paths import train_dir  # noqa: E402
+
+_BIZ_102 = train_dir() / "data" / "biz_102"
+_BIZ_117 = train_dir() / "data" / "biz_117"
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts" / "analysis"))
 

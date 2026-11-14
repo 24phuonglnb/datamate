@@ -32,8 +32,12 @@ def run_reports(target_shops: list[str] | None = None) -> None:
     reports_dir = ROOT / "reports" / "mappings"
     reports_dir.mkdir(parents=True, exist_ok=True)
 
-    train_dir = ROOT / "data" / "train" / "data"
-    public_dir = ROOT / "data" / "public_test" / "data"
+    from src.data_paths import train_dir as _train_dir
+
+    train_dir = _train_dir() / "data"
+    from src.data_paths import public_test_dir as _public_test_dir
+
+    public_dir = _public_test_dir() / "data"
 
     all_shops = []
     for p in sorted(train_dir.iterdir()):

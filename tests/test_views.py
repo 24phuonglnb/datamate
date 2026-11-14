@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 
 from src.cleaning import load_business, strip_accents
+from src.data_paths import public_test_dir, train_dir
 from src.mapping import propose_mapping
 from src.views import (
     build_database,
@@ -21,8 +22,8 @@ from src.views import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-TRAIN_DIR = ROOT / "data" / "train"
-PUBLIC_TEST_DIR = ROOT / "data" / "public_test"
+TRAIN_DIR = train_dir()
+PUBLIC_TEST_DIR = public_test_dir()
 
 
 def _write_csv(path: Path, rows: list[list[object]]) -> None:
@@ -800,3 +801,37 @@ def test_purchase_note_with_person_named_huy_is_not_cancelled(tmp_path: Path) ->
     conn.close()
     assert rows == [("PN01", 0), ("PN02", 1)]
     assert spend == 100000
+
+
+_CALENDAR_CANDIDATES = [
+    TRAIN_DIR / "calendar.csv",
+]
+_CALENDAR_CSV = next((p for p in _CALENDAR_CANDIDATES if p.is_file()), None)
+
+
+@pytest.mark.skipif(_CALENDAR_CSV is None, reason="calendar.csv not present")
+def test_schema_text_keeps_calendar_when_budget_cuts_raw_tables(tmp_path: Path) -> None:
+    """The prompt budget cuts the tail; the calendar must sit before the cleaned/raw tables so it survives."""
+    biz_dir = tmp_path / "biz_budget"
+    biz_dir.mkdir()
+    _write_csv(
+        biz_dir / "ban_hang.csv",
+        [
+            ["Mã HĐ", "Ngày bán", "Trạng thái", "Tên hàng", "ĐVT", "SL", "Đơn giá", "Thanh tiền"],
+            ["HD01", "2026-06-01", "Hoàn thành", "Cà phê sữa", "ly", "2", "25000", "50000"],
+        ],
+    )
+    for k in range(6):  # bulky auxiliary tables that will not fit in a small budget
+        _write_csv(
+            biz_dir / f"phu_luc_{k}.csv",
+            [[f"Cột dài số {i} của phụ lục {k}" for i in range(8)]] + [[f"giá trị {k}-{r}-{i}" for i in range(8)] for r in range(3)],
+        )
+    conn = build_database(biz_dir, calendar_path=_CALENDAR_CSV)
+    full = schema_text(conn, max_chars=10**7)
+    cal_pos = full.index("=== CALENDAR TABLE ===")
+    tables_pos = full.index("=== 2. CLEANED AUXILIARY & SOURCE TABLES ===")
+    assert cal_pos < tables_pos
+    cut = schema_text(conn, max_chars=tables_pos + 300)
+    conn.close()
+    assert len(cut) < len(full)
+    assert "=== CALENDAR TABLE ===" in cut

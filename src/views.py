@@ -2533,6 +2533,28 @@ def schema_text(conn: sqlite3.Connection, max_chars: int = 13000) -> str:
         lines.append("")
         lines.append("=== 1. CLEANED TABLES ===")
 
+    # Calendar goes BEFORE the cleaned/raw tables: when the prompt budget is exceeded the tail is cut,
+    # and raw fallback tables are cheaper to lose than the calendar (weekday/holiday/Tết questions, §2).
+    calendar_lines: list[str] = []
+    if has_calendar:
+        calendar_lines.append("=== CALENDAR TABLE ===")
+        calendar_lines.append(
+            "TABLE `calendar` (one row per solar day; JOIN `calendar.date = v_orders.order_date`). Columns: "
+            "`date` TEXT 'YYYY-MM-DD', `year` INT, `month` INT, `day` INT, `quarter` INT, `iso_year` INT, `iso_week` INT, "
+            "`day_of_week` INT 1=Mon..7=Sun (same as `weekday`), `day_name_vi` TEXT ('Thứ Hai'..'Chủ nhật'), "
+            "`is_weekend` INT 0/1, `lunar_year` INT, `lunar_month` INT (12 = tháng Chạp, 1 = tháng Giêng), `lunar_day` INT, "
+            "`lunar_leap` INT 0/1 (leap lunar month), `holiday` TEXT (also `holiday_vi`, NULL on ordinary days)"
+        )
+        try:
+            lo, hi = conn.execute("SELECT MIN(date), MAX(date) FROM calendar").fetchone()
+            calendar_lines.append(f"  date_range=[{lo} .. {hi}]")
+        except sqlite3.Error:
+            pass
+        calendar_lines.append("")
+
+    if calendar_lines:
+        lines[-1:-1] = calendar_lines  # just before the cleaned-tables section header
+
     # Format cleaned tables: auxiliary tables first (full detail), then primary sales/purchase source tables (compact)
     sorted_tables = sorted(
         tables_meta,
@@ -2581,22 +2603,6 @@ def schema_text(conn: sqlite3.Connection, max_chars: int = 13000) -> str:
 
         sample_cols = [c_meta["safe_name"] for c_meta in cols_info[:8]]
         lines.extend(_format_sample_rows(conn, c_name, sample_cols, limit=1 if (is_primary or is_primary_purchase) else 2))
-        lines.append("")
-
-    if has_calendar:
-        lines.append("=== CALENDAR TABLE ===")
-        lines.append(
-            "TABLE `calendar` (one row per solar day; JOIN `calendar.date = v_orders.order_date`). Columns: "
-            "`date` TEXT 'YYYY-MM-DD', `year` INT, `month` INT, `day` INT, `quarter` INT, `iso_year` INT, `iso_week` INT, "
-            "`day_of_week` INT 1=Mon..7=Sun (same as `weekday`), `day_name_vi` TEXT ('Thứ Hai'..'Chủ nhật'), "
-            "`is_weekend` INT 0/1, `lunar_year` INT, `lunar_month` INT (12 = tháng Chạp, 1 = tháng Giêng), `lunar_day` INT, "
-            "`lunar_leap` INT 0/1 (leap lunar month), `holiday` TEXT (also `holiday_vi`, NULL on ordinary days)"
-        )
-        try:
-            lo, hi = conn.execute("SELECT MIN(date), MAX(date) FROM calendar").fetchone()
-            lines.append(f"  date_range=[{lo} .. {hi}]")
-        except sqlite3.Error:
-            pass
         lines.append("")
 
     text = "\n".join(lines)
