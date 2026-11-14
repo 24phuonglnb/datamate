@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from src.data_paths import train_dir
 from src.cleaning import RawTable
 from src.ledger import (
     CANONICAL_COLUMNS,
@@ -212,7 +213,7 @@ class UnitConversionTests(unittest.TestCase):
         self.assertEqual(resolved[(item_k, "lon")], (1.0, "lon"))
 
     def test_load_unit_conversions_biz_118(self):
-        readme_path = Path("data/train/data/biz_118/README.md")
+        readme_path = (train_dir() / "data" / "biz_118" / "README.md")
         if not readme_path.exists():
             self.skipTest("biz_118 README not found")
         readme = readme_path.read_text()

@@ -213,7 +213,8 @@ def load_unit_conversions(
 
     # 2. Parse conversion tables from business data
     for t in tables:
-        t_k = norm_key(t.name)
+        t_spaced = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", t.name)
+        t_k = norm_key(t_spaced)
         df = t.df
         cols = t.columns
         col_keys = [norm_key(c) for c in cols]
@@ -237,7 +238,7 @@ def load_unit_conversions(
 
         for c in cols:
             ck = norm_key(c)
-            if not col_item and any(k in ck for k in ["ten san pham", "ten hang", "ten sp", "ma hang", "ma sp", "ma vach", "mahanghoa"]):
+            if not col_item and any(k in ck for k in ["ten san pham", "ten hang", "ten sp", "ten mon", "ten mat hang", "ten thuoc", "ma hang", "ma sp", "ma vach", "mahanghoa", "product"]):
                 col_item = c
             elif not col_base and _BASE_UNIT_COL.search(ck):
                 col_base = c
