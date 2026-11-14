@@ -7,14 +7,23 @@ Implements the scoring rules from rulebook.md §9:
   - PA = (correct - incorrect) / total
 
 Comparison rules per type (from rulebook §9):
-  number  : exact (floating-point tolerance ≤ 0.5; "tiền đúng từng đồng")
-  percent : exact to 2 decimal places (tolerance ≤ 0.005)
-  boolean : exact
-  string  : case/whitespace/punctuation-insensitive; also accepts aliases
+  number  : JSON number only (rulebook §9: string "4820000" is explicitly wrong).
+            Tolerance: math.isclose(rel_tol=1e-9, abs_tol=1e-9) — covers genuine
+            IEEE 754 float-repr error (~2e-12) but rejects values differing by 0.3+.
+  percent : JSON number only.  Agents must round to 2 dp before submitting
+            (rulebook §9: "làm tròn 2 chữ số thập phân").  Scorer rounds the
+            prediction to 2 dp then applies 1e-9 float tolerance.
+  boolean : JSON true/false only.  Rulebook §9 explicitly marks "1" and "có" wrong.
+  string  : case/whitespace/punctuation-insensitive (rulebook §9: "không phân biệt
+            hoa thường, khoảng trắng, dấu câu"); Vietnamese diacritics kept
+            ("ngoài các cách viết đó, dấu tiếng Việt phải đúng").
   date    : exact string match ("YYYY-MM-DD" or "YYYY-MM")
-  list    : order-sensitive; each element matched by string rules + per-element alias
-  table   : row-order independent; first column matched with per-row alias;
-            numeric columns exact; string columns by string rules
+  list    : order-sensitive; numeric elements need JSON number type (not string);
+            string elements matched by string rules + per-element alias.
+  table   : row-order independent (rulebook: "Thứ tự các dòng không ảnh hưởng");
+            columns matched by name first, then by position (rulebook: "Cột so
+            theo tên; tên không khớp thì so theo vị trí"); first column matched
+            with per-row alias; numeric cells need JSON number type.
 
 Ground-truth answers must stay inside this module during inference; they are
 only accessed via score_submission() after all predictions are collected.
@@ -22,7 +31,7 @@ only accessed via score_submission() after all predictions are collected.
 from __future__ import annotations
 
 import math
-import re
+import unicodedata
 from typing import Any
 
 from .official_dataset import OfficialAnswer
@@ -30,13 +39,15 @@ from .official_dataset import OfficialAnswer
 
 # ── String normalisation ──────────────────────────────────────────────────
 
-_WS_RE = re.compile(r"[\s ]+")
-_PUNCT_RE = re.compile(r"[,.\-_/\\()'\"]")
-
-
 def _norm(s: Any) -> str:
-    """Normalize for case/whitespace comparison (not punctuation)."""
-    return _WS_RE.sub(" ", str(s)).strip().lower()
+    """Case-, whitespace- and punctuation-insensitive; Vietnamese diacritics kept.
+
+    Rulebook §9: "không phân biệt hoa thường, khoảng trắng, dấu câu".
+    NFC-normalise then casefold; keep only Unicode Letter/Number/Mark code points
+    so punctuation and separators are stripped while diacritical marks are kept.
+    """
+    s = unicodedata.normalize("NFC", str(s)).casefold()
+    return "".join(c for c in s if unicodedata.category(c)[0] in "LNM")
 
 
 def _str_eq(pred: Any, gt: Any) -> bool:
@@ -44,7 +55,7 @@ def _str_eq(pred: Any, gt: Any) -> bool:
 
 
 def _str_matches(pred: Any, gt: Any, aliases: list[Any]) -> bool:
-    """Return True if pred equals gt or any alias (after normalization)."""
+    """Return True if pred equals gt or any alias (after normalisation)."""
     pn = _norm(pred)
     if pn == _norm(gt):
         return True
@@ -54,47 +65,44 @@ def _str_matches(pred: Any, gt: Any, aliases: list[Any]) -> bool:
     return False
 
 
+# ── Type guard ────────────────────────────────────────────────────────────
+
+def _is_num(v: Any) -> bool:
+    """True if v is a JSON numeric value (int or float, not bool, not NaN/Inf)."""
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
 # ── Per-type comparison ───────────────────────────────────────────────────
 
 def _cmp_number(pred: Any, gt: Any) -> bool:
-    try:
-        pf = float(pred)
-        gf = float(gt)
-    except (TypeError, ValueError):
+    # Rulebook §9: JSON number only. String "4820000" is explicitly wrong.
+    if not _is_num(pred):
         return False
-    if math.isnan(pf) or math.isnan(gf):
+    if not _is_num(gt):
         return False
-    # "tiền đúng từng đồng" → integer currency: tolerance < 0.5 covers float repr
-    return abs(pf - gf) < 0.5
+    # "tiền đúng từng đồng" — exact match; 1e-9 rel+abs tolerance covers float repr.
+    return math.isclose(float(pred), float(gt), rel_tol=1e-9, abs_tol=1e-9)
 
 
 def _cmp_percent(pred: Any, gt: Any) -> bool:
-    try:
-        pf = float(pred)
-        gf = float(gt)
-    except (TypeError, ValueError):
+    # Rulebook §9: JSON number only ("12,4%" and 0.124 are explicitly wrong).
+    if not _is_num(pred):
         return False
-    if math.isnan(pf) or math.isnan(gf):
+    if not _is_num(gt):
         return False
-    # "phần trăm đúng 2 chữ số thập phân"
-    return abs(pf - gf) < 0.005
+    # Agents must round to 2 dp (rulebook §9: "làm tròn 2 chữ số thập phân").
+    # Round pred first, then 1e-9 tolerance covers float repr of the rounded value.
+    return math.isclose(round(float(pred), 2), float(gt), rel_tol=1e-9, abs_tol=1e-9)
 
 
 def _cmp_boolean(pred: Any, gt: Any) -> bool:
-    if isinstance(pred, str):
-        pred = pred.strip().lower()
-        if pred == "true":
-            pred = True
-        elif pred == "false":
-            pred = False
-        elif pred in ("1",):
-            pred = True
-        elif pred in ("0",):
-            pred = False
-    if isinstance(gt, str):
-        gt = gt.strip().lower()
-        gt = gt == "true"
-    return bool(pred) == bool(gt)
+    # Rulebook §9: boolean answer is JSON true/false only.
+    # Explicitly wrong: "có", 1 — do NOT coerce strings or integers.
+    if not isinstance(pred, bool):
+        return False
+    if not isinstance(gt, bool):
+        return False
+    return pred == gt
 
 
 def _cmp_date(pred: Any, gt: Any) -> bool:
@@ -107,92 +115,119 @@ def _cmp_list(pred: Any, gt: Any, alias: list[Any]) -> bool:
         return False
     if len(pred) != len(gt):
         return False
-    # alias is a list of lists: alias[i] contains alternatives for gt[i]
     for i, (p, g) in enumerate(zip(pred, gt)):
         elem_aliases: list[Any] = []
         if alias and i < len(alias):
             raw = alias[i]
             elem_aliases = raw if isinstance(raw, list) else [raw]
-        # For numeric elements compare numerically; otherwise as strings
-        try:
-            pf, gf = float(p), float(g)
-            if not (math.isnan(pf) or math.isnan(gf) or abs(pf - gf) >= 0.5):
-                continue
-            # Numeric mismatch — fall through to string check
-        except (TypeError, ValueError):
-            pass
-        if not _str_matches(p, g, elem_aliases):
-            return False
+        if _is_num(g):
+            # Gold element is a JSON number — pred must also be a JSON number.
+            if not _is_num(p):
+                return False
+            if not math.isclose(float(p), float(g), rel_tol=1e-9, abs_tol=1e-9):
+                return False
+        else:
+            if not _str_matches(p, g, elem_aliases):
+                return False
     return True
 
 
 def _cmp_table(pred: Any, gt: Any, alias: list[Any]) -> bool:
     """Row-order-independent table comparison.
 
+    Columns are matched by name first, then by position (rulebook §9: "Cột so
+    theo tên; tên không khớp thì so theo vị trí").  Row order is irrelevant
+    (rulebook §9: "Thứ tự các dòng không ảnh hưởng kết quả chấm").
+
     alias is a list of per-row alternatives for the first (name/ID) column.
-    Rows are matched by the first column value (canonical or alias).
     """
     if not isinstance(pred, dict) or not isinstance(gt, dict):
         return False
 
-    pred_rows = pred.get("rows", [])
-    gt_rows = gt.get("rows", [])
-    pred_cols = [str(c).lower() for c in (pred.get("columns") or [])]
-    gt_cols = [str(c).lower() for c in (gt.get("columns") or [])]
+    pred_rows: list = pred.get("rows") or []
+    gt_rows: list = gt.get("rows") or []
+    pred_col_names = [_norm(c) for c in (pred.get("columns") or [])]
+    gt_col_names = [_norm(c) for c in (gt.get("columns") or [])]
 
     if len(pred_rows) != len(gt_rows):
         return False
 
-    # Build a lookup from (normalised first-column value or alias) → row index
-    # for the ground truth so we can match rows in any order.
-    gt_by_key: dict[str, int] = {}
-    for idx, gt_row in enumerate(gt_rows):
-        if not gt_row:
-            continue
-        key = _norm(gt_row[0])
-        gt_by_key[key] = idx
-        row_aliases: list[Any] = []
-        if alias and idx < len(alias):
-            raw = alias[idx]
-            row_aliases = raw if isinstance(raw, list) else [raw]
-        for a in row_aliases:
-            gt_by_key[_norm(a)] = idx
+    n_gt_cols = len(gt_col_names)
 
-    matched: set[int] = set()
+    # Build column index remapping: col_order[j] = index in pred_row for gt col j.
+    # Rulebook: match by name; fall back to position when names don't align.
+    if (
+        pred_col_names
+        and gt_col_names
+        and len(set(gt_col_names)) == len(gt_col_names)  # gt names unique
+        and all(n in pred_col_names for n in gt_col_names)  # all gt names present in pred
+    ):
+        try:
+            col_order = [pred_col_names.index(n) for n in gt_col_names]
+        except ValueError:
+            col_order = list(range(n_gt_cols))
+    else:
+        col_order = list(range(n_gt_cols))
+
+    def _reorder(row: list) -> list:
+        return [row[i] if i < len(row) else None for i in col_order]
+
+    # Row-order-independent matching via first-column value or alias.
+    # Use a set of matched gold indices to handle tables where two rows share the
+    # same first-column text (duplicates are legitimate in some business datasets).
+    matched_gt: set[int] = set()
 
     for pred_row in pred_rows:
-        if not pred_row:
+        if not isinstance(pred_row, list) or not pred_row:
             return False
-        pk = _norm(pred_row[0])
-        gt_idx = gt_by_key.get(pk)
-        if gt_idx is None or gt_idx in matched:
+
+        reordered = _reorder(pred_row)
+        pk = _norm(reordered[0])
+
+        hit = -1
+        for gi, gt_row in enumerate(gt_rows):
+            if gi in matched_gt or not gt_row:
+                continue
+            # First-column match: canonical value or any alias for this row.
+            row_aliases: list[Any] = []
+            if alias and gi < len(alias):
+                raw = alias[gi]
+                row_aliases = raw if isinstance(raw, list) else [raw]
+            first_col_ok = pk == _norm(gt_row[0]) or any(
+                pk == _norm(a) for a in row_aliases
+            )
+            if not first_col_ok:
+                continue
+            # First column matched — check remaining columns.
+            if _cmp_data_row(reordered, gt_row, n_gt_cols):
+                hit = gi
+                break
+
+        if hit < 0:
             return False
-        matched.add(gt_idx)
+        matched_gt.add(hit)
 
-        gt_row = gt_rows[gt_idx]
+    return len(matched_gt) == len(gt_rows)
 
-        # Compare non-first columns: numeric exact, string by normalisation.
-        # Use gt column count as reference; pred may have more columns.
-        for col_i in range(1, len(gt_row)):
-            if col_i >= len(pred_row):
+
+def _cmp_data_row(pred_row: list, gt_row: list, n_cols: int) -> bool:
+    """Compare non-first columns of a matched table row pair."""
+    for col_i in range(1, min(n_cols, len(gt_row))):
+        if col_i >= len(pred_row) or pred_row[col_i] is None:
+            return False
+        pv = pred_row[col_i]
+        gv = gt_row[col_i]
+        if _is_num(gv):
+            if not _is_num(pv):
                 return False
-            pv = pred_row[col_i]
-            gv = gt_row[col_i]
-            # Numeric?
-            try:
-                pf, gf = float(pv), float(gv)
-                if math.isnan(pf) or math.isnan(gf):
-                    return False
-                if abs(pf - gf) < 0.5:
-                    continue
+            if math.isnan(float(pv)) or math.isnan(float(gv)):
                 return False
-            except (TypeError, ValueError):
-                pass
-            # String
+            if not math.isclose(float(pv), float(gv), rel_tol=1e-9, abs_tol=1e-9):
+                return False
+        else:
             if not _str_eq(pv, gv):
                 return False
-
-    return len(matched) == len(gt_rows)
+    return True
 
 
 # ── Main comparison entry point ───────────────────────────────────────────
@@ -274,7 +309,6 @@ def compute_pa_score(
     for qid, gt in ground_truths.items():
         pred = pred_map.get(qid)
         if pred is None:
-            # Treat missing predictions as abstain (score = 0)
             pred = {"id": qid, "type": "abstain"}
             missing.append(qid)
 
@@ -295,13 +329,11 @@ def compute_pa_score(
             outcome = "incorrect"
             incorrect += 1
 
-        # By-type breakdown
         if gt_t not in by_type:
             by_type[gt_t] = {"total": 0, "correct": 0, "incorrect": 0, "abstain": 0}
         by_type[gt_t]["total"] += 1
         by_type[gt_t][outcome] += 1
 
-        # Per-business breakdown (available when caller enriches predictions)
         if biz:
             if biz not in by_business:
                 by_business[biz] = {"total": 0, "correct": 0, "incorrect": 0, "abstain": 0}
@@ -311,7 +343,6 @@ def compute_pa_score(
     pa = (correct - incorrect) / total if total else 0.0
     accuracy = correct / total if total else 0.0
 
-    # Add per-type accuracy and PA
     for t, counts in by_type.items():
         n = counts["total"]
         counts["accuracy"] = round(counts["correct"] / n, 4) if n else 0.0

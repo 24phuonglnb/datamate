@@ -23,9 +23,11 @@ from eval.official_score import (
     compute_pa_score,
     _cmp_number,
     _cmp_percent,
+    _cmp_boolean,
     _cmp_list,
     _cmp_table,
     _str_matches,
+    _norm,
 )
 
 
@@ -666,6 +668,299 @@ class TestOfficialEvalE2E(unittest.TestCase):
                                backend_name="mock", predict_only=True)
         self.assertNotIn("pa", summary)
         self.assertNotIn("correct", summary)
+
+
+# ── Bug regression tests ─────────────────────────────────────────────────
+#
+# Every test in this class pins a confirmed bug found during the PR #3 / PR #6
+# cross-scorer review (2026-11-13).  Each test must FAIL before the fix and
+# PASS after.  Do not remove or weaken these tests without updating the PA
+# scorer comparison report.
+
+class TestBugRegressions(unittest.TestCase):
+    """Regression tests for bugs confirmed by the two-scorer comparison suite."""
+
+    # ── Boolean: rulebook §9 says true/false only ─────────────────────────
+
+    def test_bool_string_true_is_wrong(self):
+        # Rulebook §9 explicit wrong example: "có" (string). "true" likewise.
+        self.assertFalse(_cmp_boolean("true", True),
+                         "String 'true' must not match boolean True (rulebook: '\"có\"' is wrong)")
+
+    def test_bool_string_false_is_wrong(self):
+        self.assertFalse(_cmp_boolean("false", False),
+                         "String 'false' must not match boolean False")
+
+    def test_bool_integer_1_is_wrong(self):
+        # Rulebook §9 explicit wrong example: 1
+        self.assertFalse(_cmp_boolean(1, True),
+                         "Integer 1 must not match boolean True (rulebook: '1' is wrong)")
+
+    def test_bool_integer_0_is_wrong(self):
+        self.assertFalse(_cmp_boolean(0, False),
+                         "Integer 0 must not match boolean False")
+
+    def test_bool_float_truthy_is_wrong(self):
+        # Regression for the bool(0.5)==True bug in the original implementation.
+        self.assertFalse(_cmp_boolean(0.5, True),
+                         "Truthy float 0.5 must not match boolean True")
+
+    def test_bool_float_falsy_is_wrong(self):
+        self.assertFalse(_cmp_boolean(0.0, False),
+                         "Float 0.0 must not match boolean False")
+
+    def test_bool_true_exact_correct(self):
+        self.assertTrue(_cmp_boolean(True, True))
+
+    def test_bool_false_exact_correct(self):
+        self.assertTrue(_cmp_boolean(False, False))
+
+    def test_bool_mismatch_wrong(self):
+        self.assertFalse(_cmp_boolean(True, False))
+        self.assertFalse(_cmp_boolean(False, True))
+
+    # ── String / norm: punctuation must be stripped ───────────────────────
+
+    def test_norm_strips_hyphen(self):
+        # Rulebook §9: "không phân biệt … dấu câu"
+        self.assertEqual(_norm("Bà Rịa - Vũng Tàu"), _norm("Bà Rịa Vũng Tàu"),
+                         "Hyphen should be stripped so both forms normalise identically")
+
+    def test_norm_strips_comma(self):
+        self.assertEqual(_norm("A, B"), _norm("A B"))
+
+    def test_norm_strips_dot(self):
+        self.assertEqual(_norm("3.200.000"), _norm("3200000"))
+
+    def test_norm_keeps_vietnamese_diacritics(self):
+        # Rulebook: "dấu tiếng Việt phải đúng" — wrong diacritics must NOT match.
+        self.assertNotEqual(_norm("Sting dâu 330ml"), _norm("Sting dầu 330ml"),
+                            "Different Vietnamese diacritics must produce different norms")
+
+    def test_str_matches_punctuation_insensitive(self):
+        # Province name written with and without hyphen — both are correct.
+        self.assertTrue(
+            _str_matches("Bà Rịa Vũng Tàu", "Bà Rịa - Vũng Tàu", []),
+            "String comparison must be punctuation-insensitive (rulebook §9)"
+        )
+
+    def test_str_matches_wrong_diacritic_fails(self):
+        # "dầu" vs "dâu" differ in diacritic — must NOT match without alias.
+        self.assertFalse(
+            _str_matches("Sting dầu 330ml", "Sting dâu 330ml", []),
+            "Wrong Vietnamese diacritic without alias must not match"
+        )
+
+    # ── Number: JSON number format required ───────────────────────────────
+
+    def test_number_string_pred_is_wrong(self):
+        # Rulebook §9 explicit wrong example: "4820000" (string with quotes).
+        self.assertFalse(_cmp_number("12345", 12345),
+                         "String number must be wrong (rulebook: '\"4820000\"' is wrong)")
+
+    def test_number_bool_pred_is_wrong(self):
+        # JSON true is not a number.
+        self.assertFalse(_cmp_number(True, 1))
+
+    def test_number_exact_integer_correct(self):
+        self.assertTrue(_cmp_number(12000, 12000))
+
+    def test_number_float_repr_correct(self):
+        # 12000.0 and 12000 represent the same integer — float repr is forgivable.
+        self.assertTrue(_cmp_number(12000.0, 12000))
+
+    def test_number_0_3_above_gold_is_wrong(self):
+        # Rulebook says "exact, only float repr error". 12000.3 for gold 12000
+        # differs by 0.3 — that is NOT a float repr error (actual repr error ~2e-12).
+        # The 0.5 tolerance accepted this; 1e-9 must reject it.
+        self.assertFalse(_cmp_number(12000.3, 12000),
+                         "12000.3 must not match gold 12000 — difference 0.3 >> float repr error")
+
+    def test_number_0_4_below_gold_is_wrong(self):
+        self.assertFalse(_cmp_number(11999.6, 12000),
+                         "11999.6 must not match gold 12000")
+
+    # ── Percent: JSON number format required ──────────────────────────────
+
+    def test_percent_string_pred_is_wrong(self):
+        self.assertFalse(_cmp_percent("12.4", 12.4),
+                         "String percent must be wrong (rulebook: '\"12,4%\"' is wrong)")
+
+    def test_percent_bool_pred_is_wrong(self):
+        self.assertFalse(_cmp_percent(True, 1.0))
+
+    def test_percent_arith_float_rounds_to_match(self):
+        # Agent computed 26.97368... and rounds to 26.97 → matches gold 26.97.
+        self.assertTrue(_cmp_percent(26.9736842105263, 26.97),
+                        "Computed percent that rounds to 2 dp matching gold must be correct")
+
+    def test_percent_wrong_round2_is_wrong(self):
+        # Agent rounds 26.9736842 → 26.97 but submits 26.98 → must be wrong.
+        self.assertFalse(_cmp_percent(26.98, 26.97),
+                         "Incorrect 2-dp rounding must be wrong")
+
+    def test_percent_exact_match_correct(self):
+        self.assertTrue(_cmp_percent(26.97, 26.97))
+
+    # ── String normalisation: NFD input must equal NFC input ─────────────
+
+    def test_norm_nfd_equals_nfc(self):
+        # Input from some serialisers arrives in NFD; _norm must canonicalise it.
+        import unicodedata
+        nfc_form = "cà phê ề đẹp"
+        nfd_form = unicodedata.normalize("NFD", nfc_form)
+        self.assertNotEqual(nfc_form, nfd_form)   # sanity: they differ raw
+        self.assertEqual(_norm(nfc_form), _norm(nfd_form),
+                         "NFD and NFC forms of the same Vietnamese string must normalise identically")
+
+    # ── Table: duplicate first-column bug ────────────────────────────────
+
+    def test_table_duplicate_first_col_exact_match(self):
+        # Two gold rows with the same first-column value are legitimate in some
+        # datasets (e.g. same product across two different time buckets).
+        # The original dict-based lookup silently dropped one row, making a correct
+        # prediction score −1 instead of +1.
+        gt = {
+            "columns": ["Tháng", "Doanh thu"],
+            "rows": [["Tháng 10", 100000], ["Tháng 10", 200000]],
+        }
+        pred = {
+            "columns": ["Tháng", "Doanh thu"],
+            "rows": [["Tháng 10", 100000], ["Tháng 10", 200000]],
+        }
+        self.assertTrue(_cmp_table(pred, gt, []),
+                        "Exact match with duplicate first-col must score +1")
+
+    def test_table_duplicate_first_col_wrong_values_fail(self):
+        gt = {
+            "columns": ["Tháng", "Doanh thu"],
+            "rows": [["Tháng 10", 100000], ["Tháng 10", 200000]],
+        }
+        pred = {
+            "columns": ["Tháng", "Doanh thu"],
+            "rows": [["Tháng 10", 100000], ["Tháng 10", 999999]],  # second row wrong
+        }
+        self.assertFalse(_cmp_table(pred, gt, []))
+
+    # ── Table: column reorder by name ────────────────────────────────────
+
+    def test_table_column_reorder_by_name(self):
+        # Rulebook §9: "Cột so theo tên; tên không khớp thì so theo vị trí"
+        # Agent may return columns in a different order than gold — must still match.
+        gt = {
+            "columns": ["Sản phẩm", "Doanh thu"],
+            "rows": [["Bánh mì", 50000], ["Cà phê", 30000]],
+        }
+        pred = {
+            "columns": ["Doanh thu", "Sản phẩm"],  # swapped
+            "rows": [[50000, "Bánh mì"], [30000, "Cà phê"]],
+        }
+        self.assertTrue(_cmp_table(pred, gt, []),
+                        "Column reorder by name must be accepted (rulebook §9)")
+
+    def test_table_column_reorder_rows_still_matched(self):
+        # Same as above but with rows in different order too.
+        gt = {
+            "columns": ["Khách hàng", "Số nợ"],
+            "rows": [["Chị Lan", 100000], ["Anh Hùng", 200000]],
+        }
+        pred = {
+            "columns": ["Số nợ", "Khách hàng"],   # swapped columns
+            "rows": [[200000, "Anh Hùng"], [100000, "Chị Lan"]],  # swapped rows
+        }
+        self.assertTrue(_cmp_table(pred, gt, []))
+
+    def test_table_wrong_column_names_fall_back_to_position(self):
+        # When column names don't all match, fall back to positional comparison.
+        gt = {
+            "columns": ["col_a", "col_b"],
+            "rows": [["Alice", 100]],
+        }
+        pred = {
+            "columns": ["X", "Y"],   # different names → positional
+            "rows": [["Alice", 100]],
+        }
+        self.assertTrue(_cmp_table(pred, gt, []),
+                        "Positional fallback when column names don't match")
+
+    # ── Table: string punctuation in cells ───────────────────────────────
+
+    def test_table_string_cell_punctuation_insensitive(self):
+        # Cell values are compared with the same normalisation as strings.
+        gt = {
+            "columns": ["Tỉnh", "Doanh thu"],
+            "rows": [["Bà Rịa - Vũng Tàu", 500000]],
+        }
+        pred = {
+            "columns": ["Tỉnh", "Doanh thu"],
+            "rows": [["Bà Rịa Vũng Tàu", 500000]],  # hyphen dropped
+        }
+        self.assertTrue(_cmp_table(pred, gt, []))
+
+    # ── Table: numeric cell type checking ────────────────────────────────
+
+    def test_table_numeric_cell_string_pred_is_wrong(self):
+        # Gold cell is a JSON number; pred string "50000" must not match.
+        gt = {
+            "columns": ["Sản phẩm", "Doanh thu"],
+            "rows": [["Bánh mì", 50000]],
+        }
+        pred = {
+            "columns": ["Sản phẩm", "Doanh thu"],
+            "rows": [["Bánh mì", "50000"]],  # number submitted as string
+        }
+        self.assertFalse(_cmp_table(pred, gt, []),
+                         "Numeric table cell submitted as string must be wrong")
+
+    # ── List: numeric element type checking ──────────────────────────────
+
+    def test_list_numeric_element_string_pred_is_wrong(self):
+        # Gold [100, 200]; pred ["100", "200"] — string elements must not match
+        # a numeric gold element.
+        self.assertFalse(_cmp_list(["100", "200"], [100, 200], []),
+                         "Numeric list element submitted as string must be wrong")
+
+    # ── answers_match integration: boolean format ─────────────────────────
+
+    def test_answers_match_boolean_string_true_is_wrong(self):
+        gt = OfficialAnswer(id="q", type="boolean", answer=True)
+        self.assertFalse(answers_match("true", "boolean", gt))
+
+    def test_answers_match_boolean_int_1_is_wrong(self):
+        gt = OfficialAnswer(id="q", type="boolean", answer=True)
+        self.assertFalse(answers_match(1, "boolean", gt))
+
+    def test_answers_match_number_string_is_wrong(self):
+        gt = OfficialAnswer(id="q", type="number", answer=12345)
+        self.assertFalse(answers_match("12345", "number", gt))
+
+    def test_answers_match_string_punctuation_insensitive(self):
+        gt = OfficialAnswer(id="q", type="string", answer="Bà Rịa - Vũng Tàu")
+        self.assertTrue(answers_match("Bà Rịa Vũng Tàu", "string", gt))
+
+    def test_answers_match_table_col_reorder(self):
+        gt_ans = {
+            "columns": ["Sản phẩm", "Doanh thu"],
+            "rows": [["Bánh mì", 50000]],
+        }
+        pred_ans = {
+            "columns": ["Doanh thu", "Sản phẩm"],
+            "rows": [[50000, "Bánh mì"]],
+        }
+        gt = OfficialAnswer(id="q", type="table", answer=gt_ans)
+        self.assertTrue(answers_match(pred_ans, "table", gt))
+
+    def test_answers_match_table_dup_first_col(self):
+        gt_ans = {
+            "columns": ["Tháng", "Doanh thu"],
+            "rows": [["Tháng 10", 100000], ["Tháng 10", 200000]],
+        }
+        pred_ans = {
+            "columns": ["Tháng", "Doanh thu"],
+            "rows": [["Tháng 10", 100000], ["Tháng 10", 200000]],
+        }
+        gt = OfficialAnswer(id="q", type="table", answer=gt_ans)
+        self.assertTrue(answers_match(pred_ans, "table", gt))
 
 
 if __name__ == "__main__":
