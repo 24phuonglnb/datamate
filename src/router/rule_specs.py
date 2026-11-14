@@ -135,4 +135,38 @@ SPECS: dict[tuple[str, str], dict] = {
         "must": [r"nam nay", r"sau hom nay", r"nam truoc"],
         "contradict": [],
         "canon": "cua nam nay neu khong sau hom nay; sau hom nay thi cua nam truoc"},
+    # pharmacy, purchases, stock and lots (router-pharmacy); written from the train rulebook text only
+    ("5", "tien nhap hang trong ky"): {
+        "must": [r"ngay phieu", r"bo phieu huy|loai phieu huy|khong tinh phieu huy", r"nhap dau ky"],
+        "contradict": [r"(?<!khong )(?<!khong phai )(?<!la )bo (phieu|dong) (ghi )?nhap dau ky", r"nhap dau ky (khong|chua) (duoc )?tinh",
+                       r"khong tinh (phieu|dong)?[^.;]{0,15}nhap dau ky", r"(theo|tinh theo) ngay (nhap kho|giao|thanh toan)"],
+        "canon": "tong tien cac phieu nhap co ngay phieu trong ky, bo phieu huy. phieu nhap dau ky la phieu nhap nhu moi phieu khac"},
+    ("5", "gia nhap binh quan mot mat hang trong thang"): {
+        "must": [r"theo so luong nhap", r"khong phai trung binh cong", r"theo don vi nhap", r"bo phieu huy"],
+        "contradict": [r"(?<!khong phai )trung binh cong cac muc gia", r"theo don vi co ban"],
+        "canon": "binh quan theo so luong nhap, khong phai trung binh cong cac muc gia nhap; theo don vi nhap, bo phieu huy"},
+    ("5", "ton theo don vi lon"): {
+        "must": [r"list 2 so", r"don vi lon nguyen", r"don vi co ban le", r"phan le van tinh bang don vi co ban"],
+        "contradict": [r"phan le (doi|quy) (sang|ve) don vi o giua", r"(?<!khong )doi sang don vi o giua"],
+        "canon": "list 2 so [so don vi lon nguyen, so don vi co ban le]; phan le van tinh bang don vi co ban, khong doi sang don vi o giua"},
+    ("5", "gia tri hang ton kho"): {
+        "must": [r"ton het hom nay", r"gia von mot don vi co ban", r"chi tinh hang con ton"],
+        "contradict": [r"(?<!khong )(theo|tinh theo) (gia nhap|gia ban|fifo)", r"tinh (ca )?hang (het|ton am)"],
+        "canon": "ton het hom nay cua tung mat hang nhan gia von mot don vi co ban ghi trong danh muc hang; chi tinh hang con ton"},
+    ("6", "thuoc ke don"): {
+        "must": [r"ghi ke don trong danh muc thuoc", r"con lai la hang khong ke don"],
+        "contradict": [r"(?<!khong )(?<!khong phai )tinh theo so (don|luong)", r"ti le ke don tinh theo (so don|so luong|so dong)"],
+        "canon": "thuoc ke don = san pham ghi ke don trong danh muc thuoc; moi san pham con lai la hang khong ke don. ti le ke don tinh theo doanh thu"},
+    ("6", "doanh thu theo hoat chat"): {
+        "must": [r"hoat chat ghi dung nhu vay", r"phoi hop[^.;]{0,25}(mot loai rieng|rieng)"],
+        "contradict": [r"(?<!khong )tinh vao (tung|moi) hoat chat", r"(?<!khong )(gop|tach) (thuoc )?phoi hop"],
+        "canon": "cac thuoc co hoat chat ghi dung nhu vay trong danh muc thuoc. thuoc phoi hop nhieu hoat chat la mot loai rieng, khong tinh vao tung hoat chat trong do"},
+    ("6", "hang het han trong n ngay toi"): {
+        "must": [r"tai hom nay", r"lo con ton", r"het ngay d"],
+        "contradict": [r"(?<!khong )(tinh )?ca lo (het|da qua) han", r"lo (da )?qua han (van )?tinh"],
+        "canon": "tinh tai hom nay d: lo con ton co han dung tu d den het ngay d + n"},
+    ("6", "lo gan het han nhat cua mot thuoc"): {
+        "must": [r"lo con ton", r"chua qua han", r"han som nhat"],
+        "contradict": [r"han muon nhat", r"(?<!chua )(tinh )?ca lo da qua han"],
+        "canon": "trong cac lo con ton chua qua han tai hom nay, lo co han som nhat"},
 }
