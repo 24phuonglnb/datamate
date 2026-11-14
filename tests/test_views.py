@@ -835,3 +835,161 @@ def test_schema_text_keeps_calendar_when_budget_cuts_raw_tables(tmp_path: Path) 
     conn.close()
     assert len(cut) < len(full)
     assert "=== CALENDAR TABLE ===" in cut
+
+
+def _views(conn: sqlite3.Connection) -> set[str]:
+    return {n for (n,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'view'")}
+
+
+def test_stock_from_lots_counts_returns_and_ignores_cancelled_orders(tmp_path: Path) -> None:
+    """Remaining per lot = qty in − qty on non-cancelled orders + returned qty; v_stock sums the lots."""
+    biz_dir = tmp_path / "biz_lots"
+    biz_dir.mkdir()
+    _write_csv(
+        biz_dir / "danh_muc.csv",
+        [
+            ["Mã hàng", "Tên hàng", "ĐVT", "Giá bán"],
+            ["SP01", "Amoxicillin 500mg hộp 10 vỉ x 10 viên", "viên", "1500"],
+            ["SP02", "Vitamin C 500", "viên", "500"],
+        ],
+    )
+    _write_csv(
+        biz_dir / "quy_doi_don_vi.csv",
+        [["Mã hàng", "Tên hàng", "ĐVT", "Quy đổi", "ĐVT cơ bản"],
+         ["SP01", "Amoxicillin 500mg hộp 10 vỉ x 10 viên", "vỉ", "10", "viên"]],
+    )
+    _write_csv(
+        biz_dir / "ban_hang.csv",
+        [
+            ["Mã HĐ", "Ngày bán", "Trạng thái", "Mã SP", "Tên hàng", "ĐVT", "SL", "Đơn giá", "Thanh tiền"],
+            ["HD01", "2026-06-01", "Hoàn thành", "SP01", "Amoxicillin 500mg hộp 10 vỉ x 10 viên", "viên", "30", "1500", "45000"],
+            ["HD02", "2026-06-02", "Đã huỷ", "SP01", "Amoxicillin 500mg hộp 10 vỉ x 10 viên", "viên", "20", "1500", "30000"],
+            ["HD03", "2026-06-03", "Trả hàng", "SP02", "Vitamin C 500", "viên", "10", "500", "5000"],
+        ],
+    )
+    _write_csv(
+        biz_dir / "lo_hang.csv",
+        [
+            ["Mã nhập hàng", "Mã hàng", "Lô", "Hạn sử dụng", "Số lượng (ĐVT cơ bản)"],
+            ["PN01", "SP01", "L-A", "2026-07-15", "100"],
+            ["PN02", "SP01", "L-B", "2027-01-01", "50"],
+            ["PN02", "SP02", "L-C", "2026-06-20", "40"],
+        ],
+    )
+    _write_csv(
+        biz_dir / "hoa_don_chi_tiet_lo.csv",
+        [
+            ["Mã hóa đơn", "Lô", "Số lượng (ĐVT cơ bản)", "Số lượng trả (ĐVT cơ bản)"],
+            ["HD01", "L-A", "30", "0"],
+            ["HD02", "L-B", "20", "0"],
+            ["HD03", "L-C", "10", "4"],
+        ],
+    )
+    conn = build_database(biz_dir)
+    assert {"v_stock", "v_lots", "v_item_units"} <= _views(conn)
+    lots = dict(conn.execute("SELECT lot, qty_remaining FROM v_lots").fetchall())
+    stock = dict(conn.execute("SELECT item_code, stock_qty_base FROM v_stock").fetchall())
+    hop = conn.execute(
+        "SELECT factor FROM v_item_units WHERE item_code = 'SP01' AND unit = 'vỉ'"
+    ).fetchone()
+    nearest = conn.execute(
+        "SELECT MIN(expiry_date) FROM v_lots WHERE item_code = 'SP01' AND qty_remaining > 0 AND expiry_date >= '2026-06-03'"
+    ).fetchone()[0]
+    conn.close()
+    assert lots == {"L-A": 70.0, "L-B": 50.0, "L-C": 34.0}  # cancelled HD02 does not consume L-B; 4 returned to L-C
+    assert stock == {"SP01": 120.0, "SP02": 34.0}
+    assert hop == (10.0,)
+    assert nearest == "2026-07-15"
+
+
+def test_stock_report_in_large_unit_is_converted_and_absent_report_means_no_view(tmp_path: Path) -> None:
+    biz_dir = tmp_path / "biz_report"
+    biz_dir.mkdir()
+    _write_csv(
+        biz_dir / "ban_hang.csv",
+        [
+            ["Mã HĐ", "Ngày bán", "Trạng thái", "Tên hàng", "ĐVT", "SL", "Đơn giá", "Thanh tiền"],
+            ["HD01", "2026-06-01", "Hoàn thành", "Bia Tiger lon", "lon", "6", "20000", "120000"],
+            ["HD02", "2026-06-02", "Hoàn thành", "Bia Tiger lon", "thùng", "1", "400000", "400000"],
+        ],
+    )
+    _write_csv(
+        biz_dir / "quy_doi.csv",
+        [["Tên hàng", "ĐVT", "Quy đổi", "ĐVT cơ bản"], ["Bia Tiger lon", "thùng", "24", "lon"]],
+    )
+    conn = build_database(biz_dir)
+    assert "v_stock" not in _views(conn)  # no stock report, no lots -> stock questions stay unanswerable
+    conn.close()
+
+    _write_csv(biz_dir / "ton_kho.csv", [["Hàng hóa", "Đơn vị tính", "Tồn cuối"], ["Bia Tiger lon", "thùng", "2"]])
+    conn = build_database(biz_dir)
+    row = conn.execute("SELECT stock_qty_base, stock_date, source FROM v_stock WHERE item_name = 'Bia Tiger lon'").fetchone()
+    text = schema_text(conn)
+    conn.close()
+    assert row == (48.0, "2026-06-02", "report")
+    assert "v_stock" in text
+
+
+def test_stock_and_purchase_failures_do_not_break_the_shop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A crash in the optional purchase/stock builders drops only those views; sales views still work."""
+    import src.stock
+    import src.views
+
+    def boom(*_a: object, **_k: object) -> None:
+        raise ValueError("unseen layout")
+
+    monkeypatch.setattr(src.stock, "create_stock_views", boom)
+    monkeypatch.setattr(src.views, "_build_purchase_lines_df", boom)
+    biz_dir = tmp_path / "biz_guard"
+    biz_dir.mkdir()
+    _write_csv(
+        biz_dir / "ban_hang.csv",
+        [
+            ["Mã HĐ", "Ngày bán", "Trạng thái", "Tên hàng", "ĐVT", "SL", "Đơn giá", "Thanh tiền"],
+            ["HD01", "2026-06-01", "Hoàn thành", "Cà phê sữa", "ly", "2", "25000", "50000"],
+        ],
+    )
+    conn = build_database(biz_dir)
+    views = _views(conn)
+    revenue = conn.execute("SELECT SUM(revenue) FROM v_valid_orders").fetchone()[0]
+    text = schema_text(conn)
+    conn.close()
+    assert "v_valid_orders" in views and not ({"v_stock", "v_purchases"} & views)
+    assert revenue == 50000
+    assert "v_valid_orders" in text
+
+
+def test_stock_card_gives_balance_by_date_and_feeds_v_stock(tmp_path: Path) -> None:
+    """A stock card with CamelCase headers (`SLQuyDoi`, `TonCuoi`) yields v_stock_card and the end-of-data v_stock."""
+    biz_dir = tmp_path / "biz_card"
+    biz_dir.mkdir()
+    _write_csv(
+        biz_dir / "san_pham.csv",
+        [["MaHangHoa", "TenGoi", "DonViCoSo", "GiaBanLe"], ["SP01", "Nước suối 500ml", "chai", "5000"]],
+    )
+    _write_csv(
+        biz_dir / "ban_hang.csv",
+        [
+            ["Mã HĐ", "Ngày bán", "Trạng thái", "Mã SP", "Tên hàng", "ĐVT", "SL", "Đơn giá", "Thanh tiền"],
+            ["HD01", "2026-06-02", "Hoàn thành", "SP01", "Nước suối 500ml", "chai", "4", "5000", "20000"],
+            ["HD02", "2026-06-05", "Hoàn thành", "SP01", "Nước suối 500ml", "chai", "3", "5000", "15000"],
+        ],
+    )
+    _write_csv(
+        biz_dir / "the_kho.csv",
+        [
+            ["MaGiaoDichKho", "MaHangHoa", "NgayGioPhatSinh", "LoaiGiaoDich", "SLQuyDoi", "TonCuoi"],
+            ["MV1", "SP01", "2026-06-01 06:00:00", "in_purchase", "24", "24"],
+            ["MV2", "SP01", "2026-06-02 09:00:00", "out_sale", "-4", "20"],
+            ["MV3", "SP01", "2026-06-05 10:00:00", "out_sale", "-3", "17"],
+        ],
+    )
+    conn = build_database(biz_dir)
+    at_jun3 = conn.execute(
+        "SELECT stock_after FROM v_stock_card WHERE item_code = 'SP01' AND moved_date <= '2026-06-03' "
+        "ORDER BY moved_at DESC, rowid DESC LIMIT 1"
+    ).fetchone()
+    end = conn.execute("SELECT stock_qty_base, source FROM v_stock WHERE item_code = 'SP01'").fetchone()
+    conn.close()
+    assert at_jun3 == (20.0,)
+    assert end == (17.0, "card")

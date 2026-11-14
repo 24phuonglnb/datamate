@@ -2082,6 +2082,12 @@ def build_database(
         "v_purchase_lines",
         "v_valid_purchase_lines",
         "v_purchases",
+        "item_units",
+        "v_item_units",
+        "lots",
+        "v_lots",
+        "stock",
+        "v_stock",
     }
     cleaned_frames: list[tuple[str, str, pd.DataFrame, dict[str, str], dict[str, str]]] = []
 
@@ -2231,13 +2237,30 @@ def build_database(
         })
 
     # 2b. Build purchase views (`v_purchase_lines`, `v_valid_purchase_lines`, `v_purchases`) if present
-    purchase_df, purchase_meta = _build_purchase_lines_df(tables, mapping, readme, items_df)
+    try:
+        purchase_df, purchase_meta = _build_purchase_lines_df(tables, mapping, readme, items_df)
+    except Exception as exc:  # unseen private layouts must never break the whole shop
+        purchase_df, purchase_meta = pd.DataFrame(), {"has_purchases": False, "error": f"{type(exc).__name__}: {exc}"[:200]}
     if purchase_meta.get("has_purchases") and not purchase_df.empty:
         _create_purchase_views(conn, purchase_df)
         p_sources = set(purchase_meta.get("source_tables", []))
         for t_info in meta_tables:
             if t_info["orig_name"] in p_sources:
                 t_info["is_primary_purchase"] = True
+
+    # 2c. Stock views (`v_item_units`, `v_lots`, `v_stock`) from stock reports / lot tables, if present
+    stock_meta: dict[str, Any] = {"has_stock": False}
+    if has_ledger:
+        from src.stock import create_stock_views
+
+        sales_sources = {n for n in (mapping.sales_table, mapping.orders_table) if n}
+        try:
+            stock_meta = create_stock_views(conn, tables, readme, sales_sources | set(purchase_meta.get("source_tables", [])))
+        except Exception as exc:  # unseen private layouts must never break the whole shop
+            for obj, kind in (("v_stock", "VIEW"), ("v_lots", "VIEW"), ("v_item_units", "VIEW"),
+                              ("stock", "TABLE"), ("lots", "TABLE"), ("item_units", "TABLE")):
+                conn.execute(f"DROP {kind} IF EXISTS {obj}")
+            stock_meta = {"has_stock": False, "error": f"{type(exc).__name__}: {exc}"[:200]}
 
     # 3. Load `calendar.csv` if available
     cal_file = _find_calendar_path(business_dir, calendar_path)
@@ -2257,6 +2280,7 @@ def build_database(
         "has_calendar": has_calendar,
         "ledger_meta": ledger_meta,
         "purchase_meta": purchase_meta,
+        "stock_meta": stock_meta,
         "tables": meta_tables,
     }
     conn.execute("CREATE TABLE IF NOT EXISTS _schema_meta (key TEXT PRIMARY KEY, value TEXT);")
@@ -2370,6 +2394,7 @@ def schema_text(conn: sqlite3.Connection, max_chars: int = 13000) -> str:
     has_calendar = bool(meta.get("has_calendar", False))
     ledger_meta = meta.get("ledger_meta", {})
     purchase_meta = meta.get("purchase_meta", {})
+    stock_meta = meta.get("stock_meta", {})
     tables_meta: list[dict[str, Any]] = meta.get("tables", [])
     readme = meta.get("readme", "")
 
@@ -2517,6 +2542,12 @@ def schema_text(conn: sqlite3.Connection, max_chars: int = 13000) -> str:
         if purchase_lines_text:
             lines.append("")
             lines.extend(purchase_lines_text)
+        from src.stock import stock_schema_lines
+
+        stock_lines_text = stock_schema_lines(conn, stock_meta)
+        if stock_lines_text:
+            lines.append("")
+            lines.extend(stock_lines_text)
         lines.append("")
         lines.append("=== 2. CLEANED AUXILIARY & SOURCE TABLES ===")
     else:

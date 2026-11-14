@@ -280,6 +280,55 @@ LIMIT 1;
 
 ---
 
+### 3.9. Tồn kho, lô, đơn vị (`v_stock`, `v_lots`, `v_item_units`)
+
+Code: `src/stock.py`. Chỉ tạo `v_stock` / `v_lots` khi shop có dữ liệu tồn; shop không có thì **không có view** → câu hỏi tồn kho trả `unanswerable` (khớp đáp án train, ví dụ biz_103, biz_118, biz_130).
+
+**Nguồn dữ liệu** (nhận theo từ khoá + nội dung, không theo tên shop):
+1. **Báo cáo tồn** (`Tồn cuối kỳ`, `Tồn cuối`, `Tồn thực`, `Tồn kho`…): tồn **cuối dữ liệu** của từng mặt hàng; nếu báo cáo ghi theo đơn vị lớn thì quy về đơn vị cơ bản.
+2. **Lô** (nhà thuốc): bảng lô (`Lô`, `Hạn sử dụng`, số lượng nhập theo đơn vị cơ bản) + bảng bán theo lô (`Mã hóa đơn`, `Lô`, `Số lượng`, `Số lượng trả`).
+   Còn lại của lô = nhập − bán trên đơn **không huỷ** + số lượng **trả lại**. Công thức này khớp 100% với báo cáo tồn ở mọi shop train có cả hai nguồn.
+   Chỉ tạo `v_lots` khi có cả bảng bán theo lô (thiếu thì `qty_remaining` sẽ sai).
+3. **Thẻ kho** (`the_kho`: mỗi lần nhập/xuất một dòng, kèm `TonCuoi` sau giao dịch): tồn tại **mọi thời điểm**. Ở shop public có cả thẻ kho lẫn lô, hai nguồn khớp 80/80 mặt hàng.
+
+Thứ tự ưu tiên cho `v_stock`: báo cáo tồn → thẻ kho → lô.
+
+- **`v_stock`** (mỗi mặt hàng một dòng): `item_code`, `item_name`, `base_unit`, `stock_date` (ngày cuối dữ liệu = "hôm nay" của mọi câu train/public), `stock_qty_base` (REAL, đơn vị cơ bản), `cost_price` (giá vốn trong danh mục, có thể NULL), `stock_value` (= `stock_qty_base * cost_price`, chỉ hàng còn tồn; NULL nếu không có giá vốn), `source` (`'report'` | `'lots'`).
+- **`v_lots`** (mỗi lô một dòng): `lot`, `item_code`, `item_name`, `base_unit`, `receipt_id`, `receipt_date`, `expiry_date` (`YYYY-MM-DD`), `qty_in`, `qty_sold`, `qty_returned`, `qty_remaining`, `unit_cost_base` (giá nhập của chính lô, theo đơn vị cơ bản — dùng cho "tiền vốn hàng sắp hết hạn" §6).
+- **`v_stock_card`** (khi có thẻ kho): `item_code`, `item_name`, `moved_at`, `moved_date`, `qty_change`, `stock_after`. Tồn hết ngày X = `stock_after` của giao dịch **cuối cùng** có `moved_date <= X`.
+- **`v_item_units`** (mọi shop có sổ bán): `item_code`, `item_name`, `unit`, `unit_key` (không dấu, để so khớp), `factor` (số đơn vị cơ bản trong 1 `unit`), `base_unit`.
+
+**Giới hạn:** `v_stock` là tình trạng **cuối dữ liệu**. Câu hỏi "đến hết ngày X" với X sớm hơn: dùng `v_stock_card` nếu có; shop chỉ có báo cáo tồn thì không có dữ liệu trả hàng theo dòng nên không tính lại chính xác được.
+
+```sql
+-- 1) Tồn cuối ngày hôm nay của một mặt hàng (đơn vị cơ bản)
+SELECT stock_qty_base FROM v_stock WHERE LOWER(item_name) = LOWER('Bia Tiger lon');
+
+-- 2) Tồn theo đơn vị lớn §5: [số đơn vị lớn nguyên, số đơn vị cơ bản lẻ]
+SELECT CAST(s.stock_qty_base / u.factor AS INTEGER) AS so_chan,
+       CAST(s.stock_qty_base - CAST(s.stock_qty_base / u.factor AS INTEGER) * u.factor AS INTEGER) AS so_le
+FROM v_stock s JOIN v_item_units u ON u.item_name = s.item_name
+WHERE LOWER(s.item_name) = LOWER('Amoxicillin 500mg hộp 10 vỉ x 10 viên') AND u.unit_key = 'hop';
+
+-- 2b) Tồn hết ngày X từ thẻ kho
+SELECT stock_after FROM v_stock_card
+WHERE item_code = 'SP0001' AND moved_date <= '2026-03-31'
+ORDER BY moved_at DESC, rowid DESC LIMIT 1;
+
+-- 3) Số mặt hàng hết hàng cuối ngày hôm nay
+SELECT COUNT(*) FROM v_stock WHERE stock_qty_base <= 0;
+
+-- 4) Giá trị hàng tồn kho (giá vốn danh mục, chỉ hàng còn tồn)
+SELECT SUM(stock_value) FROM v_stock WHERE stock_qty_base > 0;
+
+-- 5) Số lô còn tồn hết hạn từ hôm nay D đến hết ngày E; lô gần hết hạn nhất của một thuốc
+SELECT COUNT(*) FROM v_lots WHERE qty_remaining > 0 AND expiry_date BETWEEN '2026-05-25' AND '2026-09-22';
+SELECT MIN(expiry_date) FROM v_lots
+WHERE item_name = 'Siro ăn ngon Ích Nhi Plus chai 100ml' AND qty_remaining > 0 AND expiry_date >= '2026-05-25';
+```
+
+---
+
 ## 4. Hộ kinh doanh không có SalesLedger (Non-ledger shops)
 
 Một số tiệm đặc thù không bán mặt hàng theo đơn mà chỉ ghi sổ dịch vụ/sửa chữa (ví dụ `dev_012` – Tiệm sửa xe máy có `SoSuaXe.xlsx` và `DanhSachTho.xlsx`, không có cột tên mặt hàng, số lượng hay mã đơn).
