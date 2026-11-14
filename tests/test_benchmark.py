@@ -185,10 +185,19 @@ class BenchmarkDBTests(unittest.TestCase):
             db.close()
 
     def test_schema_text_includes_type_hints(self):
+        # Default ingestion describes typed rulebook views instead of raw TEXT tables.
         db = self._db("biz_cafe")
         try:
             schema = db.schema_text()
-            self.assertIn("NUMERIC", schema, "Schema should annotate numeric columns")
+            self.assertIn("v_valid_orders", schema, "Schema should describe the rulebook views")
+            self.assertIn("revenue (REAL", schema, "Schema should annotate numeric columns")
+        finally:
+            db.close()
+
+    def test_legacy_schema_text_includes_type_hints(self):
+        db = BusinessDB(self.root / "data" / "biz_cafe", self.root / "calendar.csv", legacy=True)
+        try:
+            self.assertIn("NUMERIC", db.schema_text(), "Legacy schema should annotate numeric columns")
         finally:
             db.close()
 
