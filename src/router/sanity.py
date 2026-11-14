@@ -22,6 +22,11 @@ def check(intent: str, value: Any, conn: sqlite3.Connection, start: str, end: st
                   "cust_group_rev", "payment_method_rev", "channel_rev", "unit_total_qty"):
         if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value) or value < 0:
             return "number_not_finite_nonnegative"
+    if intent in ("ingredient_revenue", "rx_nonrx_revenue", "purchase_total", "purchase_avg_price"):
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value) or value < 0:
+            return "number_not_finite_nonnegative"
+    if intent == "rx_share" and not (isinstance(value, (int, float)) and 0 <= value <= 100):
+        return "rx_share_outside_0_100"
     if intent == "cancel_count":
         total = conn.execute("SELECT COUNT(*) FROM v_orders WHERE order_date BETWEEN ? AND ?", (start, end)).fetchone()[0]
         if value > total:
@@ -63,4 +68,20 @@ def check_monthly(intent: str, value: Any, months: list) -> str | None:
         return None if ok else "monthly_series_shape"
     if intent == "streak_bool":
         return None if isinstance(value, bool) else "streak_not_boolean"
+    return None
+
+
+def check_inventory(intent: str, value: Any) -> str | None:
+    """Stock / lots answers: stock_qty finite number; stock_large_unit [n >= 0, r >= 0]; stock_value >= 0; expiry count >= 0 or list of names."""
+    if intent == "stock_qty":
+        return None if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value >= 0 else "stock_negative_or_not_number"
+    if intent == "stock_large_unit":
+        ok = (isinstance(value, list) and len(value) == 2 and all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in value))
+        return None if ok else "stock_large_unit_shape"
+    if intent == "stock_value":
+        return None if isinstance(value, (int, float)) and value >= 0 else "stock_value_negative"
+    if intent == "expiry_list":
+        if isinstance(value, list):
+            return None if all(isinstance(v, str) and v for v in value) else "expiry_names"
+        return None if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else "expiry_count"
     return None

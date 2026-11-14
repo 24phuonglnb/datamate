@@ -113,6 +113,45 @@ SQL_TEMPLATES.update({
     ),
 })
 
+# Pharmacy / purchases / stock templates (docs/VIEWS.md 3.5, 3.8, 3.9 example SQL; the period filter is on the date range
+# resolved by the shared Period resolver instead of order_month / receipt_month).
+_RX_JOIN = ("FROM v_valid_lines l LEFT JOIN v_items i "
+            "ON l.is_service_fee = 0 AND COALESCE(l.item_code, l.item_name) = COALESCE(i.item_code, i.item_name) "
+            "WHERE l.order_date BETWEEN ? AND ?")
+SQL_TEMPLATES.update({
+    "ingredient_revenue": (
+        "SELECT CAST(ROUND(COALESCE(SUM(l.line_amount), 0)) AS INTEGER) "
+        "FROM v_valid_lines l JOIN v_items i ON COALESCE(l.item_code, l.item_name) = COALESCE(i.item_code, i.item_name) "
+        "WHERE l.is_service_fee = 0 AND l.order_date BETWEEN ? AND ? AND i.active_ingredient = ?"
+    ),
+    "rx_revenue": ("SELECT CAST(ROUND(COALESCE(SUM(CASE WHEN i.is_prescription = '1' THEN l.line_amount ELSE 0 END), 0)) AS INTEGER) "
+                   + _RX_JOIN),
+    "nonrx_revenue": ("SELECT CAST(ROUND(COALESCE(SUM(CASE WHEN i.is_prescription = '1' THEN 0 ELSE l.line_amount END), 0)) AS INTEGER) "
+                      + _RX_JOIN),
+    "rx_share": ("SELECT ROUND(SUM(CASE WHEN i.is_prescription = '1' THEN l.line_amount ELSE 0 END) * 100.0 "
+                 "/ NULLIF(SUM(l.line_amount), 0), 2) " + _RX_JOIN),
+    "purchase_total": ("SELECT SUM(line_amount), COUNT(line_amount) FROM v_valid_purchase_lines "
+                       "WHERE receipt_date BETWEEN ? AND ?"),
+    "supplier_top": ("SELECT supplier, SUM(line_amount) AS spend FROM v_valid_purchase_lines "
+                     "WHERE receipt_date BETWEEN ? AND ? AND supplier IS NOT NULL AND line_amount IS NOT NULL "
+                     "GROUP BY supplier ORDER BY spend DESC, supplier ASC LIMIT 2"),
+    "purchase_avg_price_by_code": ("SELECT SUM(line_amount) * 1.0 / NULLIF(SUM(qty), 0), COUNT(line_amount), COUNT(*) "
+                                   "FROM v_valid_purchase_lines WHERE receipt_date BETWEEN ? AND ? AND item_code = ? AND unit = ?"),
+    "purchase_avg_price_by_name": ("SELECT SUM(line_amount) * 1.0 / NULLIF(SUM(qty), 0), COUNT(line_amount), COUNT(*) "
+                                   "FROM v_valid_purchase_lines WHERE receipt_date BETWEEN ? AND ? AND item_name = ? AND unit = ?"),
+    "stock_qty": "SELECT stock_qty_base FROM v_stock WHERE COALESCE(item_code, item_name) = COALESCE(?, ?)",
+    "stock_value": "SELECT SUM(stock_value), COUNT(*), SUM(CASE WHEN stock_value IS NULL THEN 1 ELSE 0 END) FROM v_stock WHERE stock_qty_base > 0",
+    "expiry_count": ("SELECT COUNT(*) FROM v_lots WHERE qty_remaining > 0 AND expiry_date BETWEEN ? AND ?"),
+    "expiry_items": ("SELECT item_name FROM v_lots WHERE qty_remaining > 0 AND expiry_date BETWEEN ? AND ? "
+                     "GROUP BY COALESCE(item_code, item_name) "
+                     "ORDER BY MIN(expiry_date) ASC, COALESCE(item_code, item_name) ASC"),
+    "expiry_nearest_by_code": ("SELECT MIN(expiry_date) FROM v_lots WHERE item_code = ? AND qty_remaining > 0 AND expiry_date >= ?"),
+    "expiry_nearest_by_name": ("SELECT MIN(expiry_date) FROM v_lots WHERE item_name = ? AND qty_remaining > 0 AND expiry_date >= ?"),
+    "stock_card_at": ("SELECT stock_after, moved_at FROM v_stock_card WHERE COALESCE(item_code, item_name) = COALESCE(?, ?) "
+                      "AND moved_date <= ? ORDER BY moved_at DESC LIMIT 2"),
+    "item_unit_factors": "SELECT unit, unit_key, factor FROM v_item_units WHERE COALESCE(item_code, item_name) = COALESCE(?, ?)",
+})
+
 # answer type per intent (rulebook section 9)
 ANSWER_TYPE = {
     "revenue": "number", "order_count": "number", "cancel_count": "number", "aov": "number",
@@ -121,6 +160,10 @@ ANSWER_TYPE = {
     "item_revenue": "number", "category_rev": "number", "sell_price_on_day": "number",
     "cust_group_rev": "number", "payment_method_rev": "number", "channel_rev": "number", "unit_total_qty": "number",
     "best_month": "date", "monthly_series": "list", "streak_bool": "boolean",
+    "ingredient_revenue": "number", "rx_nonrx_revenue": "number", "rx_share": "percent",
+    "purchase_total": "number", "supplier_top": "string", "purchase_avg_price": "number",
+    "stock_qty": "number", "stock_large_unit": "list", "stock_value": "number",
+    "expiry_list": "number", "expiry_nearest_lot": "date",   # expiry_list: "number" (lot count) or "list" (products), set per question
 }
 
 
@@ -156,6 +199,17 @@ def run_template(conn: sqlite3.Connection, intent: str, start: str, end: str, *,
             return None
         v = float(next(iter(vals)))
         return int(v) if abs(v - round(v)) < 1e-9 else v
+    if intent == "ingredient_revenue":
+        assert item is not None
+        row = conn.execute(SQL_TEMPLATES["ingredient_revenue"], (start, end, item[1])).fetchone()
+        return int(row[0]) if row and row[0] is not None else None
+    if intent == "rx_nonrx_revenue":
+        assert values and values[0] in ("rx", "nonrx")
+        row = conn.execute(SQL_TEMPLATES[values[0] + "_revenue"], (start, end)).fetchone()
+        return int(row[0]) if row and row[0] is not None else None
+    if intent == "rx_share":
+        row = conn.execute(SQL_TEMPLATES["rx_share"], (start, end)).fetchone()
+        return float(row[0]) if row and row[0] is not None else None
     if intent == "cust_group_rev":
         assert item is not None
         row = conn.execute(SQL_TEMPLATES["group_revenue"], (start, end, item[1])).fetchone()
