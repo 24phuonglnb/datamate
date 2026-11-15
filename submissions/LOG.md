@@ -10,6 +10,7 @@ Số answered / abstain / unanswerable được đếm từ chính file jsonl (c
 | 4 | 2026-11-13 22:06 | Trịnh Tố Thảo Nhi | feat/intent-router@? | router-only | 301 / 699 / 0 | 0.213 | Router-only v3: thêm best_month, monthly_series, streak_bool, cust_group_rev, payment/channel, unit_total_qty | `router_v3_2026-11-13.jsonl` |
 | 5 | 2026-11-14 23:56 | Trịnh Tố Thảo Nhi | feat/router-pharmacy@a414011 | `python scripts/make_router_submission.py --data-dir <public_test> --out <file> --guard`, router-only, không GPU | 319 / 679 / 2 | 0.229 | Router-only v4: thêm 11 template hoạt chất/kê đơn, nhập hàng, tồn kho/lô | `router_v4_2026-11-14.jsonl` |
 | 6 | 2026-11-15 | Phương | feat/selective-llm-fallback@? | router + Qwen3-14B + selective fallback (`DATAMATE_SELECTIVE_FALLBACK=1`), không gate | ? | 0.113 | Router + LLM, điểm thấp hơn router-only v4 (0.229) | file: chờ Phương |
+| 7 | 2026-11-15 (tạo file; chưa nộp) | ? | feat/router-expansion@2915ea8 (PR #11) | `DATAMATE_ROUTER_ONLY=1 python -m src.predict --data-dir <public_test> --result-dir <dir>` (router-only, không GPU; file sắp lại theo thứ tự questions.jsonl) | 433 / 565 / 2 | ? (chưa nộp) | v6 router-only \| feat/router-expansion@2915ea8 (PR #11) \| + shift, price_effect, category_share, size_qty, unsold_count, days_over_threshold, cust_freq, staff_revenue; mở rộng payment/channel/item_qty \| dev 1824/2291 đúng hết | `router_v6_2026-11-15.jsonl` |
 
 ## Chưa nộp
 
