@@ -16,6 +16,8 @@ from .router.db import ConnectionProvider
 from .router.rule_guard import RuleGuard
 from .router.gate import load_gate
 from .router.pipeline import AbstainAgent, solve as solve_routed
+from .router.shard_writer import ShardedSubmission
+from .router.vote import VoteAgent, maybe_vote
 
 
 def _lines_grouped_by_shop(path: Path) -> list[str]:
@@ -46,6 +48,10 @@ def run(data_dir: Path, result_dir: Path, model, max_attempts: int = 2) -> int:
     log_path = logdir / "questions.jsonl"
     # model None = router-only run: no weights, no GPU; questions the router does not answer abstain
     agent = Agent(model, data_dir, max_attempts=max_attempts) if model is not None else AbstainAgent()
+    agent = maybe_vote(agent)   # DATAMATE_LLM_VOTE_K >= 2: self-consistency over sampled agent calls (else unchanged)
+    # slow runs (voting) write shop by shop into a submission that is always complete (abstain until answered)
+    sub = (ShardedSubmission.from_questions_file(questions_file, result_dir)
+           if isinstance(agent, VoteAgent) or os.environ.get("DATAMATE_SHARDED_SUBMISSION") == "1" else None)
     # Router first (templates over the views), LLM agent for the rest; DATAMATE_ROUTER=0 disables it.
     use_router = os.environ.get("DATAMATE_ROUTER", "1").lower() not in ("0", "false", "no")
     rule_guard = None
@@ -59,9 +65,18 @@ def run(data_dir: Path, result_dir: Path, model, max_attempts: int = 2) -> int:
     count = 0
     try:
         # Open in write mode for a clean, deterministic run. Flush each answer.
-        with answers_path.open("w", encoding="utf-8", buffering=1) as answers, \
+        with open(os.devnull if sub else answers_path, "w", encoding="utf-8", buffering=1) as answers, \
              log_path.open("w", encoding="utf-8", buffering=1) as logs:
+            cur_shop = None
             for line in _lines_grouped_by_shop(questions_file):
+                if sub:
+                    try:
+                        shop = str(json.loads(line).get("business_id", ""))
+                    except Exception:
+                        shop = cur_shop
+                    if cur_shop is not None and shop != cur_shop:
+                        sub.finish_shop(cur_shop)
+                    cur_shop = shop
                 try:
                     question = json.loads(line)
                     answer, log = solve_routed(question, agent, router, normalizer, provider, gate)
@@ -75,11 +90,15 @@ def run(data_dir: Path, result_dir: Path, model, max_attempts: int = 2) -> int:
                     log = {"id": qid, "answer": answer, "elapsed_ms": 0, "thinking": None, "error": repr(exc)}
                 answers.write(json.dumps(answer, ensure_ascii=False, default=str) + "\n")
                 answers.flush()
+                if sub:
+                    sub.add(answer)
                 logs.write(json.dumps(log, ensure_ascii=False, default=str) + "\n")
                 logs.flush()
                 count += 1
                 if count % 20 == 0:
                     print(f"Processed {count} questions", file=sys.stderr, flush=True)
+        if sub and cur_shop is not None:
+            sub.finish_shop(cur_shop)
     finally:
         agent.close()
         if provider is not None:

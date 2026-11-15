@@ -158,3 +158,18 @@ chạy lệnh trên khi có.
 - `src/router/templates.py`: `SQL_TEMPLATES` (10 câu SQL) copy nguyên văn từ `scripts/analysis/rule_regression.py`; thêm 5 template của Nhi (`item_revenue_*`, `category_revenue`, `price_on_day_*`).
 - `src/router/_tagger_rules.py`: `deacc`, `U`, `HOWMANY`, `RULES` copy nguyên văn từ `scripts/analysis/intent_tagger.py`.
 - `src/router/intents.py`: các regex "bộ lọc phụ" (`_SKIP`, `_ITEM_REV*`) lấy từ `should_skip_question`; `topk_k`, `match_item` theo `rule_regression.py`.
+
+## Bỏ phiếu tự nhất quán cho nhánh LLM (`src/router/vote.py`, tuỳ chọn)
+
+`VoteAgent` bọc `Agent` (không sửa `src/agent.py`): hỏi agent k lần với sampling, chỉ trả lời khi tỉ lệ đồng ý ≥ ngưỡng, còn lại abstain.
+Hai đáp án là một khi bộ chấm PA (`eval.pa_score.score_one`) coi chúng khớp nhau; mẫu abstain / lỗi / SQL quá 12 s (`BusinessDB.execute_readonly`) là phiếu "không đáp án".
+
+| biến | ý nghĩa |
+|---|---|
+| `DATAMATE_LLM_VOTE_K` | số mẫu mỗi câu; mặc định 1 = tắt |
+| `DATAMATE_LLM_VOTE_THRESHOLD` | tỉ lệ k mẫu phải giống nhau (mặc định 0.6) |
+| `DATAMATE_LLM_VOTE_TEMPERATURE` | nhiệt độ sampling (mặc định 0.7) |
+| `DATAMATE_LLM_VOTE_BUDGET_S` | ngân sách thời gian mỗi câu, 0 = không giới hạn |
+
+Chỉ vLLM (`LocalVLLM.params`) hoặc model có `set_sampling(temperature, seed)` mới lấy mẫu được; `HFTransformers` luôn greedy nên vote tự tắt (có cảnh báo).
+Khi vote bật (hoặc `DATAMATE_SHARDED_SUBMISSION=1`), `src/predict.py` ghi qua `ShardedSubmission`: `submission.jsonl` luôn đủ mọi câu (abstain cho tới khi có đáp án), đúng thứ tự `questions.jsonl`, ghi nguyên tử sau mỗi shop và mỗi 25 đáp án; đáp án từng shop nằm thêm ở `by_shop/<shop>.jsonl`, nên bị ngắt giữa chừng vẫn giữ được phần đã làm.
