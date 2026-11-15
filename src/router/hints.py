@@ -37,14 +37,41 @@ def build_hints(question: dict[str, Any], nq: Any, decision: Any, conn: Any = No
     if conn is not None:
         try:
             s = I.prepare(nq.text)
+            s_item = I.strip_dates(s)   # item_match_key glues a digit to the next word ("25/12/2025, xuc xich" -> "2025xuc xich")
             cat = conn.execute("SELECT item_code, item_name, name_aliases, base_unit FROM v_items").fetchall()
-            m, _ = I.match_item(cat, s)
+            m, _ = I.match_item(cat, s_item)
             if m:
                 hints["entities"]["item"] = {"item_code": m[0], "item_name": m[1], "base_unit": m[2]}
             cats = [r[0] for r in conn.execute("SELECT DISTINCT category FROM v_items WHERE category IS NOT NULL")]
-            c, _ = I.match_category(cats, s)
+            c, _ = I.match_category(cats, s_item)
             if c:
                 hints["entities"]["category"] = c
         except Exception:
             pass
+        _add_order_filters(hints, I.prepare(nq.text), conn)
     return hints
+
+
+def _q(v: str) -> str:
+    return "'" + str(v).replace("'", "''") + "'"
+
+
+def _add_order_filters(hints: dict[str, Any], s: str, conn: Any) -> None:
+    """Payment method, channel and customer group named in the question, matched with the v3 template matchers.
+
+    Added twice: structured in `entities` (payment_method / channel / customer_group: [{"name", "values"}]) and as
+    `where_sql` entries (`period` = "<kind> filter"), because agent.format_hints_for_prompt prints every where_sql entry
+    but only the entities it knows (item, category).  Columns are those of v_valid_orders."""
+    try:
+        specs = [("payment_method", "payment_method", I._PAY, I._PAY_CUES), ("channel", "channel", I._CHAN, I._CHAN_CUES)]
+        for key, col, table, cues in specs:
+            raw = [r[0] for r in conn.execute(f"SELECT DISTINCT {col} FROM v_valid_orders WHERE {col} IS NOT NULL")]
+            for label, vals in I.match_named_all(table, cues, raw, s):
+                hints["entities"].setdefault(key, []).append({"name": label, "values": vals})
+                hints["where_sql"].append({"period": f"{key} filter ({label})", "sql": f"{col} IN ({', '.join(_q(v) for v in vals)})"})
+        groups = [r[0] for r in conn.execute("SELECT DISTINCT customer_group FROM v_valid_orders WHERE customer_group IS NOT NULL")]
+        for g in I.match_group_all(groups, s):
+            hints["entities"].setdefault("customer_group", []).append({"name": g, "values": [g]})
+            hints["where_sql"].append({"period": f"customer_group filter ({g})", "sql": f"customer_group = {_q(g)}"})
+    except Exception:
+        pass

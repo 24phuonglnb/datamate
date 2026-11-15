@@ -251,15 +251,39 @@ def _match_raw(table: dict[str, tuple[str, ...]], raw_values: list[str], s: str,
     return (vals, "ok") if vals else (None, "no_raw_value")
 
 
+_PAY_CUES = {"tien mat": r"\btien mat\b",
+             "chuyen khoan": r"\bchuyen khoan\b|\b(?:bang|qua) ck\b",   # the abbreviation only right after "bang" / "qua"
+             "vi dien tu": r"\bvi dien tu\b", "cod": r"\bcod\b", "ghi no": r"\bghi no\b"}
+_CHAN_CUES = {"tai quay": r"\btai quay\b", "zalo oa": r"\bzalo\b", "dien thoai": r"\b(dien thoai|goi dien)\b"}
+
+
 def match_payment(raw_values: list[str], s: str) -> tuple[list[str] | None, str]:
-    cues = {"tien mat": r"\btien mat\b", "chuyen khoan": r"\bchuyen khoan\b", "vi dien tu": r"\bvi dien tu\b",
-            "cod": r"\bcod\b", "ghi no": r"\bghi no\b"}
-    return _match_raw(_PAY, raw_values, s, cues)
+    return _match_raw(_PAY, raw_values, s, _PAY_CUES)
 
 
 def match_channel(raw_values: list[str], s: str) -> tuple[list[str] | None, str]:
-    cues = {"tai quay": r"\btai quay\b", "zalo oa": r"\bzalo\b", "dien thoai": r"\b(dien thoai|goi dien)\b"}
-    return _match_raw(_CHAN, raw_values, s, cues)
+    return _match_raw(_CHAN, raw_values, s, _CHAN_CUES)
+
+
+def match_named_all(table: dict[str, tuple[str, ...]], cues: dict[str, str], raw_values: list[str], s: str) -> list[tuple[str, list[str]]]:
+    """Every payment method / channel the question names, in the order of the question: [(label, shop raw values)].
+    Same cues and same raw-value rule as `_match_raw`; a name the shop has no raw value for is left out."""
+    found = []
+    for label, rx in cues.items():
+        m = re.search(rx, s)
+        if m:
+            keys = set(table[label])
+            vals = [v for v in raw_values if any(item_match_key(v).startswith(k) or item_match_key(v) == k for k in keys)]
+            if vals:
+                found.append((m.start(), label, vals))
+    return [(lab, vals) for _, lab, vals in sorted(found)]
+
+
+def match_group_all(groups: list[str], s: str) -> list[str]:
+    """Customer groups named after "nhom" (same key rule as `match_group`), in the order of the question."""
+    hits = [(m.start(), g) for g in groups if len(item_match_key(g)) >= 2
+            for m in [re.search(r"\bnhom\s+" + re.escape(item_match_key(g)) + r"\b", s)] if m]
+    return [g for _, g in sorted(hits)]
 
 
 _THEO_UNIT = re.compile(r"(?:tinh theo|theo)\s+" + T.U + r"\b")

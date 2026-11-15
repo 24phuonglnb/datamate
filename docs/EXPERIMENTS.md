@@ -232,3 +232,5 @@ Selection from the dev fall-through (951 q), by count; only templates computed p
 | 2026-11-15 | feat/router-expansion | none | dev (2291 q) | router-answered 1824/1824 correct; PA lower bound 0.7962 | 79.62% answered; before: 1340/1340 (58.49%) on feat/router-pharmacy |
 
 | 2026-11-15 | feat/router-expansion | none | hold-out (709 q), after the dev work | router-answered 514/515 correct (first run: 514/524, 10 wrong); PA lower bound 0.7236 | first run's wrong answers: 8 purchase_avg_price + 1 stock_value declared unanswerable for shops whose purchase sheets / cost column the view layer did not map, 1 revenue (cause not found on dev, kept: 97/98). Fixed by not answering "unanswerable" when the shop has raw purchase tables (`raw*nhap*`) and when no cost price is mapped; dev unchanged 1824/1824. Hold-out was looked at twice (before/after this fix) |
+
+| 2026-11-15 | exp/hints-audit | none (CPU) | dev fallthrough, 333 audited q, hints v2 | item for price_effect right 60/64 (was 41/64); channel 18/18, payment 9/10, customer group 6/24 answerable (rest: view has no group) | router-answered still 1340/1340; filters added to entities and where_sql |
