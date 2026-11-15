@@ -115,7 +115,7 @@ Câu rơi xuống agent (route `llm`) được gọi qua `pipeline.call_agent(ag
 | `where_sql` | `[{period, sql}]`: điều kiện lọc sẵn trên `order_date` (và `order_time` nếu có ca một phía) cho từng kỳ + kỳ so sánh |
 | `ambiguous_period` | các đoạn chữ thời gian không giải được (agent tự xử lý hoặc abstain) |
 | `flags` | cờ chuẩn hoá (`no_diacritics`, `partial_no_diacritics`, `residual_teencode`) |
-| `entities` | `numbers`, `dates` trích từ câu gốc; `item` `{item_code, item_name, base_unit}` và `category` nếu khớp duy nhất trong `v_items` |
+| `entities` | `numbers`, `dates` trích từ câu gốc; `item` `{item_code, item_name, base_unit}` và `category` nếu khớp duy nhất trong `v_items`; `payment_method`, `channel`, `customer_group` (danh sách `{name, values}` theo thứ tự trong câu, khớp bằng bộ khớp của template v3) — cũng được thêm vào `where_sql` (`period` = "<loại> filter (<tên>)") vì agent hiện chỉ in `item`/`category` từ `entities`, còn mọi mục `where_sql` đều được in |
 | `fallthrough_reason`, `fallthrough_intent` | vì sao router không trả lời (ví dụ `not_target:stock_qty`, `extra_filter_or_subintent`) và intent nếu có |
 
 Mẫu cho An:
