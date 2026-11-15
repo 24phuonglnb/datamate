@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import inspect
+import os
 import time
 from typing import Any, Callable
 
@@ -77,10 +78,28 @@ def solve(question: dict[str, Any], agent: Any, router: Router | None, normalize
                "thinking": None, "code": None, "output": None}
     else:
         key = G.gate_key(decision)
-        if not G.llm_allowed(gate, key):
+
+        high_risk_reasons = {
+            "not_target:category_share",
+            "not_target:cust_topk",
+            "not_target:debt_collected",
+            "not_target:debt_flow_customer",
+            "not_target:cust_freq_count",
+        }
+
+        selective_reject = (
+            os.getenv("DATAMATE_SELECTIVE_FALLBACK") == "1"
+            and decision.reason in high_risk_reasons
+        )
+
+        if selective_reject or not G.llm_allowed(gate, key):
             answer = {"id": qid, "type": "abstain"}
             log = {"id": qid, "answer": answer, "elapsed_ms": 0, "thinking": None, "code": None, "output": None}
-            decision = RouteDecision("abstain", f"llm_gate:{key}", decision.intent, params=decision.params)
+            abstain_reason = (
+                f"selective_gate:{decision.reason}"
+                if selective_reject else f"llm_gate:{key}"
+            )
+            decision = RouteDecision("abstain", abstain_reason, decision.intent, params=decision.params)
         else:
             hints = None
             if nq is not None:
