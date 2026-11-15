@@ -172,4 +172,4 @@ Hai đáp án là một khi bộ chấm PA (`eval.pa_score.score_one`) coi chún
 | `DATAMATE_LLM_VOTE_BUDGET_S` | ngân sách thời gian mỗi câu, 0 = không giới hạn |
 
 Chỉ vLLM (`LocalVLLM.params`) hoặc model có `set_sampling(temperature, seed)` mới lấy mẫu được; `HFTransformers` luôn greedy nên vote tự tắt (có cảnh báo).
-Khi vote bật (hoặc `DATAMATE_SHARDED_SUBMISSION=1`), `src/predict.py` ghi qua `ShardedSubmission`: `submission.jsonl` luôn đủ mọi câu (abstain cho tới khi có đáp án), đúng thứ tự `questions.jsonl`, ghi nguyên tử sau mỗi shop và mỗi 25 đáp án; đáp án từng shop nằm thêm ở `by_shop/<shop>.jsonl`, nên bị ngắt giữa chừng vẫn giữ được phần đã làm.
+Khi vote bật (hoặc `DATAMATE_SHARDED_SUBMISSION=1`), `src/predict.py` ghi qua `ShardedSubmission` (`src/shard_writer.py`): `submission.jsonl` luôn đủ mọi câu (abstain cho tới khi có đáp án), đúng thứ tự `questions.jsonl`, ghi nguyên tử sau mỗi shop và mỗi 25 đáp án; đáp án từng shop nằm thêm ở `by_shop/<shop>.jsonl`, nên bị ngắt giữa chừng vẫn giữ được phần đã làm.

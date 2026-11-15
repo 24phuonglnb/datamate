@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from src.router import vote as V
-from src.router.shard_writer import ShardedSubmission
+from src.shard_writer import ShardedSubmission
 
 
 def num(v, qid="q"):

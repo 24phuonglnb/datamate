@@ -16,7 +16,7 @@ from .router.db import ConnectionProvider
 from .router.rule_guard import RuleGuard
 from .router.gate import load_gate
 from .router.pipeline import AbstainAgent, solve as solve_routed
-from .router.shard_writer import ShardedSubmission
+from .shard_writer import ShardedSubmission
 from .router.vote import VoteAgent, maybe_vote
 
 
