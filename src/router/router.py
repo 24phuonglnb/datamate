@@ -53,6 +53,9 @@ class Router:
         if days_th is not None:
             intent = "days_over_threshold"   # same rulebook rows as revenue (checked above)
         bad = I.extra_filter(intent, s)
+        if bad == "item_specific_revenue" and intent == "revenue":
+            intent = "item_revenue"      # "ban <mat hang> duoc bao nhieu tien" is the revenue of an item, not of the shop
+            bad = I.extra_filter(intent, s)
         if bad:
             return RouteDecision("llm", bad, intent)
         if intent == "unans_subjective":  # rulebook section 7: opinions are not in the data
@@ -484,6 +487,9 @@ class Router:
         pct = bool(re.search(r"%|phan tram", s))
         if measure is None or not shifts or (pct and shifts != ["sang", "chieu"]) or (not pct and len(shifts) != 1):
             return RouteDecision("llm", "shift_pattern", intent)
+        cat = conn.execute("SELECT item_code, item_name, name_aliases, base_unit FROM v_items").fetchall()
+        if I.match_item(cat, I.strip_dates(s))[0] is not None:   # "ca chieu ... mon X": a shift of one item, not of the shop
+            return RouteDecision("llm", "shift_with_item", intent)
         if pct and pod.get("baseline") != "sang":
             return RouteDecision("llm", "shift_baseline", intent)
         start, end = cur.start.isoformat(), min(cur.end, as_of_d).isoformat()
