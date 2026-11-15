@@ -122,7 +122,11 @@ def main() -> None:
         model = None
         print("Router-only run: no model is loaded", file=sys.stderr)
     else:
-        model = LocalVLLM(args.model_path, args.tensor_parallel_size)
+        # the agent prompt (rulebook + schema + samples) is about 12k tokens: the 8192 default of LocalVLLM refuses every question
+        llm_kwargs = {key: cast(os.environ[env]) for env, key, cast in (
+            ("DATAMATE_MAX_MODEL_LEN", "max_model_len", int), ("DATAMATE_MAX_NEW_TOKENS", "max_new_tokens", int),
+            ("DATAMATE_GPU_UTIL", "gpu_memory_utilization", float)) if os.environ.get(env)}
+        model = LocalVLLM(args.model_path, args.tensor_parallel_size, **llm_kwargs)
         print(f"Loaded local model at {args.model_path}; inference is offline", file=sys.stderr)
     n = run(Path(args.data_dir), Path(args.result_dir), model, args.max_attempts)
     print(f"Wrote {n} predictions to {args.result_dir}/submission.jsonl", file=sys.stderr)

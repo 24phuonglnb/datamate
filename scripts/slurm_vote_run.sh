@@ -31,9 +31,17 @@ export DATAMATE_LLM_VOTE_K="${K}"
 export DATAMATE_LLM_VOTE_TEMPERATURE="${TEMP}"
 export DATAMATE_LLM_VOTE_FULL=1
 export DATAMATE_LLM_VOTE_THRESHOLD="${THRESHOLD:-0.6}"
+export DATAMATE_MAX_MODEL_LEN="${DATAMATE_MAX_MODEL_LEN:-16384}" DATAMATE_MAX_NEW_TOKENS="${DATAMATE_MAX_NEW_TOKENS:-1024}" DATAMATE_GPU_UTIL="${DATAMATE_GPU_UTIL:-0.88}"
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 PYTHONHASHSEED=42 PYTHONUNBUFFERED=1
 unset DATAMATE_ROUTER_ONLY
 
+# Slurm here does not constrain devices (every GPU is visible) and hands out GPU 0 even when somebody else's process sits on it:
+# use exactly ONE GPU, the first one that is really free (< 300 MB in use), never one that another user is working on.
+if [ "${PICK_FREE_GPU:-1}" = "1" ]; then
+    FREE_GPU="$(nvidia-smi --query-gpu=index,memory.used --format=csv,noheader,nounits | awk -F', ' '$2 < 300 {print $1; exit}')"
+    if [ -z "${FREE_GPU}" ]; then echo "no free GPU right now: exit without running"; exit 3; fi
+    export CUDA_VISIBLE_DEVICES="${FREE_GPU}"
+fi
 echo "node: $(hostname)  gpu: ${CUDA_VISIBLE_DEVICES:-unset}  K=${K}  temperature=${TEMP}  model=${MODEL_PATH}"
 nvidia-smi --query-gpu=name,memory.total,memory.used --format=csv,noheader || true
 cd "${PROJECT_ROOT}"
