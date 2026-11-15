@@ -22,7 +22,7 @@ TARGET_INTENTS = (
 SALES_PHARMACY_INTENTS = ("ingredient_revenue", "rx_nonrx_revenue", "rx_share")   # sales views + v_items, order dates
 INVENTORY_INTENTS = ("purchase_total", "supplier_top", "purchase_avg_price",       # own views, own date column
                      "stock_qty", "stock_large_unit", "stock_value", "expiry_list", "expiry_nearest_lot")
-EXPANSION_INTENTS = ("days_over_threshold", "shift", "price_effect", "category_share", "size_qty", "unsold_count")   # router-expansion
+EXPANSION_INTENTS = ("cust_freq_count", "cust_freq_share", "staff_revenue", "days_over_threshold", "shift", "price_effect", "category_share", "size_qty", "unsold_count")   # router-expansion
 EXTRA_INTENTS = ("item_revenue", "category_rev", "sell_price_on_day", "unans_subjective",
                  "best_month", "monthly_series", "streak_bool", "cust_group_rev", "payment_method_rev", "channel_rev",
                  "unit_total_qty") + SALES_PHARMACY_INTENTS + INVENTORY_INTENTS + EXPANSION_INTENTS
@@ -89,8 +89,8 @@ _SKIP["best_month"] = r"khach|\bnhom\b|\bca\b|nhan vien|\bkenh\b|%|phan tram|so 
 _SKIP["monthly_series"] = r"khach|\bnhom\b|\bca\b|nhan vien|\bkenh\b|%|phan tram|so voi|\bhang\b|\bmon\b|moi den cu"
 _SKIP["streak_bool"] = r"khach|\bnhom\b|\bca\b|nhan vien|\bkenh\b|%|phan tram|\bhang\b|\bmon\b|don\b"
 _SKIP["cust_group_rev"] = r"%|phan tram|chiem|so voi|ti trong|moi nhom|tung nhom|\bca\b|nhan vien|\bkenh\b|\bhang\b|\bmon\b|\btop\b|\bnhat\b"
-_SKIP["payment_method_rev"] = r"%|phan tram|chiem|so voi|ti trong|moi (ben|hinh thuc)|lan luot|\bca\b|nhan vien|\bkenh\b|\bkhach\b|\bnhom\b|\bhang\b|\bmon\b|\btop\b|\bnhat\b|\btang\b|\bgiam\b"
-_SKIP["channel_rev"] = r"%|phan tram|chiem|so voi|ti trong|moi (ben|kenh)|lan luot|\bca\b|nhan vien|\bkhach\b|\bnhom\b|\bhang\b|\bmon\b|\btop\b|\bnhat\b|\btang\b|\bgiam\b"
+_SKIP["payment_method_rev"] = r"so voi|\bca\b|nhan vien|\bkenh\b|\bkhach\b|\bnhom\b|\bhang\b|\bmon\b|\btop\b|\bnhat\b|\btang\b|\bgiam\b"
+_SKIP["channel_rev"] = r"so voi|\bca\b|nhan vien|\bkhach\b|\bnhom\b|\bhang\b|\bmon\b|\btop\b|\bnhat\b|\btang\b|\bgiam\b"
 _SKIP["unit_total_qty"] = r"%|phan tram|so voi|\bkhach\b|\bnhom\b|\bca\b|nhan vien|\bkenh\b|\btop\b|\bnhat\b|\btang\b|\bgiam\b"
 _PH_COMMON = r"%|phan tram|so voi|\bkhach\b|\bca\b|nhan vien|\bkenh\b|\btop\b|\bnhat\b|\btang\b|\bgiam\b|\bnhom\b"
 _SKIP["ingredient_revenue"] = _PH_COMMON + r"|ke don|\bhang\b(?! hoa)"
@@ -107,6 +107,9 @@ _SKIP["expiry_list"] = r"%|phan tram|so voi|\bkhach\b|\bca\b|nhan vien|\bkenh\b|
 _SKIP["expiry_nearest_lot"] = r"%|phan tram|so voi|\bkhach\b|\bca\b|nhan vien|\bkenh\b|\btop\b|\btang\b|\bgiam\b|\bnhom\b|tien von|gia tri|gia von|bao nhieu tien"
 _X = r"\bkhach\b|nhan vien|\bkenh\b|\btop\b|\bnhat\b|\bnhom\b|trung binh|binh quan"
 _SKIP["days_over_threshold"] = r"%|phan tram|so voi|\bkhach\b|\bnhom\b|nhan vien|\bkenh\b|\bca\b|\bmon\b|\bhang\b|tung ngay"
+_SKIP["cust_freq_count"] = r"%|phan tram|so voi|\\bnhom\\b|nhan vien|\\bkenh\\b|\\bca\\b|\\bmon\\b|\\bhang\\b|\\btop\\b|\\bnhat\\b|\\bhon\\b|\\btren\\b|\\bduoi\\b|\\bit hon\\b|\\bnhieu hon\\b"
+_SKIP["cust_freq_share"] = r"so voi|\\bnhom\\b|nhan vien|\\bkenh\\b|\\bca\\b|\\bmon\\b|\\bhang\\b|\\btop\\b|\\bnhat\\b|\\bhon\\b|\\btren\\b|\\bduoi\\b|\\bit hon\\b|\\bnhieu hon\\b"
+_SKIP["staff_revenue"] = r"%|phan tram|so voi|\\bkhach\\b|\\bnhom\\b|\\bkenh\\b|\\bca\\b|\\bmon\\b|\\bhang\\b|\\btop\\b|\\bnhat\\b|\\btang\\b|\\bgiam\\b"
 _SKIP["shift"] = _X + r"|\bhang\b|\bmon\b|cao diem|bao cao|giao ca|\bkenh\b|tang gia|ke tu"
 _SKIP["price_effect"] = _X + r"|\bca\b|doanh thu|tien|moi ngay|\bngay nao\b"
 _SKIP["category_share"] = r"\bkhach\b|\bca\b|so voi|\btop\b|\bnhat\b|\btang\b|\bgiam\b|nhan vien|\bkenh\b|ke don|hoat chat|size|nhom (than thiet|si|le|vip)|moi nhom|tung nhom"
@@ -377,3 +380,35 @@ def days_over_threshold(s: str) -> float | None:
         return None
     th, why = order_threshold(s)
     return th if why == "ok" and th is not None else None
+
+
+def freq_orders(s: str) -> int | None:
+    """N of "khach mua tu N don tro len" / "it nhat N don" (at least N orders); anything else (more than, fewer than): None."""
+    m = re.search(r"(?:tu|it nhat)\s+(\d{1,3})\s+don(?:\s+tro len)?", s)
+    return int(m.group(1)) if m else None
+
+
+def named_in_order(table: dict[str, tuple[str, ...]], cues: dict[str, str], raw_values: list[str], s: str) -> list[tuple[str, list[str]]]:
+    """Every payment method / channel the question names, in question order, with the shop's raw values for it
+    (same cue and raw-value rule as `_match_raw`); [] when one of the named ones has no raw value in the shop."""
+    hits = sorted((m.start(), k) for k, rx in cues.items() for m in [re.search(rx, s)] if m)
+    out = []
+    for _, k in hits:
+        keys = set(table[k])
+        vals = [v for v in raw_values if any(item_match_key(v).startswith(x) or item_match_key(v) == x for x in keys)]
+        if not vals:
+            return []
+        out.append((k, vals))
+    return out
+
+
+def staff_code(s: str) -> str | None:
+    """Staff code like NV003 named in the question (exactly one)."""
+    codes = {c.upper() for c in re.findall(r"\bnv\d+\b", s)}
+    return next(iter(codes)) if len(codes) == 1 else None
+
+
+# cue tables for `named_in_order` (the same cues `match_payment` / `match_channel` use, as module constants)
+_PAY_CUES_EXP = {"tien mat": r"\btien mat\b", "chuyen khoan": r"\bchuyen khoan\b|\b(?:bang|qua) ck\b", "vi dien tu": r"\bvi dien tu\b",
+                 "cod": r"\bcod\b", "ghi no": r"\bghi no\b"}
+_CHAN_CUES_EXP = {"tai quay": r"\btai quay\b", "zalo oa": r"\bzalo\b", "dien thoai": r"\b(dien thoai|goi dien)\b"}

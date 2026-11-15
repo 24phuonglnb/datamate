@@ -155,11 +155,25 @@ class Router:
         elif intent in ("payment_method_rev", "channel_rev"):
             col = "payment_method" if intent == "payment_method_rev" else "channel"
             raw = [r[0] for r in conn.execute(f"SELECT DISTINCT {col} FROM v_valid_orders WHERE {col} IS NOT NULL")]
-            vals, why = (I.match_payment if intent == "payment_method_rev" else I.match_channel)(raw, s)
-            if vals is None:
-                return RouteDecision("llm", why, intent, params=params)
-            kw["values"] = vals
-            params["values"] = vals
+            table, cues = (I._PAY, I._PAY_CUES_EXP) if intent == "payment_method_rev" else (I._CHAN, I._CHAN_CUES_EXP)
+            named = I.named_in_order(table, cues, raw, s)
+            pct = bool(re.search(r"%|phan tram|chiem|ti trong", s))
+            if not named or len(named) > 3 or (pct and len(named) != 1):
+                return RouteDecision("llm", "none_named" if not named else "several_named_or_percent", intent, params=params)
+            params["values"] = [k for k, _ in named]
+            sql = SQL_TEMPLATES["payment_revenue" if intent == "payment_method_rev" else "channel_revenue"]
+            revs = [int(conn.execute(sql.format(ph=",".join("?" * len(v))), (start, end, *v)).fetchone()[0] or 0) for _, v in named]
+            if pct:
+                total = float(conn.execute(SQL_TEMPLATES["revenue"], (start, end)).fetchone()[0] or 0)
+                if total <= 0:
+                    return RouteDecision("llm", "empty_total", intent, params=params)
+                value = float(conn.execute("SELECT ROUND(? * 100.0 / ?, 2)", (revs[0], total)).fetchone()[0])
+                if not 0 <= value <= 100:
+                    return RouteDecision("abstain", "sanity:share_outside_0_100", intent, params=params)
+                return RouteDecision("template", "ok", intent, {"id": qid, "type": "percent", "answer": value}, params)
+            if len(named) > 1:
+                return RouteDecision("template", "ok", intent, {"id": qid, "type": "list", "answer": revs}, params)
+            kw["values"] = named[0][1]
         elif intent == "unit_total_qty":
             unit = I.unit_for_total(s)
             bases = [r[0] for r in conn.execute("SELECT DISTINCT base_unit FROM v_items WHERE base_unit IS NOT NULL")]
@@ -196,6 +210,28 @@ class Router:
                     return RouteDecision("llm", "rx_polarity_unclear", intent, params=params)
                 kw["values"] = [pol]
                 params["rx"] = pol
+        elif intent in ("cust_freq_count", "cust_freq_share"):
+            n_min = I.freq_orders(s)
+            if n_min is None or not 1 <= n_min <= 100:
+                return RouteDecision("llm", "freq_not_at_least_n", intent, params=params)
+            if not conn.execute(SQL_TEMPLATES["customers_recorded"]).fetchone()[0]:   # no customer is recorded: rulebook section 7
+                return self._unanswerable(qid, "Cửa hàng không ghi khách trên đơn (rulebook mục 7).", "no_customer_info", intent, params)
+            n_all, n_freq = conn.execute(SQL_TEMPLATES["cust_freq"], (n_min, start, end)).fetchone()
+            params["min_orders"] = n_min
+            if not n_all:
+                return RouteDecision("llm", "no_customers_in_period", intent, params=params)
+            if intent == "cust_freq_count":
+                return RouteDecision("template", "ok", intent, {"id": qid, "type": "number", "answer": int(n_freq or 0)}, params)
+            value = float(conn.execute("SELECT ROUND(? * 100.0 / ?, 2)", (n_freq or 0, n_all)).fetchone()[0])
+            return RouteDecision("template", "ok", intent, {"id": qid, "type": "percent", "answer": value}, params)
+        elif intent == "staff_revenue":
+            code = I.staff_code(s)
+            known = {str(r[0]).upper() for r in conn.execute("SELECT DISTINCT staff FROM v_valid_orders WHERE staff IS NOT NULL")}
+            if code is None or code not in known:
+                return RouteDecision("llm", "staff_not_found", intent, params=params)
+            params["staff"] = code
+            value = int(conn.execute(SQL_TEMPLATES["staff_revenue"], (start, end, code)).fetchone()[0])
+            return RouteDecision("template", "ok", intent, {"id": qid, "type": "number", "answer": value}, params)
         elif intent == "days_over_threshold":
             kw["threshold"] = days_th
             params["threshold"] = days_th

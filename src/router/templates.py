@@ -154,6 +154,11 @@ SQL_TEMPLATES.update({
 
 # router-expansion templates (rulebook section 2 shifts, 5 price effect, 3 category share, 6 size, 5 unsold)
 SQL_TEMPLATES.update({
+    "cust_freq": ("SELECT COUNT(*), SUM(CASE WHEN n >= ? THEN 1 ELSE 0 END) FROM (SELECT customer_key, COUNT(*) AS n FROM v_valid_orders "
+                  "WHERE order_date BETWEEN ? AND ? AND customer_key IS NOT NULL GROUP BY customer_key)"),
+    "customers_recorded": "SELECT COUNT(customer_key) FROM v_valid_orders",
+    "staff_revenue": ("SELECT CAST(ROUND(COALESCE(SUM(revenue), 0)) AS INTEGER) FROM v_valid_orders "
+                      "WHERE order_date BETWEEN ? AND ? AND UPPER(staff) = ?"),
     "days_over_threshold": ("SELECT COUNT(*) FROM (SELECT order_date FROM v_valid_orders WHERE order_date BETWEEN ? AND ? "
                             "GROUP BY order_date HAVING SUM(revenue) >= ?)"),
     "shift_revenue": ("SELECT SUM(revenue) FROM v_valid_orders WHERE order_date BETWEEN ? AND ? "
@@ -186,6 +191,7 @@ ANSWER_TYPE = {
     "ingredient_revenue": "number", "rx_nonrx_revenue": "number", "rx_share": "percent",
     "purchase_total": "number", "supplier_top": "string", "purchase_avg_price": "number",
     "stock_qty": "number", "stock_large_unit": "list", "stock_value": "number",
+    "cust_freq_count": "number", "cust_freq_share": "percent", "staff_revenue": "number",
     "days_over_threshold": "number", "shift": "number", "price_effect": "percent", "category_share": "percent", "size_qty": "number", "unsold_count": "number",
     "expiry_list": "number", "expiry_nearest_lot": "date",   # expiry_list: "number" (lot count) or "list" (products), set per question
 }
