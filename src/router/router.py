@@ -309,6 +309,10 @@ class Router:
         start, end = cur.start.isoformat(), min(cur.end, as_of_d).isoformat()
         params.update({"start": start, "end": end})
         if not self._has_view(conn, "v_valid_purchase_lines"):
+            # "no view" only means "no purchase book" when the shop has no raw purchase table either; a shop whose purchase
+            # sheets the view layer did not recognise would be wrongly called unanswerable (hold-out: 8 of 9 wrong)
+            if conn.execute("SELECT 1 FROM sqlite_master WHERE name LIKE 'raw%nhap%' LIMIT 1").fetchone():
+                return RouteDecision("llm", "purchase_book_not_built", intent, params=params)
             return self._unanswerable(qid, "Cửa hàng không có sổ nhập hàng (rulebook mục 7).", "no_purchase_book", intent, params)
         n_amount, lo, hi = conn.execute("SELECT COUNT(line_amount), MIN(receipt_date), MAX(receipt_date) FROM v_valid_purchase_lines").fetchone()
         if not n_amount:   # quantities only: no purchase money recorded (VIEWS.md 3.8 rule 3)
@@ -395,8 +399,8 @@ class Router:
             total, n, n_null = conn.execute(SQL_TEMPLATES["stock_value"]).fetchone()
             if not n:
                 return RouteDecision("llm", "empty_stock", intent, params=params)
-            if n_null == n:
-                return self._unanswerable(qid, "Danh mục không ghi giá vốn (rulebook mục 7).", "no_cost_price", intent, params)
+            if n_null == n:   # not "unanswerable": the cost may sit in a column the view layer did not map (hold-out: 0 of 1 right)
+                return RouteDecision("llm", "cost_price_missing", intent, params=params)
             if n_null:
                 return RouteDecision("llm", "cost_price_partial", intent, params=params)
             value: Any = int(total + 0.5)

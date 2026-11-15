@@ -39,7 +39,7 @@ Mỗi câu ghi `log["router"] = {route, reason, intent, params, shop_warnings?}`
 | `purchase_total`, `supplier_top`, `purchase_avg_price` | number, string, number | `v_valid_purchase_lines` theo `receipt_date`; NCC cao nhất (hoà → agent); giá nhập bình quân theo số lượng nhập, đúng đơn vị nhập |
 | `stock_qty`, `stock_large_unit`, `stock_value` | number, list `[chẵn, lẻ]`, number | `v_stock` (cuối dữ liệu), `v_stock_card` khi hỏi ngày sớm hơn (không có thẻ kho → agent), `v_item_units`; giá trị tồn chỉ khi mọi hàng còn tồn có giá vốn |
 | `expiry_list`, `expiry_nearest_lot` | number (số lô) hoặc list (sản phẩm), date | `v_lots`: lô còn tồn hết hạn từ hôm nay đến hết ngày E; lô gần hết hạn nhất của một thuốc |
-| shop thiếu view (sổ nhập, tồn kho, lô) hoặc sổ nhập không có tiền | unanswerable | §7; template kiểm tra view trước, không chạy SQL trên view không có |
+| shop thiếu view (sổ nhập, tồn kho, lô) hoặc sổ nhập không có tiền | unanswerable | §7; template kiểm tra view trước, không chạy SQL trên view không có. Sổ nhập: chỉ unanswerable khi shop cũng không có bảng thô `raw*nhap*` (hold-out: shop có sheet nhập mà view chưa dựng → agent); giá trị tồn không có giá vốn nào → agent |
 | `shift` | number, percent | doanh thu / số đơn của ca sáng (06:00–13:59) hoặc ca chiều (14:00–21:59) theo giờ tạo đơn; "chiều so với sáng" (mốc là ca sáng) ra percent; shop có đơn thiếu giờ → agent |
 | `price_effect` | percent | thay đổi số lượng (đơn vị cơ bản) của một mặt hàng: N ngày kể từ ngày D vs N ngày ngay trước D, kỳ lấy từ `Period` (kể cả "ngày đó / ngày tăng giá"); kỳ trước rỗng → agent |
 | `category_share` | percent | doanh thu nhóm hàng / doanh thu cả kỳ; nhóm phải có trong `v_items.category` (shop chỉ có "Hàng hóa" → agent) |

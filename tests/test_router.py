@@ -1014,3 +1014,19 @@ def test_category_size_unsold_threshold_customers_staff_and_unit_conversion():
     assert d.route == "template" and d.answer["answer"] == 3.5
     d = route("tháng 3/2026 khách mua hơn 2 đơn", c)                                       # not "at least": never answered
     assert d.route == "llm"
+
+
+def test_missing_purchase_view_is_unanswerable_only_without_raw_purchase_tables():
+    c = _pharma_db(purchases=False)
+    q = "tổng tiền nhập hàng tháng 3/2026 là bao nhiêu"
+    assert route(q, c).route == "unanswerable"                                  # no purchase data at all
+    c.execute("CREATE TABLE raw_du_lieu_danh_sach_nhap_hang(a)")                 # purchase sheets exist but no view was built
+    d = route(q, c)
+    assert d.route == "llm" and d.reason == "purchase_book_not_built"
+
+
+def test_stock_value_without_any_cost_price_goes_to_llm():
+    c = _pharma_db()
+    c.execute("UPDATE v_stock SET cost_price = NULL, stock_value = NULL")
+    d = route("tính theo giá vốn, tiền hàng nằm trong kho vào cuối ngày 07/09/2026 là bao nhiêu", c)
+    assert d.route == "llm" and d.reason == "cost_price_missing"
