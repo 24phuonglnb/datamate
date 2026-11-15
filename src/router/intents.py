@@ -22,9 +22,10 @@ TARGET_INTENTS = (
 SALES_PHARMACY_INTENTS = ("ingredient_revenue", "rx_nonrx_revenue", "rx_share")   # sales views + v_items, order dates
 INVENTORY_INTENTS = ("purchase_total", "supplier_top", "purchase_avg_price",       # own views, own date column
                      "stock_qty", "stock_large_unit", "stock_value", "expiry_list", "expiry_nearest_lot")
+EXPANSION_INTENTS = ("days_over_threshold", "shift", "price_effect", "category_share", "size_qty", "unsold_count")   # router-expansion
 EXTRA_INTENTS = ("item_revenue", "category_rev", "sell_price_on_day", "unans_subjective",
                  "best_month", "monthly_series", "streak_bool", "cust_group_rev", "payment_method_rev", "channel_rev",
-                 "unit_total_qty") + SALES_PHARMACY_INTENTS + INVENTORY_INTENTS
+                 "unit_total_qty") + SALES_PHARMACY_INTENTS + INVENTORY_INTENTS + EXPANSION_INTENTS
 ENABLED_EXTRA = EXTRA_INTENTS  # an intent is listed in EXTRA_INTENTS only after it reached 100% on dev (eval report)
 MONTHLY_INTENTS = ("best_month", "monthly_series", "streak_bool")
 _RULE_RX = dict(T.RULES)
@@ -49,7 +50,12 @@ def recognise(s: str) -> tuple[str | None, str]:
         return first, "ok"
     if first not in TARGET_INTENTS:
         return None, f"not_target:{first}"
-    rivals = [n for n in TARGET_INTENTS if n != first and n not in GENERIC and n not in COMPAT.get(first, ()) and re.search(_RULE_RX[n], s)]
+    # "bao nhieu phan tram": the unit word "phan" (portion) of item_qty is not a quantity here, it is the word "percent"
+    s_riv = re.sub(r"\bphan tram\b", " ", s)
+    rivals = [n for n in TARGET_INTENTS if n != first and n not in GENERIC and n not in COMPAT.get(first, ()) and re.search(_RULE_RX[n], s_riv)]
+    if (first in ("topk_items", "best_item") and rivals == ["item_qty"] and topk_k(s) is None
+            and not re.search(r"\bnao\b|\bnhat\b|\btop\b|chay|\bgi\b", s) and _UNIT_RX.search(s)):
+        return "item_qty", "ok"   # "mat hang X ban duoc tong cong bao nhieu kg": the tagger reads "mat hang" as a ranking
     if rivals:
         return None, "multi_intent:" + "+".join([first] + rivals)
     if first == "topk_items" and topk_k(s) is None:
@@ -58,9 +64,10 @@ def recognise(s: str) -> tuple[str | None, str]:
 
 
 _SKIP: dict[str, str] = {
-    "revenue": (r"nhom|khach|\bdon\b|bill|\bca\b|nhan vien|tra bang|so voi|%|phan tram|ngay|hoat chat|ke don|"
-                r"size|trung binh|binh quan|moi|quy|mat hang|mon |ban chay|top|xu huong|luon cao hon|con no|cong no|"
-                r"(?:doanh thu|dthu) (?:cua|cuar) (?!cua hang)"),
+    "revenue": (r"nhom|khach|\bdon\b|bill|\bca\b|nhan vien|tra bang|so voi|%|phan tram|hoat chat|ke don|"
+                r"size|trung binh|binh quan|moi|mat hang|mon |ban chay|top|xu huong|luon cao hon|con no|cong no|"
+                r"(?:doanh thu|dthu) (?:cua|cuar) (?!cua hang)|"
+                r"\bnhat\b|thap nhat|cao nhat|ngay nao|ngay co|ngay (?:ma|trong)|so ngay|dem |(?:bao nhieu|may) ngay|tung ngay|hang ngay|tung quy|moi quy"),
     "order_count": r"khach|nhom|nhan vien|kenh|\bca\b|mat hang|san pham|mon ",
     "cancel_count": r"giao tre|ly do|nguyen nhan|khach|nhom|nhan vien|kenh|\bca\b",
     "cancel_rate": r"khach|nhom|nhan vien|kenh|\bca\b",
@@ -98,6 +105,13 @@ _SKIP["stock_large_unit"] = r"so voi|\bkhach\b|nhan vien|\bkenh\b|\btop\b|\btang
 _SKIP["stock_value"] = r"%|phan tram|so voi|\bkhach\b|\bca\b|nhan vien|\bkenh\b|\btop\b|\btang\b|\bgiam\b|\bnhom\b|het han|han dung|ten hang|mat hang nao|tung|moi (?:mat|loai|nhom)|\bnhat\b|\bmon\b|\bsp\b|san pham"
 _SKIP["expiry_list"] = r"%|phan tram|so voi|\bkhach\b|\bca\b|nhan vien|\bkenh\b|\btop\b|\btang\b|\bgiam\b|\bnhom\b|tien von|gia tri|gia von|bao nhieu tien|\bgia\b"
 _SKIP["expiry_nearest_lot"] = r"%|phan tram|so voi|\bkhach\b|\bca\b|nhan vien|\bkenh\b|\btop\b|\btang\b|\bgiam\b|\bnhom\b|tien von|gia tri|gia von|bao nhieu tien"
+_X = r"\bkhach\b|nhan vien|\bkenh\b|\btop\b|\bnhat\b|\bnhom\b|trung binh|binh quan"
+_SKIP["days_over_threshold"] = r"%|phan tram|so voi|\bkhach\b|\bnhom\b|nhan vien|\bkenh\b|\bca\b|\bmon\b|\bhang\b|tung ngay"
+_SKIP["shift"] = _X + r"|\bhang\b|\bmon\b|cao diem|bao cao|giao ca|\bkenh\b|tang gia|ke tu"
+_SKIP["price_effect"] = _X + r"|\bca\b|doanh thu|tien|moi ngay|\bngay nao\b"
+_SKIP["category_share"] = r"\bkhach\b|\bca\b|so voi|\btop\b|\bnhat\b|\btang\b|\bgiam\b|nhan vien|\bkenh\b|ke don|hoat chat|size|nhom (than thiet|si|le|vip)|moi nhom|tung nhom"
+_SKIP["size_qty"] = r"so voi|%|phan tram|\bkhach\b|\bnhom\b|\btop\b|\bnhat\b|\btang\b|\bgiam\b|nhan vien|\bkenh\b|\bca\b|doanh thu|tien|hon hay kem"
+_SKIP["unsold_count"] = r"%|phan tram|so voi|\bkhach\b|\bnhom\b|\btop\b|nhan vien|\bkenh\b|\bca\b|doanh thu|tien"
 # revenue also: item-specific revenue ("ban <mat hang> ... bao nhieu tien")
 _ITEM_REV = re.compile(r"\b(ban|bans)\b")
 _ITEM_REV_OK = re.compile(r"cua\s*\w*\s+hang\s*\w*\s+(?:ban|bans)\s+\S+\s+(tong cong|total|toongr cong|bao nhieu|bnhiu|bn)")
@@ -122,9 +136,15 @@ def topk_k(s: str) -> int | None:
 _UNIT_RX = re.compile(T.HOWMANY + " " + T.U + r"\b")
 
 
+_SO_UNIT_RX = re.compile(r"(?:^|\s)so\s+" + T.U + r"\s+\S")
+
+
 def asked_unit(s: str) -> str | None:
     m = _UNIT_RX.search(s)
-    return m.group(2) if m else None
+    if m:
+        return m.group(2)
+    m = _SO_UNIT_RX.search(s)    # "so thung <item> ban duoc trong thang ..."
+    return m.group(1) if m else None
 
 
 def match_item(catalog: list[tuple[Any, ...]], s: str) -> tuple[tuple[str | None, str, str | None] | None, str]:
@@ -335,3 +355,25 @@ def expiry_kind(s: str) -> str | None:
     if re.search(r"(?:san pham|mat hang|hang|thuoc|sp)\s+nao", s):
         return "list"
     return None
+
+
+# ---- router-expansion ---------------------------------------------------------------------------------------------
+def shift_measure(s: str) -> str | None:
+    """'money' (revenue) or 'count' (orders) asked about a shift; None when both or neither is named."""
+    money = bool(re.search(r"\btien\b|doanh thu|doanh so", s))
+    count = bool(re.search(r"\b(?:don|bill|hoa don)\b", s))
+    return "money" if money and not count else "count" if count and not money else None
+
+
+def size_letter(s: str) -> str | None:
+    """'m' or 'l' of "size M" / "size L" (exactly one of them named)."""
+    found = set(re.findall(r"\bsize\s*\(?([ml])\)?\b", s))
+    return next(iter(found)) if len(found) == 1 else None
+
+
+def days_over_threshold(s: str) -> float | None:
+    """Threshold X of "co may ngay doanh thu dat X dong tro len" / "dem so ngay ... tu X dong tro len" (>=, exact amounts only)."""
+    if not re.search(r"(?:bao nhieu|may|dem so|so) ngay", s) or not re.search(r"doanh thu|dthu|tien", s):
+        return None
+    th, why = order_threshold(s)
+    return th if why == "ok" and th is not None else None

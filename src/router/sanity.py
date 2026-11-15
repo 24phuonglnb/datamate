@@ -19,7 +19,7 @@ from typing import Any
 def check(intent: str, value: Any, conn: sqlite3.Connection, start: str, end: str) -> str | None:
     """-> violated rule or None."""
     if intent in ("revenue", "order_count", "cancel_count", "item_qty", "aov", "item_revenue", "category_rev", "sell_price_on_day",
-                  "cust_group_rev", "payment_method_rev", "channel_rev", "unit_total_qty"):
+                  "cust_group_rev", "payment_method_rev", "channel_rev", "unit_total_qty", "days_over_threshold", "size_qty", "unsold_count"):
         if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value) or value < 0:
             return "number_not_finite_nonnegative"
     if intent in ("ingredient_revenue", "rx_nonrx_revenue", "purchase_total", "purchase_avg_price"):
