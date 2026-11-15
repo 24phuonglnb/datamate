@@ -213,3 +213,40 @@ def test_predict_run_writes_shop_by_shop_when_asked(tmp_path, monkeypatch):
     rows = _read(out / "submission.jsonl")
     assert [r["id"] for r in rows] == ["q0", "q1", "q2", "q3"] and all(r["type"] == "abstain" for r in rows)
     assert sorted(p.name for p in (out / "by_shop").glob("*.jsonl")) == ["s1.jsonl", "s2.jsonl"]
+
+
+def test_full_mode_asks_every_sample_and_logs_each_one():
+    agent = ScriptedAgent([num(1), num(1), num(1), num(2), RuntimeError("boom")], FakeModel())
+    ans, log = V.VoteAgent(agent, 5, 0.6, full=True).solve(Q)
+    assert agent.calls == 5 and ans["answer"] == 1                     # decided after 3 but all 5 are asked
+    samples = log["vote"]["samples"]
+    assert [s["i"] for s in samples] == [0, 1, 2, 3, 4]
+    assert samples[0]["code"] == "SELECT 1" and samples[0]["answer"]["answer"] == 1
+    assert samples[3]["answer"]["answer"] == 2 and samples[4]["error"].startswith("RuntimeError") and samples[4]["answer"]["type"] == "abstain"
+    json.dumps(log)                                                     # the log is plain JSON
+
+
+def test_flag_full_is_read_from_the_environment():
+    agent = ScriptedAgent([], FakeModel())
+    assert V.maybe_vote(agent, {"DATAMATE_LLM_VOTE_K": "5", "DATAMATE_LLM_VOTE_FULL": "1"}).full is True
+    assert V.maybe_vote(agent, {"DATAMATE_LLM_VOTE_K": "5"}).full is False
+
+
+def test_tie_between_two_answers_is_an_abstain():
+    va = V.VoteAgent(ScriptedAgent([num(1), num(2), num(1), num(2)], FakeModel()), 4, 0.5, full=True)
+    ans, log = va.solve(Q)
+    assert ans["type"] == "abstain" and log["vote"]["groups"] == [2, 2]
+
+
+def test_offline_sweep_revotes_the_logged_samples():
+    from eval.vote_sweep import revote, sweep
+    samples = [{"i": i, "answer": a} for i, a in enumerate([num(1), num(1), num(2), {"type": "abstain"}, num(1)])]
+    vote_log = {"k": 5, "samples": samples}
+    assert revote(vote_log, "q1", 0.6)["answer"] == 1                                  # 3 of 5
+    assert revote(vote_log, "q1", 0.8)["type"] == "abstain"                              # 3 < 4
+    logs = [{"id": "q1", "answer": {"id": "q1", "type": "abstain"}, "router": {"route": "llm", "intent": "shift", "reason": "x"}, "vote": vote_log},
+            {"id": "q2", "answer": num(5, "q2"), "router": {"route": "template", "intent": "revenue", "reason": "ok"}}]
+    gold = {"q1": {"id": "q1", "type": "number", "answer": 1}, "q2": {"id": "q2", "type": "number", "answer": 5}}
+    res = sweep(logs, gold, [0.6, 0.8])
+    assert res["router_only_pa"] == 0.5 and res["rows"][0.6]["pa_total"] == 1.0 and res["rows"][0.8]["pa_total"] == 0.5
+    assert res["rows"][0.6]["by_kind"]["shift"]["correct"] == 1

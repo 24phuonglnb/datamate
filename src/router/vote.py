@@ -6,6 +6,10 @@ as `Agent`, so `pipeline.call_agent` and `predict.py` use it unchanged.
     DATAMATE_LLM_VOTE_THRESHOLD    share of the k samples that must give the same answer (default 0.6)
     DATAMATE_LLM_VOTE_TEMPERATURE  sampling temperature of the k calls (default 0.7)
     DATAMATE_LLM_VOTE_BUDGET_S     optional wall-clock budget per question in seconds (default 0 = none)
+    DATAMATE_LLM_VOTE_FULL         1 = always ask all k samples (no early stop), so the per-sample log can be re-voted
+                                   offline with any threshold (`eval/vote_sweep.py`)
+
+Every sample (answer, SQL, output, error, time) is kept in `log["vote"]["samples"]` of the run log.
 
 SQL: every sample's SQL is run by `Agent.solve` through `BusinessDB.execute_readonly` (only SELECT / WITH, 12 s time
 limit, at most 500 rows); a sample whose SQL fails or times out is an abstain sample.  Nothing else touches the data here.
@@ -35,6 +39,7 @@ ENV_K = "DATAMATE_LLM_VOTE_K"
 ENV_THRESHOLD = "DATAMATE_LLM_VOTE_THRESHOLD"
 ENV_TEMPERATURE = "DATAMATE_LLM_VOTE_TEMPERATURE"
 ENV_BUDGET = "DATAMATE_LLM_VOTE_BUDGET_S"
+ENV_FULL = "DATAMATE_LLM_VOTE_FULL"
 DEFAULT_THRESHOLD = 0.6
 DEFAULT_TEMPERATURE = 0.7
 
@@ -95,6 +100,12 @@ def restore_sampling(model: Any, token: Any) -> None:
         model.restore_sampling(old)
 
 
+def _short(v: Any, limit: int = 400) -> Any:
+    """Output of a sample's SQL, shortened so that the per-sample log stays small."""
+    text = json.dumps(v, ensure_ascii=False, default=str)
+    return v if len(text) <= limit else text[:limit] + "..."
+
+
 def can_sample(model: Any) -> bool:
     return model is not None and (hasattr(model, "set_sampling") or hasattr(getattr(model, "params", None), "temperature"))
 
@@ -103,13 +114,13 @@ class VoteAgent:
     """`solve(question, hints=None)` like `Agent`, answering by self-consistency over `k` sampled agent calls."""
 
     def __init__(self, agent: Any, k: int, threshold: float = DEFAULT_THRESHOLD, temperature: float = DEFAULT_TEMPERATURE,
-                 base_seed: int = 20261115, budget_s: float = 0.0):
+                 base_seed: int = 20261115, budget_s: float = 0.0, full: bool = False):
         if k < 1:
             raise ValueError("k must be >= 1")
         if not 0.0 < threshold <= 1.0:
             raise ValueError("threshold must be in (0, 1]")
         self.agent, self.k, self.threshold = agent, k, threshold
-        self.temperature, self.base_seed, self.budget_s = temperature, base_seed, budget_s
+        self.temperature, self.base_seed, self.budget_s, self.full = temperature, base_seed, budget_s, full
 
     @property
     def model(self) -> Any:
@@ -136,6 +147,7 @@ class VoteAgent:
             return self._call(question, hints)
         groups: list[list[dict[str, Any]]] = []      # groups of equal answers
         evidence: list[dict[str, Any]] = []          # the run log of the first sample of each group
+        samples: list[dict[str, Any]] = []           # every sample, for offline re-voting
         n_abstain = n_asked = 0
         need = needed_votes(self.k, self.threshold)
         for i in range(self.k):
@@ -150,6 +162,11 @@ class VoteAgent:
             finally:
                 restore_sampling(self.model, token)
             n_asked += 1
+            samples.append({"i": i, "answer": ans if isinstance(ans, dict) else None,
+                            "code": log.get("code") if isinstance(log, dict) else None,
+                            "output": _short(log.get("output")) if isinstance(log, dict) else None,
+                            "error": log.get("error") if isinstance(log, dict) else None,
+                            "elapsed_ms": log.get("elapsed_ms") if isinstance(log, dict) else None})
             if not isinstance(ans, dict) or ans.get("type") in (None, "abstain"):
                 n_abstain += 1
             else:
@@ -161,19 +178,22 @@ class VoteAgent:
                     groups.append([ans])
                     evidence.append(log if isinstance(log, dict) else {})
             top = max((len(g) for g in groups), default=0)
+            if self.full:
+                continue
             if self.threshold > 0.5 and top >= need:          # decided: no other group can reach the threshold
                 break
             if top + (self.k - n_asked) < need:               # cannot reach the threshold any more
                 break
         top_group = max(groups, key=len, default=[])
         agreement = len(top_group) / self.k
-        decided = bool(top_group) and len(top_group) >= need
+        tied = sum(1 for g in groups if len(g) == len(top_group)) > 1     # two different answers with the same support: no answer
+        decided = bool(top_group) and len(top_group) >= need and not tied
         answer = {**top_group[0], "id": qid} if decided else abstain
         out_log = {"id": qid, "answer": answer, "elapsed_ms": int((time.monotonic() - began) * 1000), "thinking": None,
                    "code": None, "output": None,
                    "vote": {"k": self.k, "asked": n_asked, "threshold": self.threshold, "agreement": round(agreement, 4),
                             "groups": sorted((len(g) for g in groups), reverse=True), "abstain_samples": n_abstain,
-                            "decided": decided}}
+                            "decided": decided, "samples": samples}}
         if decided:                                            # keep the SQL and output of the winning group for the run log
             win = evidence[groups.index(top_group)]
             out_log["code"], out_log["output"] = win.get("code"), win.get("output")
@@ -202,4 +222,4 @@ def maybe_vote(agent: Any, environ: dict[str, str] | None = None) -> Any:
     if not can_sample(getattr(agent, "model", None)):
         logger.warning("the model cannot sample (greedy backend): vote off")
         return agent
-    return VoteAgent(agent, k, threshold, temperature, budget_s=budget)
+    return VoteAgent(agent, k, threshold, temperature, budget_s=budget, full=env.get(ENV_FULL, "0") == "1")
