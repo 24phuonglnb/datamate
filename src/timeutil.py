@@ -212,6 +212,10 @@ class _Ctx:
         (self.prev_refs if prev_ref else self.items).append((m.start(), p))
         self.mask(m)
 
+    def orig_date(self, m: re.Match) -> date | None:
+        """Date of a full d/m/yyyy match (None when it is not a real date)."""
+        return _day_from(m.group(1), m.group(2), m.group(3), self)
+
     def amb(self, m: re.Match, reason: str, candidates: list[str] | None = None) -> None:
         self.res.ambiguous.append({"text": m.group(0).strip(), "reason": reason, "candidates": candidates or []})
         self.mask(m)
@@ -325,6 +329,14 @@ def _s_n_days_from(ctx: _Ctx) -> None:
         n = int(m.group(1))
         d = _range_endpoint(m.group(2), ctx)
         if d and n >= 1:
+            ctx.add(Period(d, d + timedelta(days=n - 1), "range", (R_PRICE,), _src(m)), m)
+            ctx.res.comparison = Period(d - timedelta(days=n), d - timedelta(days=1), "range", (R_PRICE,), f"{n} ngay ngay truoc")
+    # "N ngay ke tu ngay do / ngay tang gia": the day is the one full date (with year) the question names; no or several dates: not resolved
+    for m in list(re.finditer(r"\b(\d{1,3})\s*ngay\s*(?:dau\s*)?ke tu\s*(?:ngay\s*)?(?:do|ay|tang gia|doi gia|len gia|tang|doi)\b", ctx.t)):
+        days = {ctx.orig_date(x) for x in re.finditer(_DAYS, ctx.t) if x.group(3)}
+        n = int(m.group(1))
+        if len(days) == 1 and None not in days and n >= 1 and ctx.res.comparison is None:
+            d = next(iter(days))
             ctx.add(Period(d, d + timedelta(days=n - 1), "range", (R_PRICE,), _src(m)), m)
             ctx.res.comparison = Period(d - timedelta(days=n), d - timedelta(days=1), "range", (R_PRICE,), f"{n} ngay ngay truoc")
 
