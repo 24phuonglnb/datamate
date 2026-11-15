@@ -1,19 +1,19 @@
 {
  "dev": {
   "n": 2291,
-  "template": 1340,
-  "template_pct": 58.49,
-  "template_correct": 1340,
+  "template": 1824,
+  "template_pct": 79.62,
+  "template_correct": 1824,
   "template_acc_pct": 100.0,
   "template_pa": 1.0,
-  "pa_lower_bound": 0.5849,
+  "pa_lower_bound": 0.7962,
   "wrong": 0,
   "by_intent": {
    "revenue": {
-    "n": 296,
-    "template": 296,
+    "n": 365,
+    "template": 365,
     "template_pct": 100.0,
-    "template_correct": 296,
+    "template_correct": 365,
     "template_acc_pct": 100.0,
     "template_pa": 1.0,
     "pa_lower_bound": 1.0,
@@ -40,10 +40,10 @@
     "wrong": 0
    },
    "cancel_rate": {
-    "n": 78,
-    "template": 78,
+    "n": 117,
+    "template": 117,
     "template_pct": 100.0,
-    "template_correct": 78,
+    "template_correct": 117,
     "template_acc_pct": 100.0,
     "template_pa": 1.0,
     "pa_lower_bound": 1.0,
@@ -90,20 +90,20 @@
     "wrong": 0
    },
    "item_qty": {
-    "n": 51,
-    "template": 51,
+    "n": 103,
+    "template": 103,
     "template_pct": 100.0,
-    "template_correct": 51,
+    "template_correct": 103,
     "template_acc_pct": 100.0,
     "template_pa": 1.0,
     "pa_lower_bound": 1.0,
     "wrong": 0
    },
    "rev_change_pct": {
-    "n": 68,
-    "template": 68,
+    "n": 134,
+    "template": 134,
     "template_pct": 100.0,
-    "template_correct": 68,
+    "template_correct": 134,
     "template_acc_pct": 100.0,
     "template_pa": 1.0,
     "pa_lower_bound": 1.0,
@@ -190,20 +190,20 @@
     "wrong": 0
    },
    "payment_method_rev": {
-    "n": 6,
-    "template": 6,
+    "n": 15,
+    "template": 15,
     "template_pct": 100.0,
-    "template_correct": 6,
+    "template_correct": 15,
     "template_acc_pct": 100.0,
     "template_pa": 1.0,
     "pa_lower_bound": 1.0,
     "wrong": 0
    },
    "channel_rev": {
-    "n": 4,
-    "template": 4,
+    "n": 22,
+    "template": 22,
     "template_pct": 100.0,
-    "template_correct": 4,
+    "template_correct": 22,
     "template_acc_pct": 100.0,
     "template_pa": 1.0,
     "pa_lower_bound": 1.0,
@@ -328,23 +328,115 @@
     "template_pa": 1.0,
     "pa_lower_bound": 1.0,
     "wrong": 0
+   },
+   "cust_freq_count": {
+    "n": 9,
+    "template": 9,
+    "template_pct": 100.0,
+    "template_correct": 9,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "cust_freq_share": {
+    "n": 10,
+    "template": 10,
+    "template_pct": 100.0,
+    "template_correct": 10,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "staff_revenue": {
+    "n": 7,
+    "template": 7,
+    "template_pct": 100.0,
+    "template_correct": 7,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "days_over_threshold": {
+    "n": 7,
+    "template": 7,
+    "template_pct": 100.0,
+    "template_correct": 7,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "shift": {
+    "n": 60,
+    "template": 60,
+    "template_pct": 100.0,
+    "template_correct": 60,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "price_effect": {
+    "n": 57,
+    "template": 57,
+    "template_pct": 100.0,
+    "template_correct": 57,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "category_share": {
+    "n": 28,
+    "template": 28,
+    "template_pct": 100.0,
+    "template_correct": 28,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "size_qty": {
+    "n": 27,
+    "template": 27,
+    "template_pct": 100.0,
+    "template_correct": 27,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "unsold_count": {
+    "n": 26,
+    "template": 26,
+    "template_pct": 100.0,
+    "template_correct": 26,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
    }
   },
   "llm_reasons": {
-   "not_target": 505,
-   "extra_filter_or_subintent": 186,
-   "multi_intent": 109,
-   "normalizer_residual_teencode": 41,
-   "unit_mismatch": 29,
-   "category_not_found": 20,
+   "not_target": 228,
+   "extra_filter_or_subintent": 115,
+   "category_not_found": 47,
+   "item_not_found": 15,
    "item_specific_revenue": 14,
-   "item_not_found": 14,
-   "several_named": 12,
+   "normalizer_residual_teencode": 13,
    "group_not_found": 9,
-   "period_count": 6,
+   "period_count": 8,
+   "none_named": 4,
+   "multi_intent": 3,
    "empty_result": 2,
    "purchase_pattern": 2,
-   "item_named": 2
+   "freq_not_at_least_n": 2,
+   "item_named": 2,
+   "price_no_comparison": 2,
+   "shift_pattern": 1
   },
   "wrong_attribution": {},
   "intent_accuracy_pct": 100.0,
@@ -671,6 +763,96 @@
     "wrong": 0
    },
    "expiry_nearest_lot": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "cust_freq_count": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "cust_freq_share": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "staff_revenue": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "days_over_threshold": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "shift": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "price_effect": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "category_share": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "size_qty": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "unsold_count": {
     "n": 0,
     "template": 0,
     "template_pct": 0.0,

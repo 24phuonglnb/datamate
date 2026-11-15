@@ -218,6 +218,206 @@
     "template_pa": 0.0,
     "pa_lower_bound": 0.0,
     "wrong": 0
+   },
+   "ingredient_revenue": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "rx_nonrx_revenue": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "rx_share": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "purchase_total": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "supplier_top": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "purchase_avg_price": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "stock_qty": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "stock_large_unit": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "stock_value": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "expiry_list": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "expiry_nearest_lot": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "cust_freq_count": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "cust_freq_share": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "staff_revenue": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "days_over_threshold": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "shift": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "price_effect": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "category_share": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "size_qty": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
+   },
+   "unsold_count": {
+    "n": 0,
+    "template": 0,
+    "template_pct": 0.0,
+    "template_correct": 0,
+    "template_acc_pct": 0.0,
+    "template_pa": 0.0,
+    "pa_lower_bound": 0.0,
+    "wrong": 0
    }
   },
   "llm_reasons": {},
@@ -227,23 +427,23 @@
  },
  "holdout": {
   "n": 709,
-  "template": 356,
-  "template_pct": 50.21,
-  "template_correct": 356,
-  "template_acc_pct": 100.0,
-  "template_pa": 1.0,
-  "pa_lower_bound": 0.5021,
-  "wrong": 0,
+  "template": 515,
+  "template_pct": 72.64,
+  "template_correct": 514,
+  "template_acc_pct": 99.81,
+  "template_pa": 0.9961,
+  "pa_lower_bound": 0.7236,
+  "wrong": 1,
   "by_intent": {
    "revenue": {
-    "n": 84,
-    "template": 84,
+    "n": 99,
+    "template": 99,
     "template_pct": 100.0,
-    "template_correct": 84,
-    "template_acc_pct": 100.0,
-    "template_pa": 1.0,
-    "pa_lower_bound": 1.0,
-    "wrong": 0
+    "template_correct": 98,
+    "template_acc_pct": 98.99,
+    "template_pa": 0.9798,
+    "pa_lower_bound": 0.9798,
+    "wrong": 1
    },
    "order_count": {
     "n": 51,
@@ -266,10 +466,10 @@
     "wrong": 0
    },
    "cancel_rate": {
-    "n": 12,
-    "template": 12,
+    "n": 23,
+    "template": 23,
     "template_pct": 100.0,
-    "template_correct": 12,
+    "template_correct": 23,
     "template_acc_pct": 100.0,
     "template_pa": 1.0,
     "pa_lower_bound": 1.0,
@@ -316,20 +516,20 @@
     "wrong": 0
    },
    "item_qty": {
-    "n": 13,
-    "template": 13,
+    "n": 20,
+    "template": 20,
     "template_pct": 100.0,
-    "template_correct": 13,
+    "template_correct": 20,
     "template_acc_pct": 100.0,
     "template_pa": 1.0,
     "pa_lower_bound": 1.0,
     "wrong": 0
    },
    "rev_change_pct": {
-    "n": 18,
-    "template": 18,
+    "n": 38,
+    "template": 38,
     "template_pct": 100.0,
-    "template_correct": 18,
+    "template_correct": 38,
     "template_acc_pct": 100.0,
     "template_pa": 1.0,
     "pa_lower_bound": 1.0,
@@ -416,23 +616,23 @@
     "wrong": 0
    },
    "payment_method_rev": {
-    "n": 1,
-    "template": 1,
+    "n": 6,
+    "template": 6,
     "template_pct": 100.0,
-    "template_correct": 1,
+    "template_correct": 6,
     "template_acc_pct": 100.0,
     "template_pa": 1.0,
     "pa_lower_bound": 1.0,
     "wrong": 0
    },
    "channel_rev": {
-    "n": 0,
-    "template": 0,
-    "template_pct": 0.0,
-    "template_correct": 0,
-    "template_acc_pct": 0.0,
-    "template_pa": 0.0,
-    "pa_lower_bound": 0.0,
+    "n": 2,
+    "template": 2,
+    "template_pct": 100.0,
+    "template_correct": 2,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
     "wrong": 0
    },
    "unit_total_qty": {
@@ -444,24 +644,240 @@
     "template_pa": 1.0,
     "pa_lower_bound": 1.0,
     "wrong": 0
+   },
+   "ingredient_revenue": {
+    "n": 4,
+    "template": 4,
+    "template_pct": 100.0,
+    "template_correct": 4,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "rx_nonrx_revenue": {
+    "n": 3,
+    "template": 3,
+    "template_pct": 100.0,
+    "template_correct": 3,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "rx_share": {
+    "n": 3,
+    "template": 3,
+    "template_pct": 100.0,
+    "template_correct": 3,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "purchase_total": {
+    "n": 3,
+    "template": 3,
+    "template_pct": 100.0,
+    "template_correct": 3,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "supplier_top": {
+    "n": 1,
+    "template": 1,
+    "template_pct": 100.0,
+    "template_correct": 1,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "purchase_avg_price": {
+    "n": 6,
+    "template": 6,
+    "template_pct": 100.0,
+    "template_correct": 6,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "stock_qty": {
+    "n": 3,
+    "template": 3,
+    "template_pct": 100.0,
+    "template_correct": 3,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "stock_large_unit": {
+    "n": 1,
+    "template": 1,
+    "template_pct": 100.0,
+    "template_correct": 1,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "stock_value": {
+    "n": 1,
+    "template": 1,
+    "template_pct": 100.0,
+    "template_correct": 1,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "expiry_list": {
+    "n": 1,
+    "template": 1,
+    "template_pct": 100.0,
+    "template_correct": 1,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "expiry_nearest_lot": {
+    "n": 2,
+    "template": 2,
+    "template_pct": 100.0,
+    "template_correct": 2,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "cust_freq_count": {
+    "n": 7,
+    "template": 7,
+    "template_pct": 100.0,
+    "template_correct": 7,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "cust_freq_share": {
+    "n": 1,
+    "template": 1,
+    "template_pct": 100.0,
+    "template_correct": 1,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "staff_revenue": {
+    "n": 2,
+    "template": 2,
+    "template_pct": 100.0,
+    "template_correct": 2,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "days_over_threshold": {
+    "n": 3,
+    "template": 3,
+    "template_pct": 100.0,
+    "template_correct": 3,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "shift": {
+    "n": 8,
+    "template": 8,
+    "template_pct": 100.0,
+    "template_correct": 8,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "price_effect": {
+    "n": 14,
+    "template": 14,
+    "template_pct": 100.0,
+    "template_correct": 14,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "category_share": {
+    "n": 22,
+    "template": 22,
+    "template_pct": 100.0,
+    "template_correct": 22,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "size_qty": {
+    "n": 6,
+    "template": 6,
+    "template_pct": 100.0,
+    "template_correct": 6,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
+   },
+   "unsold_count": {
+    "n": 8,
+    "template": 8,
+    "template_pct": 100.0,
+    "template_correct": 8,
+    "template_acc_pct": 100.0,
+    "template_pa": 1.0,
+    "pa_lower_bound": 1.0,
+    "wrong": 0
    }
   },
   "llm_reasons": {
-   "not_target": 241,
-   "extra_filter_or_subintent": 37,
-   "multi_intent": 28,
-   "normalizer_residual_teencode": 14,
-   "category_not_found": 9,
+   "not_target": 113,
+   "extra_filter_or_subintent": 22,
+   "category_not_found": 16,
    "item_specific_revenue": 8,
-   "several_named": 5,
-   "unit_mismatch": 4,
+   "purchase_book_not_built": 8,
+   "normalizer_residual_teencode": 7,
    "group_not_found": 4,
-   "period_count": 1,
+   "none_named": 4,
+   "period_count": 3,
+   "purchase_pattern": 3,
+   "freq_not_at_least_n": 2,
+   "stock_needs_day": 1,
    "item_not_found": 1,
-   "none_named": 1
+   "staff_not_found": 1,
+   "cost_price_missing": 1
   },
-  "wrong_attribution": {},
+  "wrong_attribution": {
+   "period_or_template": 1
+  },
   "intent_accuracy_pct": 100.0,
-  "errors": []
+  "errors": [
+   {
+    "id": "q_8df2a7aa2646",
+    "intent": "revenue",
+    "gold_type": "number",
+    "attr": "period_or_template(granularity-check)",
+    "reason_params": [
+     "end",
+     "start"
+    ]
+   }
+  ]
  }
 }

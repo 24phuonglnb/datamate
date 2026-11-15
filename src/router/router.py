@@ -49,6 +49,9 @@ class Router:
             why = self.rule_guard.check(intent, s)
             if why:
                 return RouteDecision("llm", why, intent)
+        days_th = I.days_over_threshold(s) if intent == "revenue" else None
+        if days_th is not None:
+            intent = "days_over_threshold"   # same rulebook rows as revenue (checked above)
         bad = I.extra_filter(intent, s)
         if bad:
             return RouteDecision("llm", bad, intent)
@@ -59,12 +62,16 @@ class Router:
         res = nq.period
         if res.ambiguous:
             return RouteDecision("llm", "period_ambiguous", intent)
-        if res.part_of_day:
-            return RouteDecision("llm", "part_of_day", intent)
         try:
             as_of_d = dt.date.fromisoformat(as_of[:10])
         except ValueError:
             return RouteDecision("llm", "no_as_of", intent)
+        if intent == "shift":
+            return self._shift(qid, s, res, as_of_d, conn, blocked_spans)
+        if res.part_of_day:
+            return RouteDecision("llm", "part_of_day", intent)
+        if intent == "price_effect":
+            return self._price_effect(qid, s, res, as_of_d, conn, blocked_spans)
         if intent in I.MONTHLY_INTENTS:
             return self._monthly(qid, intent, s, res, as_of_d, conn, blocked_spans)
         if intent in I.INVENTORY_INTENTS:
@@ -115,8 +122,16 @@ class Router:
             if m is None:
                 return RouteDecision("llm", why, intent, params=params)
             unit = I.asked_unit(s)
-            if unit is None or I.item_match_key(unit) != I.item_match_key(m[2] or ""):
+            if unit is None:
                 return RouteDecision("llm", "unit_mismatch", intent, params=params)
+            if I.item_match_key(unit) != I.item_match_key(m[2] or ""):
+                if not self._has_view(conn, "v_item_units"):
+                    return RouteDecision("llm", "unit_mismatch", intent, params=params)
+                fac = {f for _, k, f in conn.execute(SQL_TEMPLATES["item_unit_factors"], (m[0], m[1])) if k == I.item_match_key(unit)}
+                if len(fac) != 1 or next(iter(fac)) <= 0 or next(iter(fac)) == 1:
+                    return RouteDecision("llm", "unit_mismatch", intent, params=params)
+                kw["divisor"] = float(next(iter(fac)))
+                params["unit"] = unit
             kw["item"] = (m[0], m[1])
             params["item"] = m[1]
         elif intent in ("item_revenue", "sell_price_on_day"):
@@ -142,11 +157,25 @@ class Router:
         elif intent in ("payment_method_rev", "channel_rev"):
             col = "payment_method" if intent == "payment_method_rev" else "channel"
             raw = [r[0] for r in conn.execute(f"SELECT DISTINCT {col} FROM v_valid_orders WHERE {col} IS NOT NULL")]
-            vals, why = (I.match_payment if intent == "payment_method_rev" else I.match_channel)(raw, s)
-            if vals is None:
-                return RouteDecision("llm", why, intent, params=params)
-            kw["values"] = vals
-            params["values"] = vals
+            table, cues = (I._PAY, I._PAY_CUES_EXP) if intent == "payment_method_rev" else (I._CHAN, I._CHAN_CUES_EXP)
+            named = I.named_in_order(table, cues, raw, s)
+            pct = bool(re.search(r"%|phan tram|chiem|ti trong", s))
+            if not named or len(named) > 3 or (pct and len(named) != 1):
+                return RouteDecision("llm", "none_named" if not named else "several_named_or_percent", intent, params=params)
+            params["values"] = [k for k, _ in named]
+            sql = SQL_TEMPLATES["payment_revenue" if intent == "payment_method_rev" else "channel_revenue"]
+            revs = [int(conn.execute(sql.format(ph=",".join("?" * len(v))), (start, end, *v)).fetchone()[0] or 0) for _, v in named]
+            if pct:
+                total = float(conn.execute(SQL_TEMPLATES["revenue"], (start, end)).fetchone()[0] or 0)
+                if total <= 0:
+                    return RouteDecision("llm", "empty_total", intent, params=params)
+                value = float(conn.execute("SELECT ROUND(? * 100.0 / ?, 2)", (revs[0], total)).fetchone()[0])
+                if not 0 <= value <= 100:
+                    return RouteDecision("abstain", "sanity:share_outside_0_100", intent, params=params)
+                return RouteDecision("template", "ok", intent, {"id": qid, "type": "percent", "answer": value}, params)
+            if len(named) > 1:
+                return RouteDecision("template", "ok", intent, {"id": qid, "type": "list", "answer": revs}, params)
+            kw["values"] = named[0][1]
         elif intent == "unit_total_qty":
             unit = I.unit_for_total(s)
             bases = [r[0] for r in conn.execute("SELECT DISTINCT base_unit FROM v_items WHERE base_unit IS NOT NULL")]
@@ -183,6 +212,44 @@ class Router:
                     return RouteDecision("llm", "rx_polarity_unclear", intent, params=params)
                 kw["values"] = [pol]
                 params["rx"] = pol
+        elif intent in ("cust_freq_count", "cust_freq_share"):
+            n_min = I.freq_orders(s)
+            if n_min is None or not 1 <= n_min <= 100:
+                return RouteDecision("llm", "freq_not_at_least_n", intent, params=params)
+            if not conn.execute(SQL_TEMPLATES["customers_recorded"]).fetchone()[0]:   # no customer is recorded: rulebook section 7
+                return self._unanswerable(qid, "Cửa hàng không ghi khách trên đơn (rulebook mục 7).", "no_customer_info", intent, params)
+            n_all, n_freq = conn.execute(SQL_TEMPLATES["cust_freq"], (n_min, start, end)).fetchone()
+            params["min_orders"] = n_min
+            if not n_all:
+                return RouteDecision("llm", "no_customers_in_period", intent, params=params)
+            if intent == "cust_freq_count":
+                return RouteDecision("template", "ok", intent, {"id": qid, "type": "number", "answer": int(n_freq or 0)}, params)
+            value = float(conn.execute("SELECT ROUND(? * 100.0 / ?, 2)", (n_freq or 0, n_all)).fetchone()[0])
+            return RouteDecision("template", "ok", intent, {"id": qid, "type": "percent", "answer": value}, params)
+        elif intent == "staff_revenue":
+            code = I.staff_code(s)
+            known = {str(r[0]).upper() for r in conn.execute("SELECT DISTINCT staff FROM v_valid_orders WHERE staff IS NOT NULL")}
+            if code is None or code not in known:
+                return RouteDecision("llm", "staff_not_found", intent, params=params)
+            params["staff"] = code
+            value = int(conn.execute(SQL_TEMPLATES["staff_revenue"], (start, end, code)).fetchone()[0])
+            return RouteDecision("template", "ok", intent, {"id": qid, "type": "number", "answer": value}, params)
+        elif intent == "days_over_threshold":
+            kw["threshold"] = days_th
+            params["threshold"] = days_th
+        elif intent == "category_share":
+            cats = [r[0] for r in conn.execute("SELECT DISTINCT category FROM v_items WHERE category IS NOT NULL")]
+            c, why = I.match_category(cats, I.strip_dates(s))
+            if c is None:
+                return RouteDecision("llm", why, intent, params=params)
+            kw["item"] = (None, c)
+            params["category"] = c
+        elif intent == "size_qty":
+            letter = I.size_letter(s)
+            if letter is None:
+                return RouteDecision("llm", "size_not_named", intent, params=params)
+            kw["values"] = [f"%({letter})"]
+            params["size"] = letter
         elif intent == "order_count":
             th, why = I.order_threshold(s)
             if why not in ("ok", "no_threshold"):
@@ -194,6 +261,8 @@ class Router:
             return RouteDecision("llm", "best_item_with_k", intent, params=params)
         if prev:
             kw["prev"] = prev
+        if intent == "unsold_count":
+            params["before"] = start
         value = run_template(conn, intent, start, end, **kw)
         if value is None:
             return RouteDecision("llm", "empty_result", intent, params=params)
@@ -240,6 +309,10 @@ class Router:
         start, end = cur.start.isoformat(), min(cur.end, as_of_d).isoformat()
         params.update({"start": start, "end": end})
         if not self._has_view(conn, "v_valid_purchase_lines"):
+            # "no view" only means "no purchase book" when the shop has no raw purchase table either; a shop whose purchase
+            # sheets the view layer did not recognise would be wrongly called unanswerable (hold-out: 8 of 9 wrong)
+            if conn.execute("SELECT 1 FROM sqlite_master WHERE name LIKE 'raw%nhap%' LIMIT 1").fetchone():
+                return RouteDecision("llm", "purchase_book_not_built", intent, params=params)
             return self._unanswerable(qid, "Cửa hàng không có sổ nhập hàng (rulebook mục 7).", "no_purchase_book", intent, params)
         n_amount, lo, hi = conn.execute("SELECT COUNT(line_amount), MIN(receipt_date), MAX(receipt_date) FROM v_valid_purchase_lines").fetchone()
         if not n_amount:   # quantities only: no purchase money recorded (VIEWS.md 3.8 rule 3)
@@ -326,8 +399,8 @@ class Router:
             total, n, n_null = conn.execute(SQL_TEMPLATES["stock_value"]).fetchone()
             if not n:
                 return RouteDecision("llm", "empty_stock", intent, params=params)
-            if n_null == n:
-                return self._unanswerable(qid, "Danh mục không ghi giá vốn (rulebook mục 7).", "no_cost_price", intent, params)
+            if n_null == n:   # not "unanswerable": the cost may sit in a column the view layer did not map (hold-out: 0 of 1 right)
+                return RouteDecision("llm", "cost_price_missing", intent, params=params)
             if n_null:
                 return RouteDecision("llm", "cost_price_partial", intent, params=params)
             value: Any = int(total + 0.5)
@@ -395,6 +468,86 @@ class Router:
         if value is None:
             return RouteDecision("llm", "no_lot_in_stock", intent, params=params)
         return RouteDecision("template", "ok", intent, {"id": qid, "type": "date", "answer": value}, params)
+
+    def _shift(self, qid, s, res, as_of_d, conn, blocked_spans):
+        """Revenue / orders of the morning or afternoon shift, or afternoon vs morning in percent (rulebook section 2:
+        06:00-13:59 and 14:00-21:59 by the hour the order was created; the baseline of a comparison is the morning)."""
+        intent = "shift"
+        pod = res.part_of_day
+        if not pod or res.ambiguous or res.comparison is not None or len(res.periods) != 1:
+            return RouteDecision("llm", "shift_period_or_shift_unclear", intent)
+        cur = res.periods[0]
+        if cur.start is None:
+            return RouteDecision("llm", "period_open", intent)
+        shifts = [k for k in ("sang", "chieu") if k in pod]
+        measure = I.shift_measure(s)
+        pct = bool(re.search(r"%|phan tram", s))
+        if measure is None or not shifts or (pct and shifts != ["sang", "chieu"]) or (not pct and len(shifts) != 1):
+            return RouteDecision("llm", "shift_pattern", intent)
+        if pct and pod.get("baseline") != "sang":
+            return RouteDecision("llm", "shift_baseline", intent)
+        start, end = cur.start.isoformat(), min(cur.end, as_of_d).isoformat()
+        params: dict[str, Any] = {"start": start, "end": end, "shifts": shifts, "measure": measure}
+        if blocked_spans and blocked_by_spans(blocked_spans, start, end):
+            return RouteDecision("abstain", "period_overlaps_unparsed_dates", intent, params=params)
+        if not self._has_view(conn, "v_valid_orders"):
+            return RouteDecision("llm", "no_views", intent, params=params)
+        min_date = conn.execute("SELECT MIN(order_date) FROM v_orders").fetchone()[0]
+        if min_date and end < min_date:
+            return self._unanswerable(qid, "Kỳ được hỏi nằm hoàn toàn trước ngày đầu tiên có dữ liệu của cửa hàng (rulebook mục 7).", "before_data_start", intent, params)
+        if conn.execute(SQL_TEMPLATES["shift_time_missing"], (start, end)).fetchone()[0]:
+            return RouteDecision("llm", "order_time_missing", intent, params=params)   # the hour of some orders is not recorded
+        sql = SQL_TEMPLATES["shift_revenue" if measure == "money" else "shift_orders"]
+
+        def one(shift):
+            v = conn.execute(sql, (start, end, *pod[shift])).fetchone()[0]
+            return float(v) if v is not None else 0.0
+
+        if pct:
+            base, other = one("sang"), one("chieu")
+            if base <= 0:
+                return RouteDecision("llm", "empty_baseline_shift", intent, params=params)
+            value: Any = float(conn.execute("SELECT ROUND((? - ?) * 100.0 / ?, 2)", (other, base, base)).fetchone()[0])
+            atype = "percent"
+            if not -100 <= value <= 100000:
+                return RouteDecision("abstain", "sanity:shift_percent_implausible", intent, params=params)
+        else:
+            v = one(shifts[0])
+            value, atype = int(round(v)), "number"
+        return RouteDecision("template", "ok", intent, {"id": qid, "type": atype, "answer": value}, params)
+
+    def _price_effect(self, qid, s, res, as_of_d, conn, blocked_spans):
+        """Change (%) of the base-unit quantity of an item: N days from day D (D included) vs the N days right before D
+        (rulebook section 5); both ranges use valid orders only.  Ranges come from the shared Period resolver."""
+        intent = "price_effect"
+        if res.comparison is None:
+            return RouteDecision("llm", "price_no_comparison", intent)
+        cur_ps = [p for p in res.periods if p.granularity == "range" and p.start is not None and "ke tu" in p.source]
+        if len(cur_ps) != 1:
+            return RouteDecision("llm", "price_range_missing", intent)
+        cur, prv = cur_ps[0], res.comparison
+        n = (cur.end - cur.start).days + 1
+        if prv.start is None or (prv.end - prv.start).days + 1 != n or prv.end != cur.start - dt.timedelta(days=1) or cur.end > as_of_d:
+            return RouteDecision("llm", "price_ranges_inconsistent", intent)
+        params: dict[str, Any] = {"start": cur.start.isoformat(), "end": cur.end.isoformat(),
+                                  "prev": [prv.start.isoformat(), prv.end.isoformat()]}
+        if blocked_spans and (blocked_by_spans(blocked_spans, *params["prev"]) or blocked_by_spans(blocked_spans, params["start"], params["end"])):
+            return RouteDecision("abstain", "period_overlaps_unparsed_dates", intent, params=params)
+        cat = conn.execute("SELECT item_code, item_name, name_aliases, base_unit FROM v_items").fetchall()
+        m, why = I.match_item(cat, I.strip_dates(s))
+        if m is None:
+            return RouteDecision("llm", why, intent, params=params)
+        params["item"] = m[1]
+        key = "qty_by_code" if m[0] else "qty_by_name"
+        ident = m[0] or m[1]
+        now = float(conn.execute(SQL_TEMPLATES[key], (params["start"], params["end"], ident)).fetchone()[0])
+        before = float(conn.execute(SQL_TEMPLATES[key], (*params["prev"], ident)).fetchone()[0])
+        if before <= 0:
+            return RouteDecision("llm", "empty_previous_range", intent, params=params)
+        value = float(conn.execute("SELECT ROUND((? - ?) * 100.0 / ?, 2)", (now, before, before)).fetchone()[0])
+        if not -100 <= value <= 100000:
+            return RouteDecision("abstain", "sanity:price_effect_percent_implausible", intent, params=params)
+        return RouteDecision("template", "ok", intent, {"id": qid, "type": "percent", "answer": value}, params)
 
     def _monthly(self, qid, intent, s, res, as_of_d, conn, blocked_spans):
         """best_month / monthly_series / streak_bool: months named by the question, revenue of each month (valid orders)."""

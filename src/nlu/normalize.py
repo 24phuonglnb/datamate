@@ -123,6 +123,9 @@ def _keep_case(src: str, out: str) -> str:
     return out[:1].upper() + out[1:] if src[:1].isupper() else out
 
 
+_TH_MONTH = re.compile(r"\b[Tt][Hh]\b(?=\s+(?:trước|truoc|trc|này|nay|sau|rồi|roi)\b)")
+
+
 def fix_tokens(text: str) -> tuple[str, list[tuple[str, str]]]:
     res = _resources()
     changes: list[tuple[str, str]] = []
@@ -146,6 +149,12 @@ def fix_tokens(text: str) -> tuple[str, list[tuple[str, str]]]:
         changes.append((tok, out))
         return out
 
+    # "th" alone is too short for the vocabulary-built teencode map; it means "thang" only before these words
+    def th(m: re.Match) -> str:
+        changes.append((m.group(0), "tháng"))
+        return "tháng"
+
+    text = _TH_MONTH.sub(th, text)
     return _WORD.sub(repl, text), changes
 
 

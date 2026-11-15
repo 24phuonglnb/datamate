@@ -169,4 +169,25 @@ SPECS: dict[tuple[str, str], dict] = {
         "must": [r"lo con ton", r"chua qua han", r"han som nhat"],
         "contradict": [r"han muon nhat", r"(?<!chua )(tinh )?ca lo da qua han"],
         "canon": "trong cac lo con ton chua qua han tai hom nay, lo co han som nhat"},
+    # router-expansion rows; written from the train rulebook text only
+    ("2", "ca sang, ca chieu"): {
+        "must": [r"06:00", r"13:59", r"14:00", r"21:59", r"moc la ca sang"],
+        "contradict": [r"moc la ca chieu"],
+        "canon": "theo gio tao don: ca sang 06:00-13:59, ca chieu 14:00-21:59. so ca chieu voi ca sang: moc la ca sang"},
+    ("5", "hieu ung tang gia"): {
+        "must": [r"n ngay ke tu d", r"tinh ca d", r"n ngay ngay truoc d", r"bo don huy va don tra"],
+        "contradict": [r"(?<!bo )(?<!khong tinh )(?<!loai )ca don huy", r"khong tinh d\b"],
+        "canon": "so so luong (don vi co ban) n ngay ke tu d (tinh ca d) voi n ngay ngay truoc d; ca hai khoang bo don huy va don tra"},
+    ("5", "mat hang khong ban duoc trong ky (e)"): {
+        "must": [r"da tung ban truoc ky", r"khong tinh don huy", r"trong ky khong co don nao"],
+        "contradict": [r"(?<!khong )(tinh|ke ca) mat hang chua tung ban"],
+        "canon": "mat hang cua hang da tung ban truoc ky (co trong don, khong tinh don huy, don tra) nhung trong ky khong co don nao mua mat hang do"},
+    ("6", "size m, size l"): {
+        "must": [r"ket thuc bang \(m\) hoac \(l\)", r"khong phan biet hoa thuong"],
+        "contradict": [r"bat dau bang \(m\)", r"(?<!khong )phan biet hoa thuong"],
+        "canon": "mon co ten ket thuc bang (m) hoac (l), khong phan biet hoa thuong"},
+    ("3", "xac dinh khach"): {
+        "must": [r"ma khach la mot khach", r"khach le\)? khong phai khach|khach le khong tinh", r"theo ten ghi tren don"],
+        "contradict": [r"khach le (la|tinh la) mot khach", r"khach le van tinh"],
+        "canon": "shop co ma khach: moi ma khach la mot khach; don khong ghi ma (khach le) khong phai khach. shop khong co ma khach: xac dinh khach theo ten ghi tren don"},
 }

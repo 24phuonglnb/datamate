@@ -152,6 +152,34 @@ SQL_TEMPLATES.update({
     "item_unit_factors": "SELECT unit, unit_key, factor FROM v_item_units WHERE COALESCE(item_code, item_name) = COALESCE(?, ?)",
 })
 
+# router-expansion templates (rulebook section 2 shifts, 5 price effect, 3 category share, 6 size, 5 unsold)
+SQL_TEMPLATES.update({
+    "cust_freq": ("SELECT COUNT(*), SUM(CASE WHEN n >= ? THEN 1 ELSE 0 END) FROM (SELECT customer_key, COUNT(*) AS n FROM v_valid_orders "
+                  "WHERE order_date BETWEEN ? AND ? AND customer_key IS NOT NULL GROUP BY customer_key)"),
+    "customers_recorded": "SELECT COUNT(customer_key) FROM v_valid_orders",
+    "staff_revenue": ("SELECT CAST(ROUND(COALESCE(SUM(revenue), 0)) AS INTEGER) FROM v_valid_orders "
+                      "WHERE order_date BETWEEN ? AND ? AND UPPER(staff) = ?"),
+    "days_over_threshold": ("SELECT COUNT(*) FROM (SELECT order_date FROM v_valid_orders WHERE order_date BETWEEN ? AND ? "
+                            "GROUP BY order_date HAVING SUM(revenue) >= ?)"),
+    "shift_revenue": ("SELECT SUM(revenue) FROM v_valid_orders WHERE order_date BETWEEN ? AND ? "
+                      "AND substr(order_time, 1, 5) BETWEEN ? AND ?"),
+    "shift_orders": ("SELECT COUNT(*) FROM v_valid_orders WHERE order_date BETWEEN ? AND ? "
+                     "AND substr(order_time, 1, 5) BETWEEN ? AND ?"),
+    "shift_time_missing": "SELECT COUNT(*) FROM v_valid_orders WHERE order_date BETWEEN ? AND ? AND (order_time IS NULL OR order_time = '')",
+    "qty_by_code": ("SELECT COALESCE(SUM(qty_base), 0) FROM v_valid_lines WHERE is_service_fee = 0 "
+                    "AND order_date BETWEEN ? AND ? AND item_code = ?"),
+    "qty_by_name": ("SELECT COALESCE(SUM(qty_base), 0) FROM v_valid_lines WHERE is_service_fee = 0 "
+                    "AND order_date BETWEEN ? AND ? AND item_name = ?"),
+    "category_share": ("SELECT ROUND(100.0 * (SELECT SUM(line_amount) FROM v_valid_lines WHERE is_service_fee = 0 "
+                       "AND order_date BETWEEN ? AND ? AND category = ?) / NULLIF((SELECT SUM(revenue) FROM v_valid_orders "
+                       "WHERE order_date BETWEEN ? AND ?), 0), 2)"),
+    "size_qty": ("SELECT COALESCE(SUM(qty_base), 0) FROM v_valid_lines WHERE is_service_fee = 0 "
+                 "AND order_date BETWEEN ? AND ? AND LOWER(TRIM(item_name)) LIKE ?"),
+    "unsold_count": ("SELECT COUNT(*) FROM (SELECT DISTINCT COALESCE(item_code, item_name) AS k FROM v_valid_lines "
+                     "WHERE is_service_fee = 0 AND order_date < ?) WHERE k NOT IN (SELECT COALESCE(item_code, item_name) "
+                     "FROM v_valid_lines WHERE is_service_fee = 0 AND order_date BETWEEN ? AND ?)"),
+})
+
 # answer type per intent (rulebook section 9)
 ANSWER_TYPE = {
     "revenue": "number", "order_count": "number", "cancel_count": "number", "aov": "number",
@@ -163,6 +191,8 @@ ANSWER_TYPE = {
     "ingredient_revenue": "number", "rx_nonrx_revenue": "number", "rx_share": "percent",
     "purchase_total": "number", "supplier_top": "string", "purchase_avg_price": "number",
     "stock_qty": "number", "stock_large_unit": "list", "stock_value": "number",
+    "cust_freq_count": "number", "cust_freq_share": "percent", "staff_revenue": "number",
+    "days_over_threshold": "number", "shift": "number", "price_effect": "percent", "category_share": "percent", "size_qty": "number", "unsold_count": "number",
     "expiry_list": "number", "expiry_nearest_lot": "date",   # expiry_list: "number" (lot count) or "list" (products), set per question
 }
 
@@ -170,7 +200,7 @@ ANSWER_TYPE = {
 def run_template(conn: sqlite3.Connection, intent: str, start: str, end: str, *,
                  k: int | None = None, item: tuple[str | None, str] | None = None,
                  prev: tuple[str, str] | None = None, threshold: float | None = None,
-                 values: list[str] | None = None) -> Any:
+                 values: list[str] | None = None, divisor: float | None = None) -> Any:
     """Execute the template of *intent*; returns the answer value (None when the template has no result)."""
     if intent == "rev_change_pct":
         assert prev is not None
@@ -199,6 +229,19 @@ def run_template(conn: sqlite3.Connection, intent: str, start: str, end: str, *,
             return None
         v = float(next(iter(vals)))
         return int(v) if abs(v - round(v)) < 1e-9 else v
+    if intent == "days_over_threshold":
+        assert threshold is not None
+        return int(conn.execute(SQL_TEMPLATES["days_over_threshold"], (start, end, threshold)).fetchone()[0])
+    if intent == "category_share":
+        assert item is not None
+        row = conn.execute(SQL_TEMPLATES["category_share"], (start, end, item[1], start, end)).fetchone()
+        return float(row[0]) if row and row[0] is not None else None
+    if intent == "size_qty":
+        assert values
+        v = float(conn.execute(SQL_TEMPLATES["size_qty"], (start, end, values[0])).fetchone()[0] or 0)
+        return int(round(v)) if abs(v - round(v)) < 1e-6 else round(v, 2)
+    if intent == "unsold_count":
+        return int(conn.execute(SQL_TEMPLATES["unsold_count"], (start, start, end)).fetchone()[0])
     if intent == "ingredient_revenue":
         assert item is not None
         row = conn.execute(SQL_TEMPLATES["ingredient_revenue"], (start, end, item[1])).fetchone()
@@ -231,6 +274,8 @@ def run_template(conn: sqlite3.Connection, intent: str, start: str, end: str, *,
         row = (conn.execute(SQL_TEMPLATES["item_qty_by_code"], (start, end, code)).fetchone() if code
                else conn.execute(SQL_TEMPLATES["item_qty_by_name"], (start, end, name)).fetchone())
         val = float(row[0]) if row and row[0] is not None else 0.0
+        if divisor:
+            val = val / divisor
         return int(round(val)) if abs(val - round(val)) < 1e-6 else round(val, 2)
     if intent == "order_count" and threshold is not None:
         row = conn.execute(SQL_TEMPLATES["order_count_threshold"], (start, end, threshold)).fetchone()

@@ -45,8 +45,6 @@ def test_non_target_goes_to_llm(text):
 
 
 @pytest.mark.parametrize("text", [
-    "doanh thu tháng 3/2026 của nhân viên Lan",
-    "doanh thu ca sáng tháng 3/2026",
     "doanh thu tháng 3/2026 so với tháng 2/2026",
 ])
 def test_extra_filters_rejected(text):
@@ -388,7 +386,9 @@ def _guard(running):
 ALL_INTENTS = {"revenue", "order_count", "cancel_count", "cancel_rate", "aov", "best_day", "topk_items", "best_item",
                "item_qty", "item_revenue", "category_rev", "sell_price_on_day", "rev_change_pct", "best_month",
                "monthly_series", "streak_bool", "cust_group_rev", "payment_method_rev", "channel_rev", "unit_total_qty",
-               "ingredient_revenue", "rx_nonrx_revenue", "rx_share"}
+               "ingredient_revenue", "rx_nonrx_revenue", "rx_share",
+               "shift", "category_share", "size_qty", "unsold_count", "cust_freq_count", "cust_freq_share", "staff_revenue",
+               "days_over_threshold"}
 
 
 def test_rule_guard_canonical_rulebook_disables_nothing():
@@ -795,8 +795,8 @@ def test_group_payment_channel_and_unit_totals():
     assert d.answer["answer"] == 400                                             # "Thu hộ (COD)" is its own method
     d = route("doanh thu các đơn bán tại quầy tháng 2/2026 là bao nhiêu", c)
     assert d.intent == "channel_rev" and d.answer["answer"] == 400
-    d = route("doanh thu các đơn bán qua zalo oa và bán tại quầy tháng 1/2026", c)   # two channels: not a single number
-    assert d.route == "llm"
+    d = route("doanh thu các đơn bán qua zalo oa và bán tại quầy tháng 1/2026", c)   # two channels: one number each, in question order
+    assert d.route == "template" and d.answer["type"] == "list" and len(d.answer["answer"]) == 2
     d = route("tháng 1/2026 tổng cộng bán được bao nhiêu ly", c)
     assert d.intent == "unit_total_qty" and d.answer["answer"] == 5                 # service fee line excluded
     d = route("tháng 1/2026 bán được tổng cộng bao nhiêu ly cà phê sữa", c)         # a named item: not the all-items total
@@ -936,6 +936,100 @@ def test_inventory_rule_rows_missing_switch_the_intent_off():
     text = "## 5. Kho\n| Tiền nhập hàng trong kỳ | x |\n"   # every other row missing: the dependent intents are disabled
     g = RuleGuard(ref, text)
     assert "stock_large_unit" in g.disabled and "purchase_avg_price" in g.disabled and "ingredient_revenue" in g.disabled
+
+
+# ---- router-expansion: shifts, price effect, category share, size, unsold items, customers, staff -----------------------
+def _exp_db(order_time=True):
+    c = sqlite3.connect(":memory:")
+    _OPEN.append(c)
+    c.executescript("""
+    CREATE TABLE v_orders(order_id, order_date, order_time, status, revenue, customer_key, staff);
+    CREATE VIEW v_valid_orders AS SELECT * FROM v_orders WHERE status NOT IN ('huy','tra_hang');
+    CREATE TABLE v_valid_lines(order_date, item_code, item_name, qty_base, is_service_fee, line_amount, category);
+    CREATE TABLE v_items(item_code, item_name, name_aliases, base_unit, category);
+    CREATE TABLE v_item_units(item_code, item_name, unit, unit_key, factor, base_unit);
+    """)
+    t = (lambda x: x) if order_time else (lambda x: None)
+    c.executemany("INSERT INTO v_orders VALUES(?,?,?,?,?,?,?)", [
+        (1, "2026-03-02", t("09:00:00"), "hoan_thanh", 1000, "K1", "NV001"), (2, "2026-03-02", t("15:30:00"), "hoan_thanh", 3000, "K1", "NV002"),
+        (3, "2026-03-03", t("10:00:00"), "hoan_thanh", 500, "K2", "NV001"), (4, "2026-03-03", t("20:00:00"), "huy", 9990, "K2", "NV001"),
+        (5, "2026-03-04", t("07:00:00"), "hoan_thanh", 1500, None, "NV001"), (6, "2026-03-05", t("14:00:00"), "hoan_thanh", 2000, "K1", "NV002")])
+    c.executemany("INSERT INTO v_items VALUES(?,?,?,?,?)", [
+        ("A1", "Cà phê sữa (M)", "Cà phê sữa (M)", "ly", "Cà phê"), ("A2", "Cà phê sữa (L)", "Cà phê sữa (L)", "ly", "Cà phê"),
+        ("B1", "Nước suối Aqua", "Nước suối Aqua", "chai", "Nước"), ("C1", "Bánh mì", "Bánh mì", "cái", "Bánh")])
+    c.executemany("INSERT INTO v_item_units VALUES(?,?,?,?,?,?)", [("B1", "Nước suối Aqua", "thùng", "thung", 24, "chai")])
+    c.executemany("INSERT INTO v_valid_lines VALUES(?,?,?,?,?,?,?)", [
+        ("2026-02-20", "C1", "Bánh mì", 4, 0, 40, "Bánh"),                                       # sold before March only
+        ("2026-03-02", "A1", "Cà phê sữa (M)", 3, 0, 150, "Cà phê"), ("2026-03-02", "A2", "Cà phê sữa (L)", 2, 0, 250, "Cà phê"),
+        ("2026-03-03", "B1", "Nước suối Aqua", 48, 0, 50, "Nước"), ("2026-03-04", "B1", "Nước suối Aqua", 24, 0, 150, "Nước"),
+        ("2026-03-06", "B1", "Nước suối Aqua", 12, 0, 60, "Nước"), ("2026-03-02", None, "Phí phục vụ", 1, 1, 10, None)])
+    return c
+
+
+@pytest.mark.parametrize("text,answer,atype", [
+    ("doanh thu ca sáng tháng 3/2026 là bao nhiêu", 3000, "number"),                                  # orders 1, 3, 5: 09:00, 10:00, 07:00 (4 is cancelled)
+    ("tháng 3/2026 ca chiều có bao nhiêu đơn", 2, "number"),                                          # 15:30 and 14:00
+    ("tháng 3/2026 doanh thu ca chiều so với ca sáng chênh bao nhiêu %", 66.67, "percent"),           # (5000 - 3000) / 3000
+])
+def test_shift_templates(text, answer, atype):
+    d = route(text, _exp_db())
+    assert d.route == "template", d.reason
+    assert (d.answer["answer"], d.answer["type"]) == (answer, atype)
+
+
+def test_shift_without_order_time_is_not_answered():
+    d = route("doanh thu ca sáng tháng 3/2026 là bao nhiêu", _exp_db(order_time=False))
+    assert d.route == "llm" and d.reason == "order_time_missing"
+
+
+def test_price_effect_uses_the_resolved_ranges():
+    q = "từ ngày 03/03/2026, Nước suối Aqua tăng giá lên 6.000đ. So 2 ngày kể từ ngày 03/03/2026 với 2 ngày ngay trước đó, số chai bán ra thay đổi bao nhiêu %"
+    d = route(q, _exp_db())            # 03-03..03-04: 72 bottles; 03-01..03-02: none -> not decidable
+    assert d.route == "llm" and d.reason == "empty_previous_range"
+    q2 = "từ ngày 05/03/2026, Nước suối Aqua tăng giá lên 6.000đ. So 2 ngày kể từ ngày 05/03/2026 với 2 ngày ngay trước đó, số chai bán ra thay đổi bao nhiêu %"
+    d = route(q2, _exp_db())           # 03-05..03-06: 12; 03-03..03-04: 72 -> -83.33
+    assert d.route == "template" and d.answer == {"id": "t1", "type": "percent", "answer": -83.33}
+    q3 = q2.replace("ngày kể từ ngày 05/03/2026", "ngày kể từ ngày đó")
+    d = route(q3, _exp_db())
+    assert d.route == "template" and d.answer["answer"] == -83.33
+
+
+def test_category_size_unsold_threshold_customers_staff_and_unit_conversion():
+    c = _exp_db()
+    d = route("tháng 3/2026 nhóm cà phê chiếm bao nhiêu phần trăm doanh thu", c)       # 400 / 8000 = 5%
+    assert d.route == "template" and d.answer["answer"] == 5.0 and d.answer["type"] == "percent"
+    d = route("tháng 3/2026 bán được bao nhiêu ly size M", c)
+    assert d.route == "template" and d.answer["answer"] == 3
+    d = route("tháng 3/2026 có bao nhiêu mặt hàng bị ế", c)                               # Bánh mì sold in February, not in March
+    assert d.route == "template" and d.answer["answer"] == 1
+    d = route("tháng 3/2026 có mấy ngày doanh thu đạt 2.000 đồng trở lên", c)              # 03-02: 4000, 03-03: 500, 03-04: 1500, 03-05: 2000
+    assert d.route == "template" and d.answer["answer"] == 2
+    d = route("tháng 3/2026 có mấy khách mua từ 2 đơn trở lên", c)                         # K1: 3 orders; K2: 1
+    assert d.route == "template" and d.answer["answer"] == 1
+    d = route("tháng 3/2026 khách mua từ 2 đơn trở lên chiếm bao nhiêu phần trăm số khách đã mua", c)
+    assert d.route == "template" and d.answer["answer"] == 50.0
+    d = route("tháng 3/2026 nhân viên mã NV002 bán được bao nhiêu tiền", c)
+    assert d.route == "template" and d.answer["answer"] == 5000
+    d = route("tháng 3/2026 bán được bao nhiêu thùng nước suối aqua", c)                  # 84 bottles = 3.5 crates
+    assert d.route == "template" and d.answer["answer"] == 3.5
+    d = route("tháng 3/2026 khách mua hơn 2 đơn", c)                                       # not "at least": never answered
+    assert d.route == "llm"
+
+
+def test_missing_purchase_view_is_unanswerable_only_without_raw_purchase_tables():
+    c = _pharma_db(purchases=False)
+    q = "tổng tiền nhập hàng tháng 3/2026 là bao nhiêu"
+    assert route(q, c).route == "unanswerable"                                  # no purchase data at all
+    c.execute("CREATE TABLE raw_du_lieu_danh_sach_nhap_hang(a)")                 # purchase sheets exist but no view was built
+    d = route(q, c)
+    assert d.route == "llm" and d.reason == "purchase_book_not_built"
+
+
+def test_stock_value_without_any_cost_price_goes_to_llm():
+    c = _pharma_db()
+    c.execute("UPDATE v_stock SET cost_price = NULL, stock_value = NULL")
+    d = route("tính theo giá vốn, tiền hàng nằm trong kho vào cuối ngày 07/09/2026 là bao nhiêu", c)
+    assert d.route == "llm" and d.reason == "cost_price_missing"
 
 
 # ---- hints: payment method / channel / customer group filters and item matching next to a date ------------------------
