@@ -1,19 +1,19 @@
 {
  "dev": {
   "n": 2291,
-  "template": 1824,
-  "template_pct": 79.62,
-  "template_correct": 1824,
+  "template": 1900,
+  "template_pct": 82.93,
+  "template_correct": 1900,
   "template_acc_pct": 100.0,
   "template_pa": 1.0,
-  "pa_lower_bound": 0.7962,
+  "pa_lower_bound": 0.8293,
   "wrong": 0,
   "by_intent": {
    "revenue": {
-    "n": 365,
-    "template": 365,
+    "n": 386,
+    "template": 386,
     "template_pct": 100.0,
-    "template_correct": 365,
+    "template_correct": 386,
     "template_acc_pct": 100.0,
     "template_pa": 1.0,
     "pa_lower_bound": 1.0,
@@ -90,10 +90,10 @@
     "wrong": 0
    },
    "item_qty": {
-    "n": 103,
-    "template": 103,
+    "n": 110,
+    "template": 110,
     "template_pct": 100.0,
-    "template_correct": 103,
+    "template_correct": 110,
     "template_acc_pct": 100.0,
     "template_pa": 1.0,
     "pa_lower_bound": 1.0,
@@ -110,10 +110,10 @@
     "wrong": 0
    },
    "item_revenue": {
-    "n": 32,
-    "template": 32,
+    "n": 69,
+    "template": 69,
     "template_pct": 100.0,
-    "template_correct": 32,
+    "template_correct": 69,
     "template_acc_pct": 100.0,
     "template_pa": 1.0,
     "pa_lower_bound": 1.0,
@@ -130,10 +130,10 @@
     "wrong": 0
    },
    "sell_price_on_day": {
-    "n": 21,
-    "template": 21,
+    "n": 24,
+    "template": 24,
     "template_pct": 100.0,
-    "template_correct": 21,
+    "template_correct": 24,
     "template_acc_pct": 100.0,
     "template_pa": 1.0,
     "pa_lower_bound": 1.0,
@@ -150,10 +150,10 @@
     "wrong": 0
    },
    "best_month": {
-    "n": 7,
-    "template": 7,
+    "n": 14,
+    "template": 14,
     "template_pct": 100.0,
-    "template_correct": 7,
+    "template_correct": 14,
     "template_acc_pct": 100.0,
     "template_pa": 1.0,
     "pa_lower_bound": 1.0,
@@ -370,10 +370,10 @@
     "wrong": 0
    },
    "shift": {
-    "n": 60,
-    "template": 60,
+    "n": 61,
+    "template": 61,
     "template_pct": 100.0,
-    "template_correct": 60,
+    "template_correct": 61,
     "template_acc_pct": 100.0,
     "template_pa": 1.0,
     "pa_lower_bound": 1.0,
@@ -422,11 +422,10 @@
   },
   "llm_reasons": {
    "not_target": 228,
-   "extra_filter_or_subintent": 115,
+   "extra_filter_or_subintent": 55,
    "category_not_found": 47,
    "item_not_found": 15,
-   "item_specific_revenue": 14,
-   "normalizer_residual_teencode": 13,
+   "normalizer_residual_teencode": 11,
    "group_not_found": 9,
    "period_count": 8,
    "none_named": 4,
