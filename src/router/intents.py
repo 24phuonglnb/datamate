@@ -228,8 +228,9 @@ def _match_raw(table: dict[str, tuple[str, ...]], raw_values: list[str], s: str,
     return (vals, "ok") if vals else (None, "no_raw_value")
 
 
-_PAY_CUES = {"tien mat": r"\btien mat\b", "chuyen khoan": r"\bchuyen khoan\b", "vi dien tu": r"\bvi dien tu\b",
-             "cod": r"\bcod\b", "ghi no": r"\bghi no\b"}
+_PAY_CUES = {"tien mat": r"\btien mat\b",
+             "chuyen khoan": r"\bchuyen khoan\b|\b(?:bang|qua) ck\b",   # the abbreviation only right after "bang" / "qua"
+             "vi dien tu": r"\bvi dien tu\b", "cod": r"\bcod\b", "ghi no": r"\bghi no\b"}
 _CHAN_CUES = {"tai quay": r"\btai quay\b", "zalo oa": r"\bzalo\b", "dien thoai": r"\b(dien thoai|goi dien)\b"}
 
 

@@ -982,3 +982,11 @@ def test_hints_match_the_item_that_follows_a_date():
     h = _hints("từ ngày 25/12/2025, Xúc xích Vissan 5 cây tăng giá lên 26.000đ. so 7 ngày kể từ ngày đó với 7 ngày trước", _hints_db())
     assert h["entities"]["item"]["item_name"] == "Xúc xích Vissan 5 cây"
     assert h["comparison_period"]["start"] == "2025-12-18"
+
+
+def test_hints_payment_abbreviation_ck_only_after_bang_or_qua():
+    c = _hints_db()
+    c.execute("INSERT INTO v_valid_orders VALUES('2026-03-04', 70, 'Chuyển khoản', 'Tại quầy', 'lẻ')")
+    h = _hints("tháng 3/2026 doanh thu các đơn trả bằng ck chiếm bao nhiêu phần trăm", c)
+    assert h["entities"]["payment_method"][0]["values"] == ["Chuyển khoản"]
+    assert "payment_method" not in _hints("tháng 3/2026 doanh thu của ck Lan là bao nhiêu", c)["entities"]
