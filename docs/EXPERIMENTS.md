@@ -222,3 +222,5 @@ A shop without the view (purchase book, stock, lots) or with a purchase book wit
 | 2026-11-14 | feat/router-pharmacy | none | dev (2291 q) | router-answered 1340/1340 correct; PA lower bound 0.5849 | 58.49% answered; +233 answered vs 1107 before; 11 new templates, 233/233 of the 243 routable dev questions of the new groups correct |
 
 | 2026-11-15 | exp/hints-audit | none (CPU) | dev fallthrough 951 q, hints audit (333 q checked against train answers) | hints periods right 301/333 before, 330/333 after (3 not checkable) fixing "N ngay ke tu ngay do" in timeutil; router-answered still 1340/1340 | no filter field in hints for channel/payment/customer group; 51/80 category questions have no category in v_items (all "Hàng hóa") |
+
+| 2026-11-15 | exp/hints-audit | none (CPU) | dev fallthrough, 333 audited q, hints v2 | item for price_effect right 60/64 (was 41/64); channel 18/18, payment 9/10, customer group 6/24 answerable (rest: view has no group) | router-answered still 1340/1340; filters added to entities and where_sql |

@@ -936,3 +936,49 @@ def test_inventory_rule_rows_missing_switch_the_intent_off():
     text = "## 5. Kho\n| Tiền nhập hàng trong kỳ | x |\n"   # every other row missing: the dependent intents are disabled
     g = RuleGuard(ref, text)
     assert "stock_large_unit" in g.disabled and "purchase_avg_price" in g.disabled and "ingredient_revenue" in g.disabled
+
+
+# ---- hints: payment method / channel / customer group filters and item matching next to a date ------------------------
+def _hints_db():
+    c = sqlite3.connect(":memory:")
+    _OPEN.append(c)
+    c.executescript("""
+    CREATE TABLE v_valid_orders(order_date, revenue, payment_method, channel, customer_group);
+    CREATE TABLE v_items(item_code, item_name, name_aliases, base_unit, category);
+    INSERT INTO v_valid_orders VALUES('2026-03-02', 100, 'Tiền mặt', 'Tại quầy', 'sỉ'), ('2026-03-03', 50, 'Thu hộ (COD)', 'Zalo OA', 'lẻ');
+    INSERT INTO v_items VALUES('X1', 'Xúc xích Vissan 5 cây', 'Xúc xích Vissan 5 cây', 'gói', 'Hàng hóa');
+    """)
+    return c
+
+
+def _hints(text, conn):
+    from src.router.hints import build_hints
+    nq = normalize(text, AS_OF)
+    return build_hints({"id": "t1", "as_of_date": AS_OF}, nq, type("D", (), {"reason": "extra_filter_or_subintent", "intent": None})(), conn)
+
+
+def test_hints_carry_payment_channel_and_group_filters_in_question_order():
+    h = _hints("tháng 3/2026 doanh thu các đơn bán qua Zalo OA và các đơn bán tại quầy mỗi loại bao nhiêu", _hints_db())
+    assert [e["name"] for e in h["entities"]["channel"]] == ["zalo oa", "tai quay"]
+    assert [e["values"] for e in h["entities"]["channel"]] == [["Zalo OA"], ["Tại quầy"]]
+    sql = [w["sql"] for w in h["where_sql"] if "filter" in w["period"]]
+    assert sql == ["channel IN ('Zalo OA')", "channel IN ('Tại quầy')"]
+    h = _hints("tháng 3/2026 doanh thu các đơn trả bằng COD là bao nhiêu", _hints_db())
+    assert h["entities"]["payment_method"][0]["values"] == ["Thu hộ (COD)"] and "payment_method" not in str(h["entities"].get("channel", ""))
+    h = _hints("tháng 3/2026 doanh thu các đơn của khách nhóm sỉ", _hints_db())
+    assert h["entities"]["customer_group"] == [{"name": "sỉ", "values": ["sỉ"]}]
+    assert any(w["sql"] == "customer_group = 'sỉ'" for w in h["where_sql"])
+    h = _hints("tháng 3/2026 doanh thu là bao nhiêu", _hints_db())
+    assert not {"channel", "payment_method", "customer_group"} & set(h["entities"])
+
+
+def test_hints_filters_are_in_the_shape_the_agent_prints():
+    from src.agent import format_hints_for_prompt
+    h = _hints("tháng 3/2026 doanh thu các đơn bán tại quầy", _hints_db())
+    assert "channel IN ('Tại quầy')" in format_hints_for_prompt(h)
+
+
+def test_hints_match_the_item_that_follows_a_date():
+    h = _hints("từ ngày 25/12/2025, Xúc xích Vissan 5 cây tăng giá lên 26.000đ. so 7 ngày kể từ ngày đó với 7 ngày trước", _hints_db())
+    assert h["entities"]["item"]["item_name"] == "Xúc xích Vissan 5 cây"
+    assert h["comparison_period"]["start"] == "2025-12-18"
