@@ -112,7 +112,7 @@ _SKIP["cust_freq_share"] = r"so voi|\\bnhom\\b|nhan vien|\\bkenh\\b|\\bca\\b|\\b
 _SKIP["staff_revenue"] = r"%|phan tram|so voi|\\bkhach\\b|\\bnhom\\b|\\bkenh\\b|\\bca\\b|\\bmon\\b|\\bhang\\b|\\btop\\b|\\bnhat\\b|\\btang\\b|\\bgiam\\b"
 _SKIP["shift"] = _X + r"|\bhang\b|\bmon\b|cao diem|bao cao|giao ca|\bkenh\b|tang gia|ke tu"
 _SKIP["price_effect"] = _X + r"|\bca\b|doanh thu|tien|moi ngay|\bngay nao\b"
-_SKIP["category_share"] = r"\bkhach\b|\bca\b|so voi|\btop\b|\bnhat\b|\btang\b|\bgiam\b|nhan vien|\bkenh\b|ke don|hoat chat|size|nhom (than thiet|si|le|vip)|moi nhom|tung nhom"
+_SKIP["category_share"] = r"\bkhach\b|\bca (?:sang|chieu|toi)\b|so voi|\btop\b|\bnhat\b|\btang\b|\bgiam\b|nhan vien|\bkenh\b|ke don|hoat chat|size|nhom (than thiet|si|le|vip)|moi nhom|tung nhom"
 _SKIP["size_qty"] = r"so voi|%|phan tram|\bkhach\b|\bnhom\b|\btop\b|\bnhat\b|\btang\b|\bgiam\b|nhan vien|\bkenh\b|\bca\b|doanh thu|tien|hon hay kem"
 _SKIP["unsold_count"] = r"%|phan tram|so voi|\bkhach\b|\bnhom\b|\btop\b|nhan vien|\bkenh\b|\bca\b|doanh thu|tien"
 # revenue also: item-specific revenue ("ban <mat hang> ... bao nhieu tien")

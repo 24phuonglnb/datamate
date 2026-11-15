@@ -125,8 +125,10 @@ class Router:
             if unit is None:
                 return RouteDecision("llm", "unit_mismatch", intent, params=params)
             if I.item_match_key(unit) != I.item_match_key(m[2] or ""):
+                if not self._has_view(conn, "v_item_units"):
+                    return RouteDecision("llm", "unit_mismatch", intent, params=params)
                 fac = {f for _, k, f in conn.execute(SQL_TEMPLATES["item_unit_factors"], (m[0], m[1])) if k == I.item_match_key(unit)}
-                if len(fac) != 1 or next(iter(fac)) <= 1 or not self._has_view(conn, "v_item_units"):
+                if len(fac) != 1 or next(iter(fac)) <= 0 or next(iter(fac)) == 1:
                     return RouteDecision("llm", "unit_mismatch", intent, params=params)
                 kw["divisor"] = float(next(iter(fac)))
                 params["unit"] = unit

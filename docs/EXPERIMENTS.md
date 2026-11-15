@@ -222,3 +222,11 @@ A shop without the view (purchase book, stock, lots) or with a purchase book wit
 | 2026-11-14 | feat/router-pharmacy | none | dev (2291 q) | router-answered 1340/1340 correct; PA lower bound 0.5849 | 58.49% answered; +233 answered vs 1107 before; 11 new templates, 233/233 of the 243 routable dev questions of the new groups correct |
 
 | 2026-11-15 | exp/hints-audit | none (CPU) | dev fallthrough 951 q, hints audit (333 q checked against train answers) | hints periods right 301/333 before, 330/333 after (3 not checkable) fixing "N ngay ke tu ngay do" in timeutil; router-answered still 1340/1340 | no filter field in hints for channel/payment/customer group; 51/80 category questions have no category in v_items (all "Hàng hóa") |
+
+### Router expansion (branch feat/router-expansion, CPU, no LLM)
+
+Selection from the dev fall-through (951 q), by count; only templates computed purely in SQL on the existing views; each kept only after 100% on dev (hold-out and public not used to choose or tune). Added: shift (60), price_effect (57), category_share (28), size_qty (27), unsold_count (26), days_over_threshold (7), cust_freq_count (9), cust_freq_share (10), staff_revenue (7); payment/channel percent and several values; item_qty with a larger unit; two recognition fixes ("bao nhieu phan tram" is not a quantity; "th" before "truoc/nay/sau" is "thang"). Not done (data layer or rules not in the views): customer names (view has codes), customers' groups for shops without a group column, categories for shops with only "Hang hoa", debts by day, cost/profit.
+
+| date | branch | model | question set | PA | notes |
+|---|---|---|---|---|---|
+| 2026-11-15 | feat/router-expansion | none | dev (2291 q) | router-answered 1824/1824 correct; PA lower bound 0.7962 | 79.62% answered; before: 1340/1340 (58.49%) on feat/router-pharmacy |
