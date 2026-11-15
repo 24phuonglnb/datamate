@@ -799,8 +799,8 @@ def test_group_payment_channel_and_unit_totals():
     assert d.route == "template" and d.answer["type"] == "list" and len(d.answer["answer"]) == 2
     d = route("tháng 1/2026 tổng cộng bán được bao nhiêu ly", c)
     assert d.intent == "unit_total_qty" and d.answer["answer"] == 5                 # service fee line excluded
-    d = route("tháng 1/2026 bán được tổng cộng bao nhiêu ly cà phê sữa", c)         # a named item: not the all-items total
-    assert d.route == "llm"
+    d = route("tháng 1/2026 bán được tổng cộng bao nhiêu ly cà phê sữa", c)         # a named item: its own quantity, not the all-items total
+    assert d.intent == "item_qty" and d.answer["answer"] == 3                        # "cà phê" is no longer read as a shift ("ca")
     d = route("tháng 1/2026 tổng cộng bán được bao nhiêu chai", c)
     assert d.route == "llm" and d.reason == "unit_not_a_base_unit"
 
@@ -1084,3 +1084,13 @@ def test_hints_payment_abbreviation_ck_only_after_bang_or_qua():
     h = _hints("tháng 3/2026 doanh thu các đơn trả bằng ck chiếm bao nhiêu phần trăm", c)
     assert h["entities"]["payment_method"][0]["values"] == ["Chuyển khoản"]
     assert "payment_method" not in _hints("tháng 3/2026 doanh thu của ck Lan là bao nhiêu", c)["entities"]
+
+
+def test_item_specific_revenue_is_item_revenue_and_ca_is_only_a_shift_before_sang_chieu():
+    c = _db_ext()
+    d = route("tháng 1/2026 bán trà đào được bao nhiêu tiền", c)
+    assert d.intent == "item_revenue" and d.route == "template"
+    d = route("tháng 1/2026 ca chiều bán trà đào được bao nhiêu tiền", c)         # a real shift reference stops item revenue; a shift of one item is not the shop's shift
+    assert d.route == "llm"
+    d = route("doanh thu 30 ngày gần nhất là bao nhiêu", c)                           # "gan nhat" is a period, not a ranking
+    assert d.intent == "revenue" and d.route in ("template", "llm") and d.reason != "extra_filter_or_subintent"
