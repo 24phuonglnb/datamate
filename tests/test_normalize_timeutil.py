@@ -342,3 +342,18 @@ class TetWithoutYear(unittest.TestCase):
     def test_ambiguous_when_rulebook_does_not_define_tet_or_no_calendar(self):
         self.assertEqual(self.tet("2026-05-01", tet_bare=False)[1], True)
         self.assertEqual(resolve("doanh thu dip tet", "2026-05-01").ambiguous[0]["text"], "dip tet")
+
+
+def test_n_days_from_the_price_day_named_once_in_the_question():
+    """"7 ngay ke tu ngay do / ngay tang gia" = the 7 days from the one full date of the question, vs the 7 days before."""
+    import datetime as dt
+    from src.timeutil import resolve
+    for q in ("pho vifon doi gia vao ngay 29/06/2025. 7 ngay ke tu ngay do ban duoc nhieu hay it hon 7 ngay truoc do bao nhieu %",
+              "pho vifon doi gia vao ngay 29/06/2025. 7 ngay ke tu ngay tang gia so voi 7 ngay truoc"):
+        r = resolve(q, "2026-09-10")
+        assert any((p.start, p.end) == (dt.date(2025, 6, 29), dt.date(2025, 7, 5)) for p in r.periods)
+        assert (r.comparison.start, r.comparison.end) == (dt.date(2025, 6, 22), dt.date(2025, 6, 28))
+    r = resolve("7 ngay ke tu ngay do so voi 7 ngay truoc", "2026-09-10")      # no date named: nothing is guessed
+    assert not r.periods and r.comparison is None
+    r = resolve("ngay 01/06/2025 va ngay 29/06/2025, 7 ngay ke tu ngay do", "2026-09-10")   # two dates: ambiguous, not guessed
+    assert not any(p.end == dt.date(2025, 7, 5) for p in r.periods)
