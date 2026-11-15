@@ -70,7 +70,7 @@ _SKIP: dict[str, str] = {
     "revenue": (r"nhom|khach|\bdon\b|bill|\bca\b|nhan vien|tra bang|so voi|%|phan tram|hoat chat|ke don|"
                 r"size|trung binh|binh quan|moi|mat hang|mon |ban chay|top|xu huong|luon cao hon|con no|cong no|"
                 r"(?:doanh thu|dthu) (?:cua|cuar) (?!cua hang)|"
-                r"\bnhat\b|thap nhat|cao nhat|ngay nao|ngay co|ngay (?:ma|trong)|so ngay|dem |(?:bao nhieu|may) ngay|tung ngay|hang ngay|tung quy|moi quy"),
+                r"(?<!gan )\bnhat\b|thap nhat|cao nhat|ngay nao|ngay co|ngay (?:ma|trong)|so ngay|dem |(?:bao nhieu|may) ngay|tung ngay|hang ngay|tung quy|moi quy"),
     "order_count": r"khach|nhom|nhan vien|kenh|\bca\b|mat hang|san pham|mon ",
     "cancel_count": r"giao tre|ly do|nguyen nhan|khach|nhom|nhan vien|kenh|\bca\b",
     "cancel_rate": r"khach|nhom|nhan vien|kenh|\bca\b",
