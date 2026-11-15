@@ -126,7 +126,7 @@ TEXT_CASES = {
     "q_1324e9ac2b41": "tháng 4/2025 ngày nào cửa hàng bán được nhiều tiền nhất",
     "q_1af02cd5fe06": "Cho tôi biết số đơn hôm qua",
     "q_1dbea6881dab": "tháng 6/2026 cửa hàng bán được tổng cộng bao nhiêu tiền",
-    "q_21e3d299c23d": "doanh thu thang 3/2025 tang hay giam bao nhieu % so với th truoc",
+    "q_21e3d299c23d": "doanh thu thang 3/2025 tang hay giam bao nhieu % so với tháng truoc",
     "q_261ae1fe4be0": "tháng 3/2025 top 5 hàng bán chạy nhất là gì",
     "q_29503ba420d0": "tháng 5/2026 doanh thu hàng không kê đơn là bao nhiêu ta",
     "q_2ca8fd946a09": "doanh thu từ đầu năm tới hết hôm nay là bao nhiêu nhỉ",
