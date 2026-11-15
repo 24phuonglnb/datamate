@@ -49,17 +49,24 @@ def recognise(s: str) -> tuple[str | None, str]:
         return first, "ok"
     if first not in TARGET_INTENTS:
         return None, f"not_target:{first}"
-    rivals = [n for n in TARGET_INTENTS if n != first and n not in GENERIC and n not in COMPAT.get(first, ()) and re.search(_RULE_RX[n], s)]
+    rivals = [n for n in TARGET_INTENTS if n != first and n not in GENERIC and n not in COMPAT.get(first, ())
+              and re.search(_RULE_RX[n], s)
+              and not (n in _SKIP and re.search(_SKIP[n], s))]
     if rivals:
         return None, "multi_intent:" + "+".join([first] + rivals)
     if first == "topk_items" and topk_k(s) is None:
+        # Year digits (e.g. "2026") match "\d+ hang" in the topk rule; check if it's really item_revenue
+        if re.search(r"(?:mat\s*hang|hang|mon)\s+.{2,80}(?:thu ve|thu duoc)", s):
+            return "item_revenue", "ok"
         first = "best_item"  # the tagger reads the digits of "2026 mat hang" as k; the question has no k
     return first, "ok"
 
 
 _SKIP: dict[str, str] = {
-    "revenue": (r"nhom|khach|\bdon\b|bill|\bca\b|nhan vien|tra bang|so voi|%|phan tram|ngay|hoat chat|ke don|"
-                r"size|trung binh|binh quan|moi|quy|mat hang|mon |ban chay|top|xu huong|luon cao hon|con no|cong no|"
+    "revenue": (r"nhom|khach|\bdon\b|bill|\bca\b|nhan vien|tra bang|so voi|%|phan tram|"
+                r"(?:bao nhieu|nhieu|so|dem|may)\s+ngay\b|tung ngay\b|"
+                r"hoat chat|ke don|"
+                r"size|trung binh|binh quan|moi|mat hang|mon |ban chay|top|xu huong|luon cao hon|con no|cong no|"
                 r"(?:doanh thu|dthu) (?:cua|cuar) (?!cua hang)"),
     "order_count": r"khach|nhom|nhan vien|kenh|\bca\b|mat hang|san pham|mon ",
     "cancel_count": r"giao tre|ly do|nguyen nhan|khach|nhom|nhan vien|kenh|\bca\b",
@@ -69,18 +76,18 @@ _SKIP: dict[str, str] = {
     "topk_items": (r"thu ve|bao nhieu tien|bn tien|bnhiu tien|"
                    r"ban (duoc|dc|ra) (tong cong |total )?(bao nhieu|bnhiu|bn|nhieu|may)|"
                    r"\be\b|khong ban|nhom|khach|kenh"),
-    "item_qty": r"hon hay kem|%|phan tram|khach|nhom|kenh|\bca\b",
+    "item_qty": r"hon hay kem|%|phan tram|khach|nhom|kenh|\bca\s+(?:sang|chieu|toi|dem|ngay)\b",
     "rev_change_pct": (r"khach|mua tu \d+ don|gia bao nhieu|ban ra|ban (?:duoc|dc) (?:may|bao nhieu|bnhiu|bn)|"
                        r"nhom|kenh|\bca\b"),
 }
 _SKIP["best_item"] = _SKIP["topk_items"]
-_SKIP["item_revenue"] = r"nhom|khach|\bca\b|so voi|%|phan tram|top|nhat|tang|giam|moi|quy|nhan vien|kenh|ke don|hoat chat|size"
+_SKIP["item_revenue"] = r"nhom|khach|\bca\s+(?:sang|chieu|toi|dem|ngay)\b|so voi|%|phan tram|\btop\b|nhat|tang|giam|moi|quy|nhan vien|kenh|ke don|hoat chat|size"
 _SKIP["category_rev"] = r"khach|\bca\b|so voi|%|phan tram|top|nhat|tang|giam|moi|quy|nhan vien|kenh|ke don|hoat chat|size|nhom (than thiet|si|le|vip)"
-_SKIP["sell_price_on_day"] = r"khach|so voi|%|phan tram|top|nhat|tang gia|ke tu|nhom|\bca\b"
+_SKIP["sell_price_on_day"] = r"khach|so voi|%|phan tram|top|nhat|tang gia|ke tu|nhom|\bca\s+(?:sang|chieu|toi|dem|ngay)\b"
 _SKIP["unans_subjective"] = r"$^"
-_SKIP["best_month"] = r"khach|\bnhom\b|\bca\b|nhan vien|\bkenh\b|%|phan tram|so voi|\bhang\b|\bmon\b"
-_SKIP["monthly_series"] = r"khach|\bnhom\b|\bca\b|nhan vien|\bkenh\b|%|phan tram|so voi|\bhang\b|\bmon\b|moi den cu"
-_SKIP["streak_bool"] = r"khach|\bnhom\b|\bca\b|nhan vien|\bkenh\b|%|phan tram|\bhang\b|\bmon\b|don\b"
+_SKIP["best_month"] = r"khach|\bnhom\b|\bca\s+(?:sang|chieu|toi|dem|ngay)\b|nhan vien|\bkenh\b|%|phan tram|so voi|(?<!cua )\bhang\b|\bmon\b"
+_SKIP["monthly_series"] = r"khach|\bnhom\b|\bca\s+(?:sang|chieu|toi|dem|ngay)\b|nhan vien|\bkenh\b|%|phan tram|so voi|(?<!cua )\bhang\b|\bmon\b|moi den cu"
+_SKIP["streak_bool"] = r"khach|\bnhom\b|\bca\s+(?:sang|chieu|toi|dem|ngay)\b|nhan vien|\bkenh\b|%|phan tram|(?<!cua )\bhang\b|\bmon\b|don\b"
 _SKIP["cust_group_rev"] = r"%|phan tram|chiem|so voi|ti trong|moi nhom|tung nhom|\bca\b|nhan vien|\bkenh\b|\bhang\b|\bmon\b|\btop\b|\bnhat\b"
 _SKIP["payment_method_rev"] = r"%|phan tram|chiem|so voi|ti trong|moi (ben|hinh thuc)|lan luot|\bca\b|nhan vien|\bkenh\b|\bkhach\b|\bnhom\b|\bhang\b|\bmon\b|\btop\b|\bnhat\b|\btang\b|\bgiam\b"
 _SKIP["channel_rev"] = r"%|phan tram|chiem|so voi|ti trong|moi (ben|kenh)|lan luot|\bca\b|nhan vien|\bkhach\b|\bnhom\b|\bhang\b|\bmon\b|\btop\b|\bnhat\b|\btang\b|\bgiam\b"

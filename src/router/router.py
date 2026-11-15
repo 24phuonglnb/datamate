@@ -51,7 +51,15 @@ class Router:
                 return RouteDecision("llm", why, intent)
         bad = I.extra_filter(intent, s)
         if bad:
-            return RouteDecision("llm", bad, intent)
+            # "bán [item] được bao nhiêu tiền" is tagged as revenue but is really item_revenue
+            if bad == "item_specific_revenue" and intent == "revenue":
+                intent = "item_revenue"
+                bad2 = I.extra_filter(intent, s)
+                if bad2:
+                    return RouteDecision("llm", bad2, intent)
+                # fall through: handle as item_revenue below
+            else:
+                return RouteDecision("llm", bad, intent)
         if intent == "unans_subjective":  # rulebook section 7: opinions are not in the data
             ans = {"id": qid, "type": "unanswerable",
                    "reason": "Câu hỏi mang tính đánh giá chủ quan, dữ liệu cửa hàng không ghi nhận (rulebook mục 7)."}

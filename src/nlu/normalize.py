@@ -26,7 +26,13 @@ _WORD = re.compile(r"\b[^\W\d_]+\b")
 _VOWELS = "aăâeêioôơuưy"
 _TONES = {"s": "́", "f": "̀", "r": "̉", "x": "̃", "j": "̣"}
 _UNITS = {"ml", "mg", "kg", "mm", "cm", "pvc", "cod", "oa", "xl", "xxl", "gb", "tb", "g", "l", "m", "s", "x", "ly",
-          "vnd", "tmđt", "tmdt", "sku"}
+          "vnd", "tmđt", "tmdt", "sku",
+          # Short abbreviations: safe to exempt from residual_teencode (no vowels or telex-like digraph)
+          "th",   # tháng (month) — handled by timeutil._MONTH
+          "ee",   # ê (attention particle), never a true telex residual
+          "aa",   # double-A (battery type / product suffix)
+          "ck",   # chuyển khoản (bank transfer)
+          }
 _TELEX_MARK = re.compile(r"aa|ee|oo|dd|uw|ow|aw")
 _NUM = re.compile(r"\d+(?:[.,]\d+)*")
 _DATE = re.compile(r"\d{1,2}\s*[/-]\s*\d{1,2}(?:\s*[/-]\s*\d{2,4})?")
