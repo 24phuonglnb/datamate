@@ -10,5 +10,5 @@ Branch này chỉ để lưu vết, không merge vào main. Không đưa vào đ
    ```bash
    python -c "import json,sys,collections as C; c=C.Counter(json.loads(l)['type'] for l in open(sys.argv[1],encoding='utf-8') if l.strip()); print(sum(c.values())-c['abstain']-c['unanswerable'], c['abstain'], c['unanswerable'])" submissions/<file>
    ```
-4. Thêm một dòng vào `LOG.md`: số thứ tự kế tiếp, thời gian, người nộp, `branch@commit` đã chạy (`git rev-parse --short HEAD`), lệnh/cờ chạy, ba số ở bước 3, mô tả ngắn. Cột điểm để `?` cho tới khi có điểm leaderboard, rồi sửa lại.
+4. Thêm một dòng vào `LOG.md`: số thứ tự kế tiếp, thời gian nộp, người nộp, `branch@commit` đã chạy (`git rev-parse --short HEAD`), lệnh/cờ chạy, ba số ở bước 3, mô tả ngắn. Cột điểm để `?` cho tới khi có điểm leaderboard, rồi sửa lại; file chưa nộp thì ghi vào bảng "Chưa nộp".
 5. Commit chỉ file jsonl và `LOG.md`, push branch `submissions`.
