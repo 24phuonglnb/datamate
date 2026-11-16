@@ -1,0 +1,149 @@
+# Build the router-only submission image (CPU, no model), smoke-test it on synthetic data and
+# export it in the organisers' format (guideline §11): <name>.tar.gz + .md5 + uncompressed size.
+#
+# - Pull requests touching the image: build + smoke test only (no export).
+# - Push a tag `router-v*` (works before this file is on main), or once on main: Actions tab ->
+#   "router-image" -> Run workflow. Team id defaults to ccsisters (variable TEAM_NAME overrides
+#   it for tag builds): build + test + export.
+#   Download the artifact, unzip it, check the .md5, upload the .tar.gz to Google Drive.
+#
+# Official train / public_test data never reach the runner: tests use scripts/create_demo_data.py
+# and example_data/. Run the public test on your own machine with the exported image.
+name: router-image
+
+on:
+  workflow_dispatch:
+    inputs:
+      team:
+        description: "Lowercase team id: the image is tagged zaic2026_datamate_<team>:final"
+        default: ccsisters
+        type: string
+  push:
+    tags: ["router-v*"]
+  pull_request:
+    paths:
+      - Dockerfile.router
+      - Dockerfile.router.dockerignore
+      - requirements.router.txt
+      - predict.sh
+      - src/**
+      - docker/router/**
+      - scripts/smoke_router_image.sh
+      - .github/workflows/router-image.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: router-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image name
+        id: name
+        env:
+          INPUT_TEAM: ${{ inputs.team }}
+          VAR_TEAM: ${{ vars.TEAM_NAME }}
+        run: |
+          case "$GITHUB_EVENT_NAME" in
+            workflow_dispatch) team="$INPUT_TEAM" ;;
+            push)              team="${VAR_TEAM:-ccsisters}" ;;
+            *)                 team="ci" ;;
+          esac
+          if ! [[ "$team" =~ ^[a-z0-9][a-z0-9_-]*$ ]]; then
+            echo "::error::team id '$team' must be lowercase letters/digits/_/-"
+            exit 1
+          fi
+          echo "image=zaic2026_datamate_${team}:final" >> "$GITHUB_OUTPUT"
+          echo "archive=zaic2026_datamate_${team}" >> "$GITHUB_OUTPUT"
+          echo "export=$([ "$GITHUB_EVENT_NAME" = pull_request ] && echo false || echo true)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build (linux/amd64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.router
+          platforms: linux/amd64
+          tags: ${{ steps.name.outputs.image }}
+          load: true
+          push: false
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=router
+          cache-to: type=gha,scope=router,mode=max
+
+      - name: Inspect image
+        env:
+          IMAGE: ${{ steps.name.outputs.image }}
+        run: |
+          platform=$(docker image inspect -f '{{.Os}}/{{.Architecture}}' "$IMAGE")
+          echo "platform=$platform size=$(docker image inspect -f '{{.Size}}' "$IMAGE")"
+          [ "$platform" = linux/amd64 ] || { echo "::error::image is $platform"; exit 1; }
+          docker run --rm --network none --entrypoint bash "$IMAGE" -c '
+            set -e
+            cd /code && find . -maxdepth 3 -not -path "./src/*" | sort
+            for f in predict.sh README.md training_code/README.md training_code/data_manifest.json; do
+              test -s "$f" || { echo "missing /code/$f"; exit 1; }
+            done
+            # official data must not be in the image
+            if find / -xdev \( -name answers.jsonl -o -path "*/public_test*" -o -path "*/train/train*" \) 2>/dev/null | grep -q .; then
+              echo "official data found in image"; exit 1
+            fi
+            echo "layout OK"'
+
+      - name: Smoke test on synthetic demo data
+        env:
+          IMAGE: ${{ steps.name.outputs.image }}
+        run: |
+          demo="$RUNNER_TEMP/demo"
+          mkdir -p "$demo"
+          # create_demo_data.py needs openpyxl: run it with the image's Python
+          docker run --rm --network none --entrypoint python \
+            -v "$PWD/scripts":/s:ro -v "$demo":/out "$IMAGE" /s/create_demo_data.py /out
+          sudo chown -R "$(id -u):$(id -g)" "$demo"
+          bash scripts/smoke_router_image.sh "$IMAGE" "$demo" "$RUNNER_TEMP/out_demo"
+
+      - name: Smoke test on example_data
+        env:
+          IMAGE: ${{ steps.name.outputs.image }}
+        run: bash scripts/smoke_router_image.sh "$IMAGE" example_data "$RUNNER_TEMP/out_example"
+
+      - name: Export (docker save | gzip, md5, uncompressed size)
+        if: steps.name.outputs.export == 'true'
+        env:
+          IMAGE: ${{ steps.name.outputs.image }}
+          ARCHIVE: ${{ steps.name.outputs.archive }}
+        run: |
+          set -euo pipefail
+          mkdir -p export && cd export
+          docker save "$IMAGE" | gzip > "$ARCHIVE.tar.gz"
+          md5sum "$ARCHIVE.tar.gz" > "$ARCHIVE.tar.gz.md5"
+          gzip -dc "$ARCHIVE.tar.gz" | wc -c > "$ARCHIVE.tar.size"
+          sha256sum "$ARCHIVE.tar.gz" > "$ARCHIVE.tar.gz.sha256"
+          md5sum -c "$ARCHIVE.tar.gz.md5"
+          {
+            echo "### $IMAGE"
+            echo "- commit: \`$GITHUB_SHA\`"
+            echo "- image id: \`$(docker image inspect -f '{{.Id}}' "$IMAGE")\`"
+            echo "- archive: \`$ARCHIVE.tar.gz\` ($(stat -c %s "$ARCHIVE.tar.gz") bytes)"
+            echo "- uncompressed .tar size: $(cat "$ARCHIVE.tar.size") bytes"
+            echo "- md5: \`$(cut -d' ' -f1 "$ARCHIVE.tar.gz.md5")\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload artifact
+        if: steps.name.outputs.export == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.name.outputs.archive }}-${{ github.sha }}
+          path: export/
+          compression-level: 0
+          retention-days: 30
+          if-no-files-found: error

@@ -1,68 +1,58 @@
-# CPU-only router fallback for Zalo AI Challenge 2026 DataMate.
+# Router-only submission image (CPU, no model) — Zalo AI Challenge 2026 DataMate.
 #
-# Uses the same judging interface as the full GPU image:
-#   - Entrypoint: bash /code/predict.sh  (required by organiser)
-#   - Input:  /data/questions.jsonl, /data/rulebook.md, /data/calendar.csv, /data/data/<shop>/
-#   - Output: /result/submission.jsonl, /result/logs/questions.jsonl
+# Build from main (src/router, src/nlu, src/views.py ... are all on main). CI builds it with
+# .github/workflows/router-image.yml; by hand:
+#   docker buildx build --platform linux/amd64 --load -f Dockerfile.router \
+#       -t zaic2026_datamate_<team>:final .
 #
-# DATAMATE_ROUTER_ONLY=1 (baked in) causes src/predict.py to skip model loading:
-#   router answers most questions deterministically (about 75 % of public); the rest become abstain.
+# Judging interface (organiser guideline §3, §10):
+#   docker run --rm --network none --entrypoint bash \
+#       -v /abs/path/public_test:/data:ro -v /abs/path/result:/result \
+#       zaic2026_datamate_<team>:final /code/predict.sh
+#   Input:  /data/questions.jsonl, /data/rulebook.md, /data/calendar.csv, /data/data/<shop>/
+#   Output: /result/submission.jsonl, /result/logs/questions.jsonl
 #
-# ── BUILD FROM main ──────────────────────────────────────────────────────────
-# The router (src/router/, src/nlu/, src/views.py, ...) is on main; build from the
-# latest main commit (the one reported in the PR that last touched this file):
+# DATAMATE_ROUTER_ONLY=1 makes src/predict.py load no model: the router answers what it is
+# certain of, the rest is abstain. No GPU, no weights. Official datasets are kept out of the
+# build context by Dockerfile.router.dockerignore (BuildKit picks it from the -f name).
 #
-# On CECS or any Linux host:
-#   git fetch origin
-#   git checkout main && git pull
-#   docker buildx build --platform linux/amd64 \
-#       -t zaic2026_datamate_team:router \
-#       -f Dockerfile.router .
+# Check:  wc -l result/submission.jsonl  == number of questions
+#         python3 scripts/validate_submission.py result/submission.jsonl public_test/questions.jsonl
 #
-# ── JUDGING-COMPATIBLE RUN COMMAND ──────────────────────────────────────────
-#   docker run --rm --network none \
-#       -v /absolute/path/to/public_test:/data:ro \
-#       -v /absolute/path/to/result:/result \
-#       zaic2026_datamate_team:router
-#
-# ── SMOKE TEST (verify correct question count and schema) ────────────────────
-#   docker run --rm --network none \
-#       -v $(pwd)/public_test:/data:ro \
-#       -v /tmp/router-smoke:/result \
-#       zaic2026_datamate_team:router
-#   wc -l /tmp/router-smoke/submission.jsonl        # must equal question count
-#   python3 scripts/validate_submission.py \
-#       /tmp/router-smoke/submission.jsonl public_test/questions.jsonl
-#
-# Expected output: most questions answered, the rest {"type":"abstain"}.
-# No GPU required. No model weights included.
+# Export for submission (guideline §11):
+#   set -o pipefail
+#   docker save zaic2026_datamate_<team>:final | gzip > zaic2026_datamate_<team>.tar.gz
+#   md5sum zaic2026_datamate_<team>.tar.gz > zaic2026_datamate_<team>.tar.gz.md5
 
 FROM python:3.10-slim
 
-# Match the judging environment's offline and reproducibility flags.
 ENV PYTHONUNBUFFERED=1 \
     PYTHONHASHSEED=42 \
     HF_HUB_OFFLINE=1 \
     TRANSFORMERS_OFFLINE=1 \
     PYTHONPATH=/code \
     OMP_NUM_THREADS=4 \
+    PIP_NO_CACHE_DIR=1 \
     DATAMATE_ROUTER_ONLY=1 \
     DATAMATE_CACHE_DIR=/tmp/datamate_cache
 
 WORKDIR /code
 
-# CPU-only runtime: openpyxl for xlsx ingestion, pandas for rulebook views.
-# torch and vllm are NOT installed (no GPU path).
+# CPU-only runtime: openpyxl for xlsx ingestion, pandas for the views. No torch / vllm.
 COPY requirements.router.txt /code/requirements.txt
 RUN pip install --no-cache-dir -r /code/requirements.txt
 
-# Source: built from main (see above).
-# Copies all of src/ including src/router/, src/nlu/, src/views.py, etc.
-COPY src/ /code/src/
+# Docs and data-generation evidence required by guideline §1 and §8.
+COPY docker/router/README.md /code/README.md
+COPY docker/router/training_code/README.md /code/training_code/README.md
+COPY scripts/build_nlu_resources.py scripts/build_rule_reference.py scripts/data_invariants.py \
+     eval/folds.json /code/training_code/data_generation/
 
-# predict.sh is the judging entrypoint — identical to the GPU image.
-# DATAMATE_ROUTER_ONLY=1 (above) suppresses model loading inside src/predict.py.
+COPY src/ /code/src/
 COPY predict.sh /code/predict.sh
-RUN chmod +x /code/predict.sh
+COPY docker/router/make_manifest.py /tmp/make_manifest.py
+RUN chmod +x /code/predict.sh \
+    && python /tmp/make_manifest.py /code \
+    && rm /tmp/make_manifest.py
 
 CMD ["bash", "/code/predict.sh"]
