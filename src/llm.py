@@ -198,23 +198,31 @@ class HFTransformers:
 
 # ─── vLLM (competition Docker backend) ───────────────────────────────────
 
+class PromptTooLongError(ValueError):
+    """The prompt plus the answer budget does not fit in ``max_model_len``.
+
+    Raised before the engine is called, so one long prompt costs one abstain
+    (the agent catches it) instead of an engine error for the whole run.
+    """
+
+
 class LocalVLLM:
     """Offline vLLM inference backend.
 
     Requires vllm package, CUDA-capable GPU, and weights in ``model_path``.
 
-    Qwen3-14B::
-        model = LocalVLLM("/models/Qwen3-14B", tensor_parallel_size=2,
-                          max_model_len=16384, max_new_tokens=1024)
-    Qwen3-8B (default)::
-        model = LocalVLLM("/models/Qwen3-8B", tensor_parallel_size=2)
+    Qwen3-14B (competition image; MODEL_PATH/TP_SIZE/MAX_MODEL_LEN from the Dockerfile)::
+        model = LocalVLLM("/code/models/Qwen3-14B", tensor_parallel_size=2)
+
+    ``max_model_len`` default 20480: shop prompts are 28-41k characters (schema,
+    rulebook, README), more than 8192 tokens, and a retry adds the SQL error.
     """
 
     def __init__(
         self,
         model_path: str,
         tensor_parallel_size: int = 2,
-        max_model_len: int = 8192,
+        max_model_len: int = 20480,
         max_new_tokens: int = 640,
         temperature: float = 0.0,
         gpu_memory_utilization: float = 0.85,
@@ -238,6 +246,8 @@ class LocalVLLM:
             gpu_memory_utilization=gpu_memory_utilization,
         )
         self.tokenizer = self.llm.get_tokenizer()
+        self.max_model_len = max_model_len
+        self.max_new_tokens = max_new_tokens
 
     def generate(self, system: str, user: str) -> tuple[str, str | None]:
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
@@ -248,6 +258,12 @@ class LocalVLLM:
         except TypeError:
             prompt = self.tokenizer.apply_chat_template(
                 messages, tokenize=False, add_generation_prompt=True
+            )
+        n_tokens = len(self.tokenizer.encode(prompt, add_special_tokens=False))
+        if n_tokens + self.max_new_tokens > self.max_model_len:
+            raise PromptTooLongError(
+                f"prompt has {n_tokens} tokens + {self.max_new_tokens} answer tokens "
+                f"> max_model_len {self.max_model_len}"
             )
         text = self.llm.generate([prompt], self.params, use_tqdm=False)[0].outputs[0].text
         thinking = re.findall(r"<think>(.*?)</think>", text, flags=re.S)
@@ -264,7 +280,7 @@ def qwen3_14b(model_path: str, tensor_parallel_size: int = 2) -> LocalVLLM:
     return LocalVLLM(
         model_path=model_path,
         tensor_parallel_size=tensor_parallel_size,
-        max_model_len=16384,
+        max_model_len=20480,
         max_new_tokens=1024,
         temperature=0.0,
         gpu_memory_utilization=0.88,

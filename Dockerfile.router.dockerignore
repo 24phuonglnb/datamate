@@ -1,4 +1,4 @@
-# .dockerignore for Dockerfile.router (CPU-only router fallback image)
+# Dockerfile.router.dockerignore — BuildKit applies it only to `-f Dockerfile.router`
 # Only src/, predict.sh, and requirements.router.txt are needed.
 # Everything else is excluded to keep the build context small and leak-free.
 
