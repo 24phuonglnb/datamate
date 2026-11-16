@@ -54,7 +54,7 @@ Dựa trên bảng `lines` (kết quả của `SalesLedger` đã chuẩn hoá t�
 | `status` | `TEXT` | Trạng thái cấp đơn đã chuẩn hoá về 4 giá trị: `'hoan_thanh'`, `'dang_giao'`, `'huy'`, `'tra_hang'`. Theo **§1 & §8**, nếu đơn có bất kỳ dòng hoàn/trả nào (kể cả trả một phần), toàn bộ đơn mang `status = 'tra_hang'`. |
 | `item_code` | `TEXT` | Mã mặt hàng chuẩn hoá (đã đồng bộ giữa bảng danh mục và bảng bán hàng). `NULL` đối với dòng `Phí phục vụ`. |
 | `item_name` | `TEXT` | Tên mặt hàng chuẩn hoá (đã giải mã tên viết tắt từ sheet `Ghi tắt` / cột `Tên gọi khác` và gộp các biến thể khoảng trắng/dấu theo **§9**). |
-| `category` | `TEXT` | Nhóm hàng / danh mục mặt hàng (lấy từ bảng danh mục hoặc cột nhóm hàng trên sổ bán). |
+| `category` | `TEXT` | Nhóm hàng / danh mục mặt hàng (lấy từ bảng danh mục hoặc cột nhóm hàng trên sổ bán). Ưu tiên cột nhóm (`Nhóm hàng hóa`) có từ 2 giá trị trở lên; cột `Loại hàng hóa` của phần mềm bán hàng (chỉ có "Hàng hóa") chỉ dùng khi không còn cột nào khác. |
 | `is_service_fee` | `INTEGER` | `1` nếu là dòng `"Phí phục vụ"`, `0` nếu là mặt hàng thật. Theo **§3**, dòng `"Phí phục vụ"` **được cộng vào doanh thu đơn**, nhưng **không phải là mặt hàng** khi đếm hoặc xếp hạng mặt hàng (luôn lọc `is_service_fee = 0` khi truy vấn theo mặt hàng). Các dòng điều chỉnh cấp hoá đơn như `"Voucher"`, `"Phí ship"`, `"Dùng <n> điểm"` có số lượng trống đã được loại khỏi `lines` theo **§1**. |
 | `unit` | `TEXT` | Đơn vị tính lúc bán trên dòng đơn (ví dụ `'thùng'`, `'lốc'`, `'hộp'`, `'cái'`). |
 | `qty` | `REAL` | Số lượng bán theo đơn vị trên dòng (`unit`). |
@@ -67,7 +67,7 @@ Dựa trên bảng `lines` (kết quả của `SalesLedger` đã chuẩn hoá t�
 | `customer_code` | `TEXT` | Mã khách hàng (`NULL` nếu là khách lẻ). |
 | `customer_name` | `TEXT` | Tên khách hàng chuẩn hoá có dấu (`NULL` nếu là khách lẻ). |
 | `customer_key` | `TEXT` | Khoá định danh khách hàng để `GROUP BY` / `COUNT(DISTINCT customer_key)` (**§3**): bằng `customer_code` nếu tiệm có dùng mã khách (đơn không ghi mã khách là khách lẻ -> `NULL`), ngược lại bằng tên khách đã chuẩn hoá: bỏ dấu, viết thường, bỏ dấu câu, và nối các cụm chữ số liền nhau, nên `Triệu Linh An - 0327 988 481` và `Triệu Linh An 0327988481` là cùng một khách (tên chỉ khác cách viết là một khách; khác chữ hoặc khác số là hai khách). Mọi nhãn khách vãng lai (`Khách lẻ`, `Lẻ`, `KL`, `Khách vãng lai`, `Vãng lai`, trống) đều có `customer_key = NULL`. |
-| `customer_group` | `TEXT` | Nhóm / hạng khách hàng (nếu có trong bảng khách hàng hoặc sổ bán). |
+| `customer_group` | `TEXT` | Nhóm / hạng khách hàng (nếu có trong bảng khách hàng hoặc sổ bán). Cột nhóm phải có ít giá trị (không phải mã, tên hay số điện thoại); `Loại hình khách` / `Đối tượng KH` ("Cá nhân") không phải nhóm. Không có cột nhóm thì `NULL`, câu hỏi theo nhóm khách là unanswerable. |
 | `staff` | `TEXT` | Nhân viên bán hàng / thu ngân. |
 | `channel` | `TEXT` | Kênh bán hàng. |
 | `payment_method` | `TEXT` | Hình thức thanh toán. |

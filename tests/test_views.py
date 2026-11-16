@@ -1002,3 +1002,93 @@ def test_stock_card_gives_balance_by_date_and_feeds_v_stock(tmp_path: Path) -> N
     assert at_jun7 == (15.0,)
     assert order == sorted(order)  # rowid follows moved_at (the out-of-order MV6 row is moved)
     assert end == (15.0, "card")
+
+
+def _shop_with_customer_list(biz_dir: Path, customer_rows: list[list[object]]) -> None:
+    biz_dir.mkdir()
+    _write_csv(
+        biz_dir / "danh_muc.csv",
+        [
+            ["Mã hàng", "Tên hàng", "Loại hàng hóa", "Nhóm hàng hóa", "ĐVT", "Giá bán"],
+            ["SP01", "Cà phê sữa", "Hàng hóa", "cà phê", "ly", "25000"],
+            ["SP02", "Trà đào", "Hàng hóa", "trà", "ly", "30000"],
+            ["SP03", "Bạc xỉu", "Hàng hóa", "cà phê", "ly", "28000"],
+        ],
+    )
+    _write_csv(
+        biz_dir / "ban_hang.csv",
+        [
+            ["Mã HĐ", "Ngày bán", "Trạng thái", "Mã KH", "Khách hàng", "Mã SP", "Tên hàng", "ĐVT", "SL", "Đơn giá", "Thanh tiền"],
+            ["HD01", "2026-06-01", "Hoàn thành", "KH01", "Nguyễn An", "SP01", "Cà phê sữa", "ly", "2", "25000", "50000"],
+            ["HD02", "2026-06-02", "Hoàn thành", "KH02", "Trần Bình", "SP02", "Trà đào", "ly", "1", "30000", "30000"],
+            ["HD03", "2026-06-03", "Hoàn thành", "KH03", "Lê Chi", "SP03", "Bạc xỉu", "ly", "1", "28000", "28000"],
+            ["HD04", "2026-06-03", "Hoàn thành", "", "Khách lẻ", "SP01", "Cà phê sữa", "ly", "1", "25000", "25000"],
+        ],
+    )
+    _write_csv(biz_dir / "danh_sach_khach_hang.csv", customer_rows)
+
+
+def test_customer_group_is_the_group_column_not_the_customer_code(tmp_path: Path) -> None:
+    """"Mã khách hàng" (contains "hang") and "Email" (contains "ma") come before "Nhóm khách hàng"."""
+    biz_dir = tmp_path / "biz_groups"
+    _shop_with_customer_list(
+        biz_dir,
+        [
+            ["Email", "Mã khách hàng", "Tên khách hàng", "Đối tượng KH", "Nhóm khách hàng"],
+            ["", "KH01", "Nguyễn An", "Cá nhân", "thân thiết"],
+            ["", "KH02", "Trần Bình", "Cá nhân", "lẻ"],
+            ["", "KH03", "Lê Chi", "Cá nhân", "thân thiết"],
+        ],
+    )
+    conn = build_database(biz_dir)
+    groups = dict(conn.execute("SELECT order_id, customer_group FROM v_orders").fetchall())
+    cats = dict(conn.execute("SELECT item_code, category FROM v_items").fetchall())
+    conn.close()
+    assert groups == {"HD01": "thân thiết", "HD02": "lẻ", "HD03": "thân thiết", "HD04": None}
+    assert cats == {"SP01": "cà phê", "SP02": "trà", "SP03": "cà phê"}  # not "Loại hàng hóa" = "Hàng hóa"
+
+
+def test_customer_type_without_a_group_column_leaves_group_null(tmp_path: Path) -> None:
+    """"Loại hình khách" = "Cá nhân" for everyone is not a customer group; codes never become groups."""
+    biz_dir = tmp_path / "biz_no_groups"
+    _shop_with_customer_list(
+        biz_dir,
+        [
+            ["Mã khách hàng", "Tên khách hàng", "Loại hình khách", "Điện thoại"],
+            ["KH01", "Nguyễn An", "Cá nhân", "0901"],
+            ["KH02", "Trần Bình", "Cá nhân", "0902"],
+            ["KH03", "Lê Chi", "Cá nhân", "0903"],
+        ],
+    )
+    conn = build_database(biz_dir)
+    groups = {g for (g,) in conn.execute("SELECT DISTINCT customer_group FROM v_orders")}
+    conn.close()
+    assert groups == {None}
+
+
+def test_customer_group_columns_handles_camelcase_and_short_headers() -> None:
+    from src.views import _customer_group_columns
+
+    df = pd.DataFrame({
+        "ma_kh": ["KH01", "KH02", "KH03", "KH04"],
+        "loai_hinh_kh": ["Cá nhân"] * 4,
+        "LoaiKhachHang": ["lẻ", "sỉ", "lẻ", "thân thiết"],
+    })
+    assert _customer_group_columns(df, list(df.columns)) == ("ma_kh", None, "LoaiKhachHang")
+    df2 = pd.DataFrame({"Customer ID": ["A", "B", "C"], "ten_kh": ["An", "Bình", "Chi"], "Hạng": ["lẻ", "sỉ", "lẻ"]})
+    assert _customer_group_columns(df2, list(df2.columns)) == ("Customer ID", "ten_kh", "Hạng")
+
+
+def test_category_fallback_keeps_header_priority_for_single_category_shops() -> None:
+    """With one value everywhere, "Nhóm hàng hóa" still wins over the POS type "Loại hàng hóa" (first in the file)."""
+    from src.views import _pick_category_column
+
+    one = pd.DataFrame({"Mã": ["A", "B"], "Tên": ["x", "y"], "Loại hàng hóa": ["Hàng hóa"] * 2,
+                        "Nhóm hàng hóa": ["Cà phê"] * 2})
+    assert _pick_category_column(one, list(one.columns), ("Tên", "Mã")) == "Nhóm hàng hóa"
+    # an empty group column does not beat a filled one
+    empty = one.assign(**{"Nhóm hàng hóa": [None, None]})
+    assert _pick_category_column(empty, list(empty.columns), ("Tên", "Mã")) == "Loại hàng hóa"
+    # two values still come first, whatever the tier
+    two = one.assign(**{"Loại hàng hóa": ["Hàng hóa", "Dịch vụ"]})
+    assert _pick_category_column(two, list(two.columns), ("Tên", "Mã")) == "Loại hàng hóa"
