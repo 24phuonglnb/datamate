@@ -6,6 +6,10 @@ read and an intent is switched off ONLY when a row it uses is missing, lost one 
 contradicting phrase.  Added sentences, examples and new rows do not switch anything off, and nobody has to approve a
 change: the decision is made from the text alone.
 
+Rows are identified by their folded NAME only: the section number is dropped, so a rulebook whose sections were
+renumbered or whose rows moved to another section is not read as "new rules".  (The section stays in `rule_specs`
+and `DEPENDENCIES` as a label; `_lookup` ignores it.)
+
 Rows that did not exist in the train rulebook (names compared with `rule_reference.json`, hashes of the train rows, no
 rule text stored) are reported, and a question containing the words of such a row's name, in order and close together,
 goes to the LLM (a new rule may redefine what the question asks).  Changed-but-compatible rows are only reported.
@@ -83,7 +87,8 @@ def _norm(text: str) -> str:
 
 
 def parse_rulebook(text: str) -> dict[str, str]:
-    """{"<section>|<folded row name>": normalised row text} for every table row under a numbered section."""
+    """{"<folded row name>": normalised row text} for every table row under a numbered section (section numbers are
+    not part of the key; a name that occurs twice keeps both texts)."""
     rows: dict[str, str] = {}
     sec = ""
     for line in text.splitlines():
@@ -96,7 +101,8 @@ def parse_rulebook(text: str) -> dict[str, str]:
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
         if len(cells) < 2 or _norm(cells[0]) in ("luat", "cach noi", "type", "tu", "cach ghi"):
             continue
-        rows[f"{sec}|{_norm(cells[0])}"] = _norm(" | ".join(cells[1:]))
+        name, text = _norm(cells[0]), _norm(" | ".join(cells[1:]))
+        rows[name] = f"{rows[name]} || {text}" if name in rows else text
     return rows
 
 
@@ -104,12 +110,17 @@ def _h(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
 
+def row_name(key: str) -> str:
+    """Folded row name of a key; accepts the older "<section>|<name>" keys of rule_reference.json."""
+    return re.sub(r"^\d+\|", "", key)
+
+
 def build_reference(rulebook_text: str) -> dict[str, str]:
     return {k: _h(v) for k, v in parse_rulebook(rulebook_text).items()}
 
 
 def _find(keys, sec: str, prefix: str):
-    return [k for k in keys if k.startswith(f"{sec}|") and k.split("|", 1)[1].startswith(prefix)]
+    return [k for k in keys if row_name(k).startswith(prefix)]
 
 
 def _in_order_close(toks: list[str], words: list[str], max_gap: int = 2) -> bool:
@@ -140,11 +151,11 @@ def _load_reviewed(path: Path) -> set[str]:
 
 
 def _lookup(rows: dict[str, str], sec: str, prefix: str) -> tuple[str | None, str | None]:
-    """Row whose name starts with `prefix`: same section first, then any; the shortest name wins (exact before longer)."""
-    cands = [(k.split("|", 1)[0] != sec, len(k), k) for k in rows if k.split("|", 1)[1].startswith(prefix)]
+    """Row whose name starts with `prefix` (the section is only a label); the shortest name wins (exact before longer)."""
+    cands = [(len(k), k) for k in rows if k.startswith(prefix)]
     if not cands:
         return None, None
-    k = min(cands)[2]
+    k = min(cands)[1]
     return k, rows[k]
 
 
@@ -154,7 +165,7 @@ def spec_problems(rows: dict[str, str]) -> dict[tuple[str, str], list[str]]:
     for (sec, prefix), spec in SPECS.items():
         key, text = _lookup(rows, sec, prefix)
         if text is None:
-            out[(sec, prefix)] = [f"row '{sec}|{prefix}' missing"]
+            out[(sec, prefix)] = [f"row '{prefix}' missing"]
             continue
         why = [f"main idea absent from '{key}': /{rx}/" for rx in spec["must"] if not re.search(rx, text)]
         why += [f"contradicting phrase in '{key}': /{rx}/" for rx in spec["contradict"] if re.search(rx, text)]
@@ -166,6 +177,7 @@ def spec_problems(rows: dict[str, str]) -> dict[tuple[str, str], list[str]]:
 class RuleGuard:
     def __init__(self, reference: dict[str, str], running_text: str, reviewed: set[str] | None = None):
         self.reviewed = reviewed or set()  # notes only
+        reference = {row_name(k): v for k, v in reference.items()}
         run = parse_rulebook(running_text)
         run_h = {k: _h(v) for k, v in run.items()}
         self._running_keys = set(run)
@@ -180,7 +192,7 @@ class RuleGuard:
                 self.disabled[intent] = why
         self._cues = []
         for k in self.new:
-            toks = [t for t in re.findall(r"[a-z0-9]+", k.split("|", 1)[1]) if t not in _STOP and len(t) > 1]
+            toks = [t for t in re.findall(r"[a-z0-9]+", k) if t not in _STOP and len(t) > 1]
             if len(toks) >= 2:
                 self._cues.append((k, toks))
 
@@ -191,8 +203,8 @@ class RuleGuard:
         return cls(ref, Path(running_rulebook).read_text(encoding="utf-8"), _load_reviewed(rp))
 
     def defines(self, sec: str, prefix: str) -> bool:
-        """Does the running rulebook still have a row (section, name starting with prefix)?"""
-        return any(k.startswith(f"{sec}|{prefix}") for k in self._running_keys)
+        """Does the running rulebook still have a row whose name starts with prefix (any section)?"""
+        return any(k.startswith(prefix) for k in self._running_keys)
 
     def check(self, intent: str, folded_question: str) -> str | None:
         """Reason to leave the question to the LLM, else None."""

@@ -6,17 +6,15 @@
 #   - Output: /result/submission.jsonl, /result/logs/questions.jsonl
 #
 # DATAMATE_ROUTER_ONLY=1 (baked in) causes src/predict.py to skip model loading:
-#   router answers ~50 % of questions deterministically; the rest become abstain.
+#   router answers most questions deterministically (about 75 % of public); the rest become abstain.
 #
-# ── HARD PREREQUISITE ────────────────────────────────────────────────────────
-# This file MUST be built from the feat/intent-router branch, which carries
-# 21 extra source files that do not exist on main:
-#   src/router/   src/nlu/   src/views.py   src/cleaning.py
-#   src/ledger.py src/mapping.py src/timeutil.py src/profile.py
+# ── BUILD FROM main ──────────────────────────────────────────────────────────
+# The router (src/router/, src/nlu/, src/views.py, ...) is on main; build from the
+# latest main commit (the one reported in the PR that last touched this file):
 #
 # On CECS or any Linux host:
 #   git fetch origin
-#   git checkout feat/intent-router
+#   git checkout main && git pull
 #   docker buildx build --platform linux/amd64 \
 #       -t zaic2026_datamate_team:router \
 #       -f Dockerfile.router .
@@ -36,7 +34,7 @@
 #   python3 scripts/validate_submission.py \
 #       /tmp/router-smoke/submission.jsonl public_test/questions.jsonl
 #
-# Expected output: ~50 % answered, ~50 % {"type":"abstain"} — no wrong answers.
+# Expected output: most questions answered, the rest {"type":"abstain"}.
 # No GPU required. No model weights included.
 
 FROM python:3.10-slim
@@ -58,7 +56,7 @@ WORKDIR /code
 COPY requirements.router.txt /code/requirements.txt
 RUN pip install --no-cache-dir -r /code/requirements.txt
 
-# Source: requires feat/intent-router checkout (see prerequisite above).
+# Source: built from main (see above).
 # Copies all of src/ including src/router/, src/nlu/, src/views.py, etc.
 COPY src/ /code/src/
 
