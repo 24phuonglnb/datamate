@@ -9,11 +9,15 @@ data/
 
 # ── Evaluation artefacts — not part of the runtime ────────────────────────
 eval/
+!eval/folds.json
 eval_results/
 reports/
 
 # ── Development and analysis scripts ─────────────────────────────────────
 scripts/
+!scripts/build_nlu_resources.py
+!scripts/build_rule_reference.py
+!scripts/data_invariants.py
 benchmark/
 docs/
 tests/
