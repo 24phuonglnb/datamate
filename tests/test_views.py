@@ -982,14 +982,23 @@ def test_stock_card_gives_balance_by_date_and_feeds_v_stock(tmp_path: Path) -> N
             ["MV1", "SP01", "2026-06-01 06:00:00", "in_purchase", "24", "24"],
             ["MV2", "SP01", "2026-06-02 09:00:00", "out_sale", "-4", "20"],
             ["MV3", "SP01", "2026-06-05 10:00:00", "out_sale", "-3", "17"],
+            # two movements at the same moved_at: file order decides, so the balance is 15, not 16
+            ["MV5", "SP01", "2026-06-07 08:00:00", "out_sale", "-1", "16"],
+            ["MV4", "SP01", "2026-06-07 08:00:00", "out_sale", "-1", "15"],
+            ["MV6", "SP01", "2026-06-06 12:00:00", "in_return", "0", "17"],
         ],
     )
     conn = build_database(biz_dir)
-    at_jun3 = conn.execute(
-        "SELECT stock_after FROM v_stock_card WHERE item_code = 'SP01' AND moved_date <= '2026-06-03' "
+    last_by = (
+        "SELECT stock_after FROM v_stock_card WHERE item_code = 'SP01' AND moved_date <= ? "
         "ORDER BY moved_at DESC, rowid DESC LIMIT 1"
-    ).fetchone()
+    )
+    at_jun3 = conn.execute(last_by, ("2026-06-03",)).fetchone()
+    at_jun7 = conn.execute(last_by, ("2026-06-07",)).fetchone()
+    order = [r[0] for r in conn.execute("SELECT moved_at FROM v_stock_card ORDER BY rowid")]
     end = conn.execute("SELECT stock_qty_base, source FROM v_stock WHERE item_code = 'SP01'").fetchone()
     conn.close()
     assert at_jun3 == (20.0,)
-    assert end == (17.0, "card")
+    assert at_jun7 == (15.0,)
+    assert order == sorted(order)  # rowid follows moved_at (the out-of-order MV6 row is moved)
+    assert end == (15.0, "card")

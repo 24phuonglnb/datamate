@@ -479,9 +479,10 @@ def stock_schema_lines(conn: sqlite3.Connection, meta: dict[str, Any]) -> list[s
         ]
     if meta.get("has_card"):
         out.append(
-            "- VIEW `v_stock_card` (stock card, one row per movement): item_code, item_name, moved_at, moved_date, qty_change, "
-            "stock_after (running balance in base unit). Stock at end of day X = stock_after of the LAST movement with "
-            "moved_date <= X for that item (items with no movement yet have no stock)."
+            "- VIEW `v_stock_card` (stock card, one row per movement): rowid (movement order), item_code, item_name, moved_at, "
+            "moved_date, qty_change, stock_after (running balance in base unit). Stock at end of day X = stock_after of the "
+            "LAST movement with moved_date <= X for that item (items with no movement yet have no stock): "
+            "ORDER BY moved_at DESC, rowid DESC LIMIT 1 (rowid breaks ties between movements at the same moved_at)."
         )
     if meta.get("has_lots"):
         out.append(
