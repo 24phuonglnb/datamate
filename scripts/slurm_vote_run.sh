@@ -38,7 +38,7 @@ unset DATAMATE_ROUTER_ONLY
 # Slurm here does not constrain devices (every GPU is visible) and hands out GPU 0 even when somebody else's process sits on it:
 # use exactly ONE GPU, the first one that is really free (< 300 MB in use), never one that another user is working on.
 if [ "${PICK_FREE_GPU:-1}" = "1" ]; then
-    FREE_GPU="$(nvidia-smi --query-gpu=index,memory.used --format=csv,noheader,nounits | awk -F', ' '$2 < 300 {print $1; exit}')"
+    FREE_GPU="$(nvidia-smi --query-gpu=index,memory.used --format=csv,noheader,nounits | awk -F', ' '$2 < 300 && !done {print $1; done=1}')"
     if [ -z "${FREE_GPU}" ]; then echo "no free GPU right now: exit without running"; exit 3; fi
     export CUDA_VISIBLE_DEVICES="${FREE_GPU}"
 fi
