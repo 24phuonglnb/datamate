@@ -55,7 +55,8 @@ CORE SQL & SCHEMA RULES:
     SUM(line_amount)*1.0/NULLIF(SUM(qty),0) only for a consistent requested unit; use qty_base for base-unit cost.
   * `v_stock`: end-of-data stock_qty_base, stock_value and stock_date; do not use as a historical snapshot.
     `v_stock_card`: historical stock_after from the LAST movement per item with moved_date <= the cutoff,
-    ordered by moved_at; do not SUM successive balances. Abstain if a last-movement tie cannot be resolved.
+    ORDER BY moved_at DESC, rowid DESC (rowid = movement order, breaks same-moved_at ties); do not SUM
+    successive balances.
     `v_lots`: lot, expiry_date, qty_remaining, unit_cost_base; filter qty_remaining > 0 for remaining lots.
     `v_item_units`: factor converts between unit and base_unit; do not assume a fixed pack size.
   * `v_payments`: paid_date, paid_time, amount; `v_deliveries`: delivery_date, delivery_round.
