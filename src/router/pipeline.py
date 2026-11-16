@@ -71,6 +71,10 @@ def solve(question: dict[str, Any], agent: Any, router: Router | None, normalize
         answer = decision.answer
         log = {"id": qid, "answer": answer, "elapsed_ms": int((time.monotonic() - began) * 1000),
                "thinking": None, "code": None, "output": None}
+        if decision.route == "template":  # guideline §3.3: predefined code -> source file/function, inputs, output
+            log["code"] = f"src/router/templates.py::run_template(intent={decision.intent!r})"
+            log["inputs"] = decision.params
+            log["output"] = (answer or {}).get("answer")
     elif decision.route == "abstain":
         answer = {"id": qid, "type": "abstain"}
         log = {"id": qid, "answer": answer, "elapsed_ms": int((time.monotonic() - began) * 1000),
