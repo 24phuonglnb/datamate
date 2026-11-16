@@ -372,6 +372,81 @@ def _rx_unrecognized(val: Any) -> bool:
     return not is_blank(val) and _normalize_prescription(val) is None
 
 
+def _distinct_filled(t_df: pd.DataFrame, col: str) -> tuple[int, int]:
+    """(filled cells, distinct filled values) of one column, compared on `norm_key`."""
+    vals = [norm_key(nfc(v)) for v in t_df[col] if not is_blank(v)]
+    return len(vals), len(set(vals))
+
+
+_CUST_CODE_HDR = re.compile(r"^(ma kh|ma khach|ma doi tac|ma hoi vien|ma thanh vien|so kh|id kh|customer id|customer code)")
+_CUST_NAME_HDR = re.compile(r"^(ten kh|ten khach|ho ten|ho va ten|ten doi tac|ten hoi vien|ten thanh vien|customer name)")
+# Customer-group headers, most specific first. "Loại hình khách" / "Đối tượng KH" ("Cá nhân" / "Công ty") are not groups.
+_CUST_GROUP_TIERS = (
+    re.compile(r"\b(nhom kh|nhom khach|hang the|hang kh|hang khach|hang thanh vien|hang hoi vien|phan loai kh|phan loai khach|customer group|tier)\b"),
+    re.compile(r"\b(nhom|group|vip|khach le si|le si)\b|^(hang|xep hang|cap|cap do|level|rank)$"),
+    re.compile(r"\b(loai kh|loai khach|phan loai)\b"),
+)
+
+
+def _customer_group_columns(t_df: pd.DataFrame, cols: list[str]) -> tuple[str | None, str | None, str | None]:
+    """(code, name, group) columns of a customer list, for the customer-group lookup only.
+
+    Headers are matched as whole words at the start (the old substring match took "Email" for the code because it
+    contains "ma", and "Mã khách hàng" for the group because it contains "hang"). The group column must look like a
+    category: few distinct values, not one per customer."""
+    keys = {c: _col_key(c) for c in cols}  # CamelCase exports: "LoaiKhachHang" -> "loai khach hang"
+    code = next((c for c in cols if _CUST_CODE_HDR.search(keys[c])), None)
+    if code is None:
+        code = next((c for c in cols if re.match(r"ma\b", keys[c]) and not re.search(r"so thue|barcode|cccd|cmnd|nhom", keys[c])), None)
+    name = next((c for c in cols if c != code and _CUST_NAME_HDR.search(keys[c])), None)
+    if name is None:
+        name = next((c for c in cols if c != code and re.match(r"ten\b", keys[c]) and "cong ty" not in keys[c]), None)
+    best: tuple[int, int, str] | None = None
+    for pos, c in enumerate(cols):
+        k = keys[c]
+        if c in (code, name) or re.match(r"(ma|ten|so|id)\b", k):
+            continue
+        tier = next((i for i, rx in enumerate(_CUST_GROUP_TIERS) if rx.search(k)), None)
+        if tier is None:
+            continue
+        filled, distinct = _distinct_filled(t_df, c)
+        if filled == 0 or distinct > 30 or (distinct > 5 and distinct > 0.5 * filled):
+            continue  # empty, or one value per customer (codes, names, phone numbers)
+        if distinct < 2 and tier == 2:
+            continue
+        if best is None or (tier, pos) < best[:2]:
+            best = (tier, pos, c)
+    return code, name, (best[2] if best else None)
+
+
+_CAT_HDR_TIERS = (
+    re.compile(r"\b(nhom hang|nhom sp|nhom san pham|nhom mon|nhom thuoc|nhom vat tu|danh muc|nganh hang|category)\b"),
+    re.compile(r"\bnhom\b"),
+    re.compile(r"\b(loai san pham|loai sp|loai mon|loai thuoc|loai vat tu|phan loai)\b"),
+)
+
+
+def _pick_category_column(t_df: pd.DataFrame, cols: list[str], exclude: tuple[Any, ...]) -> str | None:
+    """Category column of a catalog: columns with at least two values first, then non-empty ones, and within each
+    the header tier: item groups ("Nhóm hàng hóa") before the POS item type ("Loại hàng hóa", always "Hàng hóa").
+    A single-category shop therefore keeps its "Nhóm hàng hóa" column instead of the first header match."""
+    cands = [
+        c for c in cols
+        if c not in exclude
+        and not re.search(r"(^|\s)(dv|dvt|don vi)(\s|$)", _col_key(c))
+        and any(w in _col_key(c) for w in ["nhom", "loai", "danh muc", "nganh", "phan loai", "category"])
+    ]
+    if not cands:
+        return None
+    ranked = []
+    for pos, c in enumerate(cands):
+        k = _col_key(c)
+        tier = next((i for i, rx in enumerate(_CAT_HDR_TIERS) if rx.search(k)), len(_CAT_HDR_TIERS))
+        _, distinct = _distinct_filled(t_df, c)
+        ranked.append((distinct < 2, distinct == 0, tier, pos, c))
+    return min(ranked)[-1]
+
+
 def _pick_attr_code_column(
     t_df: pd.DataFrame,
     cols: list[str],
@@ -478,7 +553,7 @@ def _build_item_catalog_and_canonicalize_lines(
             continue
         if not code_c:
             code_c = next((c for c in cols if c != name_c and not any(w in norm_key(c) for w in ["barcode", "ma vach", "ean", "lien quan"]) and any(w in norm_key(c) for w in ["ma hang", "ma sp", "ma san pham", "ma thuoc", "ma mon", "ma vat tu", "ma cay", "sku", "code", "ma"])), None)
-        cat_c = next((c for c in cols if c not in (name_c, code_c) and not re.search(r"(^|\s)(dv|dvt|don vi)(\s|$)", norm_key(c)) and any(w in norm_key(c) for w in ["nhom", "loai", "danh muc", "nganh", "phan loai", "category"])), None)
+        cat_c = _pick_category_column(t_df, cols, (name_c, code_c))
         unit_c = next((c for c in cols if c not in (name_c, code_c, cat_c) and any(w in norm_key(c) for w in ["dvt co ban", "don vi co ban", "dvt", "don vi", "unit"])), None)
         alias_c = next((c for c in cols if c not in (name_c, code_c, cat_c, unit_c) and any(w in norm_key(c) for w in ["goi khac", "ten tat", "ghi tat", "biet duoc", "alias"])), None)
         sell_c = next((c for c in cols if any(w in norm_key(c) for w in ["gia ban", "don gia ban", "gia niem yet", "gia le", "don gia"])), None)
@@ -845,18 +920,22 @@ def _build_item_catalog_and_canonicalize_lines(
             cols = [c for c in t_df.columns if c not in META_COLS]
             c_code = next((c for c in cols if any(w in norm_key(c) for w in ["ma kh", "ma khach", "so kh", "customer id", "ma doi tac", "ma"])), None)
             c_name = next((c for c in cols if any(w in norm_key(c) for w in ["ten kh", "ho ten", "ten khach", "khach hang", "ten doi tac", "ten"])), None)
-            c_grp = next((c for c in cols if any(w in norm_key(c) for w in ["nhom", "hang", "loai", "phan loai", "tier", "group", "vip"])), None)
+            # The group lookup has its own column choice: "Mã khách hàng" contains "hang" and "Email" contains "ma",
+            # so the first-match picks above can land on the code column (group = customer code).
+            g_code, g_name, c_grp = _customer_group_columns(t_df, cols)
             for _, r in t_df.iterrows():
                 cd_v = nfc(r[c_code]).strip() if (c_code and not is_blank(r[c_code])) else None
                 nm_v = re.sub(r"\s+", " ", nfc(r[c_name]).strip()) if (c_name and not is_blank(r[c_name])) else None
-                gr_v = re.sub(r"\s+", " ", nfc(r[c_grp]).strip()) if (c_grp and not is_blank(r[c_grp])) else None
                 if cd_v and nm_v and norm_key(nm_v) not in _WALKIN_KEYS:
                     cust_code_to_official_name[cd_v.upper()] = nm_v
+                gr_v = re.sub(r"\s+", " ", nfc(r[c_grp]).strip()) if (c_grp and not is_blank(r[c_grp])) else None
                 if gr_v:
-                    if cd_v:
-                        cust_group_map[f"CODE:{cd_v.upper()}"] = gr_v
-                    if nm_v:
-                        cust_group_map[f"NAME:{norm_key(nm_v)}"] = gr_v
+                    g_cd = nfc(r[g_code]).strip() if (g_code and not is_blank(r[g_code])) else None
+                    g_nm = re.sub(r"\s+", " ", nfc(r[g_name]).strip()) if (g_name and not is_blank(r[g_name])) else None
+                    if g_cd:
+                        cust_group_map[f"CODE:{g_cd.upper()}"] = gr_v
+                    if g_nm:
+                        cust_group_map[f"NAME:{norm_key(g_nm)}"] = gr_v
 
     # Check if sales_df also has a customer group column directly
     sales_cgrp_col = next(
