@@ -91,8 +91,11 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-dir", default=os.environ.get("DATA_DIR", "/data"))
     parser.add_argument("--result-dir", default=os.environ.get("RESULT_DIR", "/result"))
-    parser.add_argument("--model-path", default=os.environ.get("MODEL_PATH", "/code/models/Qwen3-8B"))
+    # MODEL_PATH / TP_SIZE / MAX_MODEL_LEN: set once in the Dockerfile ENV; no model default here.
+    parser.add_argument("--model-path", default=os.environ.get("MODEL_PATH"))
     parser.add_argument("--tensor-parallel-size", type=int, default=int(os.environ.get("TP_SIZE", "2")))
+    parser.add_argument("--max-model-len", type=int,
+                        default=int(os.environ["MAX_MODEL_LEN"]) if os.environ.get("MAX_MODEL_LEN") else None)
     parser.add_argument("--max-attempts", type=int, default=int(os.environ.get("MAX_ATTEMPTS", "2")))
     parser.add_argument("--router-only", action="store_true",
                         default=os.environ.get("DATAMATE_ROUTER_ONLY", "0").lower() in ("1", "true", "yes"),
@@ -103,7 +106,10 @@ def main() -> None:
         model = None
         print("Router-only run: no model is loaded", file=sys.stderr)
     else:
-        model = LocalVLLM(args.model_path, args.tensor_parallel_size)
+        if not args.model_path:
+            parser.error("set MODEL_PATH (Dockerfile ENV) or --model-path, or use --router-only")
+        extra = {"max_model_len": args.max_model_len} if args.max_model_len else {}
+        model = LocalVLLM(args.model_path, args.tensor_parallel_size, **extra)
         print(f"Loaded local model at {args.model_path}; inference is offline", file=sys.stderr)
     n = run(Path(args.data_dir), Path(args.result_dir), model, args.max_attempts)
     print(f"Wrote {n} predictions to {args.result_dir}/submission.jsonl", file=sys.stderr)
