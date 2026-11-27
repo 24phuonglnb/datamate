@@ -1,0 +1,18 @@
+# Dockerfile.dockerignore — BuildKit applies it only to `-f Dockerfile` (GPU image).
+# Allowlist: only what the Dockerfile COPYs enters the build context.
+# Datasets (data/, train/, public_test/), eval/, scripts/, tests/ and .git stay out.
+*
+
+!requirements.txt
+!predict.sh
+!README.md
+!src/
+!training_code/
+
+# Only the submitted model. Other checkpoints in models/ (e.g. Qwen3-8B) must not
+# enter the image: the rule is <=15B parameters for all inference models combined.
+!models/README.md
+!models/Qwen3-14B/
+
+**/__pycache__/
+**/*.pyc

@@ -75,7 +75,7 @@ official_data/
 zalo_data/
 
 # ── Docker build cache ────────────────────────────────────────────────────
-.dockerignore
+# (.dockerignore is not used: each Dockerfile has its own <Dockerfile>.dockerignore)
 /eval_results/
 
 # Per-question raw rows and error examples derive from private data

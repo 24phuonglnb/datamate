@@ -54,7 +54,7 @@ Dựa trên bảng `lines` (kết quả của `SalesLedger` đã chuẩn hoá t�
 | `status` | `TEXT` | Trạng thái cấp đơn đã chuẩn hoá về 4 giá trị: `'hoan_thanh'`, `'dang_giao'`, `'huy'`, `'tra_hang'`. Theo **§1 & §8**, nếu đơn có bất kỳ dòng hoàn/trả nào (kể cả trả một phần), toàn bộ đơn mang `status = 'tra_hang'`. |
 | `item_code` | `TEXT` | Mã mặt hàng chuẩn hoá (đã đồng bộ giữa bảng danh mục và bảng bán hàng). `NULL` đối với dòng `Phí phục vụ`. |
 | `item_name` | `TEXT` | Tên mặt hàng chuẩn hoá (đã giải mã tên viết tắt từ sheet `Ghi tắt` / cột `Tên gọi khác` và gộp các biến thể khoảng trắng/dấu theo **§9**). |
-| `category` | `TEXT` | Nhóm hàng / danh mục mặt hàng (lấy từ bảng danh mục hoặc cột nhóm hàng trên sổ bán). |
+| `category` | `TEXT` | Nhóm hàng / danh mục mặt hàng (lấy từ bảng danh mục hoặc cột nhóm hàng trên sổ bán). Ưu tiên cột nhóm (`Nhóm hàng hóa`) có từ 2 giá trị trở lên; cột `Loại hàng hóa` của phần mềm bán hàng (chỉ có "Hàng hóa") chỉ dùng khi không còn cột nào khác. |
 | `is_service_fee` | `INTEGER` | `1` nếu là dòng `"Phí phục vụ"`, `0` nếu là mặt hàng thật. Theo **§3**, dòng `"Phí phục vụ"` **được cộng vào doanh thu đơn**, nhưng **không phải là mặt hàng** khi đếm hoặc xếp hạng mặt hàng (luôn lọc `is_service_fee = 0` khi truy vấn theo mặt hàng). Các dòng điều chỉnh cấp hoá đơn như `"Voucher"`, `"Phí ship"`, `"Dùng <n> điểm"` có số lượng trống đã được loại khỏi `lines` theo **§1**. |
 | `unit` | `TEXT` | Đơn vị tính lúc bán trên dòng đơn (ví dụ `'thùng'`, `'lốc'`, `'hộp'`, `'cái'`). |
 | `qty` | `REAL` | Số lượng bán theo đơn vị trên dòng (`unit`). |
@@ -67,7 +67,7 @@ Dựa trên bảng `lines` (kết quả của `SalesLedger` đã chuẩn hoá t�
 | `customer_code` | `TEXT` | Mã khách hàng (`NULL` nếu là khách lẻ). |
 | `customer_name` | `TEXT` | Tên khách hàng chuẩn hoá có dấu (`NULL` nếu là khách lẻ). |
 | `customer_key` | `TEXT` | Khoá định danh khách hàng để `GROUP BY` / `COUNT(DISTINCT customer_key)` (**§3**): bằng `customer_code` nếu tiệm có dùng mã khách (đơn không ghi mã khách là khách lẻ -> `NULL`), ngược lại bằng tên khách đã chuẩn hoá: bỏ dấu, viết thường, bỏ dấu câu, và nối các cụm chữ số liền nhau, nên `Triệu Linh An - 0327 988 481` và `Triệu Linh An 0327988481` là cùng một khách (tên chỉ khác cách viết là một khách; khác chữ hoặc khác số là hai khách). Mọi nhãn khách vãng lai (`Khách lẻ`, `Lẻ`, `KL`, `Khách vãng lai`, `Vãng lai`, trống) đều có `customer_key = NULL`. |
-| `customer_group` | `TEXT` | Nhóm / hạng khách hàng (nếu có trong bảng khách hàng hoặc sổ bán). |
+| `customer_group` | `TEXT` | Nhóm / hạng khách hàng (nếu có trong bảng khách hàng hoặc sổ bán). Cột nhóm phải có ít giá trị (không phải mã, tên hay số điện thoại); `Loại hình khách` / `Đối tượng KH` ("Cá nhân") không phải nhóm. Không có cột nhóm thì `NULL`, câu hỏi theo nhóm khách là unanswerable. |
 | `staff` | `TEXT` | Nhân viên bán hàng / thu ngân. |
 | `channel` | `TEXT` | Kênh bán hàng. |
 | `payment_method` | `TEXT` | Hình thức thanh toán. |
@@ -295,7 +295,7 @@ Thứ tự ưu tiên cho `v_stock`: báo cáo tồn → thẻ kho → lô.
 
 - **`v_stock`** (mỗi mặt hàng một dòng): `item_code`, `item_name`, `base_unit`, `stock_date` (ngày cuối dữ liệu = "hôm nay" của mọi câu train/public), `stock_qty_base` (REAL, đơn vị cơ bản), `cost_price` (giá vốn trong danh mục, có thể NULL), `stock_value` (= `stock_qty_base * cost_price`, chỉ hàng còn tồn; NULL nếu không có giá vốn), `source` (`'report'` | `'lots'`).
 - **`v_lots`** (mỗi lô một dòng): `lot`, `item_code`, `item_name`, `base_unit`, `receipt_id`, `receipt_date`, `expiry_date` (`YYYY-MM-DD`), `qty_in`, `qty_sold`, `qty_returned`, `qty_remaining`, `unit_cost_base` (giá nhập của chính lô, theo đơn vị cơ bản — dùng cho "tiền vốn hàng sắp hết hạn" §6).
-- **`v_stock_card`** (khi có thẻ kho): `item_code`, `item_name`, `moved_at`, `moved_date`, `qty_change`, `stock_after`. Tồn hết ngày X = `stock_after` của giao dịch **cuối cùng** có `moved_date <= X`.
+- **`v_stock_card`** (khi có thẻ kho): `rowid` (thứ tự phát sinh), `item_code`, `item_name`, `moved_at`, `moved_date`, `qty_change`, `stock_after`. Tồn hết ngày X = `stock_after` của giao dịch **cuối cùng** có `moved_date <= X`, tức `ORDER BY moved_at DESC, rowid DESC LIMIT 1`. Hai giao dịch trùng `moved_at` thì `rowid` lớn hơn là giao dịch sau: thẻ kho được sắp theo `moved_at` rồi theo thứ tự dòng trong file gốc trước khi ghi, nên `rowid` giữ đúng thứ tự đó.
 - **`v_item_units`** (mọi shop có sổ bán): `item_code`, `item_name`, `unit`, `unit_key` (không dấu, để so khớp), `factor` (số đơn vị cơ bản trong 1 `unit`), `base_unit`.
 
 **Giới hạn:** `v_stock` là tình trạng **cuối dữ liệu**. Câu hỏi "đến hết ngày X" với X sớm hơn: dùng `v_stock_card` nếu có; shop chỉ có báo cáo tồn thì không có dữ liệu trả hàng theo dòng nên không tính lại chính xác được.
@@ -310,7 +310,7 @@ SELECT CAST(s.stock_qty_base / u.factor AS INTEGER) AS so_chan,
 FROM v_stock s JOIN v_item_units u ON u.item_name = s.item_name
 WHERE LOWER(s.item_name) = LOWER('Amoxicillin 500mg hộp 10 vỉ x 10 viên') AND u.unit_key = 'hop';
 
--- 2b) Tồn hết ngày X từ thẻ kho
+-- 2b) Tồn hết ngày X từ thẻ kho (rowid phá hòa khi hai giao dịch trùng moved_at)
 SELECT stock_after FROM v_stock_card
 WHERE item_code = 'SP0001' AND moved_date <= '2026-03-31'
 ORDER BY moved_at DESC, rowid DESC LIMIT 1;

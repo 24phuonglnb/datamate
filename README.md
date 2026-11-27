@@ -125,7 +125,7 @@ data/
 nên `DATA_DIR` phải trỏ vào thư mục lồng bên trong (không di chuyển dữ liệu):
 ```bash
 export DATA_DIR=$PWD/data/train/train          # hoặc data/public_test/public_test
-python -m src.predict --data-dir "$DATA_DIR" --result-dir /path/to/result --model-path /path/to/Qwen3-8B
+python -m src.predict --data-dir "$DATA_DIR" --result-dir /path/to/result --model-path /path/to/Qwen3-14B
 ```
 
 ---
@@ -199,7 +199,7 @@ The model path can be set three ways (highest priority first):
 
 1. **CLI flag:** `--model-path /absolute/path/to/Qwen3-14B`
 2. **Environment variable:** `MODEL_PATH=/absolute/path/to/Qwen3-14B`
-3. **Default:** `/code/models/Qwen3-8B` (competition container default)
+3. **Docker image:** `MODEL_PATH=/code/models/Qwen3-14B` is set once in the `Dockerfile` ENV (with `TP_SIZE`, `MAX_MODEL_LEN`); `predict.sh` and `src/predict.py` have no model default of their own.
 
 Place model weights under `models/` locally (this directory is excluded from git via `.gitignore`).
 
@@ -236,7 +236,15 @@ docker run --rm --gpus '"device=0,1"' --network none --shm-size=16g \
   zaic2026_datamate_team:final
 ```
 
-Environment variables: `MODEL_PATH` (default `/code/models/Qwen3-8B`), `TP_SIZE` (default `2`), `DATA_DIR`, `RESULT_DIR`.
+Environment variables: `MODEL_PATH` (`/code/models/Qwen3-14B`), `TP_SIZE` (`2`), `MAX_MODEL_LEN` (`20480`), all from the `Dockerfile` ENV; `DATA_DIR`, `RESULT_DIR`.
+
+Build context: `Dockerfile.dockerignore` (GPU image) and `Dockerfile.router.dockerignore` (router image) are picked by BuildKit from the `-f` file name. The GPU context holds only `src/`, `predict.sh`, `requirements.txt`, `README.md`, `training_code/` and `models/Qwen3-14B/`. Check the weights are in the image after a build:
+
+```bash
+docker run --rm --entrypoint ls zaic2026_datamate_team:final -la /code/models/Qwen3-14B
+```
+
+Prompts longer than `MAX_MODEL_LEN` (prompt + answer tokens) abstain for that question only (`PromptTooLongError`). Count real tokens before a full run: `python scripts/analysis/prompt_tokens.py --data-dir <public_test> --tokenizer /code/models/Qwen3-14B`.
 
 ---
 

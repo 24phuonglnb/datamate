@@ -440,7 +440,7 @@ def test_rule_guard_removed_row_or_section_switches_off():
 def test_rule_guard_extra_sentences_and_new_rows_do_not_switch_off_but_new_rows_make_cues():
     g = _guard(_canon_rulebook(lambda p, t: t + ". them mot cau vi du moi, khong doi y nghia (vi du: don chua giao)",
                                "## 3. Muc 3\n| Ngày đắt khách nhất | ngày có nhiều đơn nhất |\n"))
-    assert g.disabled == {} and g.new == ["3|ngay dat khach nhat"]
+    assert g.disabled == {} and g.new == ["ngay dat khach nhat"]
     d = Router(g).route({"id": "t1", "as_of_date": AS_OF}, normalize("tháng 3/2026 ngày nào đắt khách nhất", AS_OF), _db())
     assert d.route == "llm" and d.reason.startswith("new_rule_cue")
     d = Router(g).route({"id": "t1", "as_of_date": AS_OF}, normalize("tháng 3/2026 ngày nào bán được nhiều tiền nhất", AS_OF), _db())
@@ -1094,3 +1094,30 @@ def test_item_specific_revenue_is_item_revenue_and_ca_is_only_a_shift_before_san
     assert d.route == "llm"
     d = route("doanh thu 30 ngày gần nhất là bao nhiêu", c)                           # "gan nhat" is a period, not a ranking
     assert d.intent == "revenue" and d.route in ("template", "llm") and d.reason != "extra_filter_or_subintent"
+
+
+def _renumber(text: str, shift: int = 3) -> str:
+    """The same rulebook with every numbered section heading renumbered (## 1. -> ## 4., ...)."""
+    import re as _re
+    return _re.sub(r"(?m)^(##\s+)(\d+)(\.)", lambda m: f"{m.group(1)}{int(m.group(2)) + shift}{m.group(3)}", text)
+
+
+def test_rule_guard_renumbered_sections_are_not_new_rules():
+    base = _canon_rulebook()
+    a, b = _guard(base), _guard(_renumber(base))
+    assert b.new == a.new == [] and b.disabled == a.disabled == {} and b.removed == a.removed and b.changed == a.changed
+
+
+def test_rule_guard_row_moved_to_another_section_is_the_same_row():
+    moved = _canon_rulebook().replace("## 1.", "## 9.")
+    g, base = _guard(moved), _guard(_canon_rulebook())
+    assert (g.new, g.removed, g.changed, g.disabled) == (base.new, base.removed, base.changed, base.disabled) and g.new == []
+
+
+def test_rule_guard_renumbered_real_rulebooks_give_the_same_report():
+    for f in (ROOT / "data" / "train" / "train" / "rulebook.md", PUBLIC / "rulebook.md"):
+        if not f.is_file():
+            pytest.skip("rulebook not available")
+        text = f.read_text(encoding="utf-8")
+        a, b = _guard(text), _guard(_renumber(text))
+        assert (a.new, a.removed, a.changed, a.disabled) == (b.new, b.removed, b.changed, b.disabled)
